@@ -320,6 +320,24 @@ export default {
         return await handleApply(request, env);
       }
 
+      /* GET /api/admin/registrations — for Google Sheets sync */
+      if (method === 'GET' && url.pathname === '/api/admin/registrations') {
+        const secret = request.headers.get('X-Admin-Secret');
+        const envSecret = env.ADMIN_SECRET || '';
+        if (!secret || !envSecret || secret !== envSecret) {
+          return jsonErr('Unauthorised', 401, request);
+        }
+        try {
+          const rows = await env.DB.prepare(
+            'SELECT id, name, email, github, role, created_at FROM registrations ORDER BY created_at DESC'
+          ).all();
+          return jsonOk({ registrations: rows.results || [] }, request);
+        } catch (err) {
+          console.error('DB error (admin):', err?.message);
+          return jsonErr('Failed to fetch registrations', 500, request);
+        }
+      }
+
       /* 404 for everything else */
       return secHeaders(new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
