@@ -1,122 +1,108 @@
 /**
  * OASIS — Google Sheets Auto-Import
- * 
- * HOW TO SET UP:
- * 1. Open Google Sheets → Extensions → Apps Script
- * 2. Paste this entire file
- * 3. Replace WORKER_URL and API_SECRET below
- * 4. Click Run → authorise
- * 5. Set a trigger: clock icon → Add Trigger → syncRegistrations → Time-driven → Every hour
+ * Accepts data POSTed from GitHub Actions OR fetches directly
  */
 
-// ─── CONFIG ──────────────────────────────────────────────────
-const WORKER_URL  = 'https://www.owasp-oasis.com'; // your live Worker URL
-const API_SECRET  = 'REPLACE_WITH_A_SECRET_YOU_MAKE_UP'; // set same value in wrangler.toml vars
-
-// Sheet names
+const WORKER_URL  = 'https://www.owasp-oasis.org';
+const API_SECRET  = 'oasis-admin-2026-xK9mP3q7*';
 const SHEET_REGISTRATIONS = 'Registrations';
 const SHEET_LOG           = 'Sync Log';
 
-// ─── MAIN SYNC FUNCTION ───────────────────────────────────────
-function syncRegistrations() {
+// ─── CALLED BY GITHUB ACTIONS (POST with data) ───────────────
+function doPost(e) {
   try {
-    const response = UrlFetchApp.fetch(`${WORKER_URL}/api/admin/registrations`, {
-      method: 'GET',
-      headers: {
-        'X-Admin-Secret': API_SECRET,
-        'Content-Type': 'application/json',
-      },
-      muteHttpExceptions: true,
-    });
-
-    if (response.getResponseCode() !== 200) {
-      logSync(`ERROR: HTTP ${response.getResponseCode()} — ${response.getContentText()}`);
-      return;
-    }
-
-    const data = JSON.parse(response.getContentText());
+    const data = JSON.parse(e.postData.contents);
     const registrations = data.registrations || [];
-
-    if (!registrations.length) {
-      logSync('No registrations found.');
-      return;
-    }
-
     writeToSheet(registrations);
-    logSync(`Synced ${registrations.length} registrations successfully.`);
-
+    logSync(`GitHub Actions synced ${registrations.length} registrations.`);
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, count: registrations.length }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    logSync(`ERROR: ${err.message}`);
+    logSync(`ERROR (doPost): ${err.message}`);
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// ─── CALLED MANUALLY (GET) ────────────────────────────────────
+function doGet(e) {
+  try {
+    syncRegistrations();
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, message: 'Sync complete' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ─── FETCH FROM WORKER AND SYNC ───────────────────────────────
+function syncRegistrations() {
+  const response = UrlFetchApp.fetch(`${WORKER_URL}/api/admin/registrations`, {
+    method: 'GET',
+    headers: { 'X-Admin-Secret': API_SECRET },
+    muteHttpExceptions: true,
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error(`HTTP ${response.getResponseCode()}: ${response.getContentText()}`);
+  }
+
+  const data = JSON.parse(response.getContentText());
+  const registrations = data.registrations || [];
+  writeToSheet(registrations);
+  logSync(`Synced ${registrations.length} registrations.`);
 }
 
 // ─── WRITE TO SHEET ───────────────────────────────────────────
 function writeToSheet(registrations) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   let sheet   = ss.getSheetByName(SHEET_REGISTRATIONS);
+  if (!sheet) sheet = ss.insertSheet(SHEET_REGISTRATIONS);
 
-  // Create sheet if it doesn't exist
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_REGISTRATIONS);
-  }
-
-  // Clear existing data
   sheet.clearContents();
 
-  // Headers
   const headers = ['ID', 'Name', 'Email', 'GitHub', 'Role', 'Registered At'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
-  // Style header row
   const headerRange = sheet.getRange(1, 1, 1, headers.length);
   headerRange.setBackground('#0B4F8A');
   headerRange.setFontColor('#FFFFFF');
   headerRange.setFontWeight('bold');
   headerRange.setFontSize(11);
 
-  // Data rows
-  const rows = registrations.map(r => [
-    r.id         || '',
-    r.name       || '',
-    r.email      || '',
-    r.github     || '',
-    r.role       || '',
-    r.created_at ? new Date(r.created_at).toLocaleString() : '',
-  ]);
-
-  if (rows.length > 0) {
+  if (registrations.length > 0) {
+    const rows = registrations.map(r => [
+      r.id || '', r.name || '', r.email || '',
+      r.github || '', r.role || '',
+      r.created_at ? new Date(r.created_at).toLocaleString() : '',
+    ]);
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }
 
-  // Auto-resize columns
-  for (let i = 1; i <= headers.length; i++) {
-    sheet.autoResizeColumn(i);
-  }
-
-  // Freeze header row
+  for (let i = 1; i <= headers.length; i++) sheet.autoResizeColumn(i);
   sheet.setFrozenRows(1);
 
-  // Add summary at top
-  const totalCell = sheet.getRange('H1');
-  totalCell.setValue(`Total: ${rows.length}`);
-  totalCell.setFontWeight('bold');
-  totalCell.setFontColor('#0B4F8A');
+  sheet.getRange('H1').setValue(`Total: ${registrations.length}`)
+    .setFontWeight('bold').setFontColor('#0B4F8A');
 }
 
-// ─── SYNC LOG ─────────────────────────────────────────────────
+// ─── LOG ──────────────────────────────────────────────────────
 function logSync(message) {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet   = ss.getSheetByName(SHEET_LOG);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_LOG);
   if (!sheet) sheet = ss.insertSheet(SHEET_LOG);
-
   sheet.appendRow([new Date().toLocaleString(), message]);
-  Logger.log(message);
 }
 
-// ─── MANUAL TRIGGER (run from sheet menu) ────────────────────
+// ─── MENU ─────────────────────────────────────────────────────
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('OASIS')
-    .addItem('Sync Registrations Now', 'syncRegistrations')
+    .addItem('Sync Now', 'syncRegistrations')
     .addToUi();
 }
