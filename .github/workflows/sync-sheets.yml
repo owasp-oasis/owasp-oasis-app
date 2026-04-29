@@ -1,0 +1,37 @@
+name: Sync DB to Google Sheets
+
+on:
+  workflow_dispatch:    # Manual trigger from GitHub UI
+  schedule:
+    - cron: '0 * * * *' # Also auto-runs every hour
+
+jobs:
+  sync:
+    name: Export registrations to Google Sheets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Google Sheets sync
+        run: |
+          echo "Triggering Google Sheets sync..."
+          RESPONSE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}")
+          
+          echo "HTTP Status: $RESPONSE"
+          cat /tmp/response.json
+          
+          if [ "$RESPONSE" != "200" ]; then
+            echo "❌ Sync failed with HTTP $RESPONSE"
+            exit 1
+          fi
+          
+          echo "✅ Sync successful"
+
+      - name: Summary
+        run: |
+          echo "## ✅ Google Sheets Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Time** | $(date) |" >> $GITHUB_STEP_SUMMARY
