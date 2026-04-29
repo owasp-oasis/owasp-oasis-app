@@ -1,17 +1,26 @@
 /**
  * OASIS — Google Sheets Auto-Import
- * Accepts data POSTed from GitHub Actions OR fetches directly
+ * API_SECRET is passed from GitHub Actions — not hardcoded here
  */
 
-const WORKER_URL  = 'https://www.owasp-oasis.org';
-const API_SECRET  = 'oasis-admin-2026-xK9mP3q7*';
+const WORKER_URL          = 'https://www.owasp-oasis.org';
 const SHEET_REGISTRATIONS = 'Registrations';
 const SHEET_LOG           = 'Sync Log';
 
-// ─── CALLED BY GITHUB ACTIONS (POST with data) ───────────────
+// ─── CALLED BY GITHUB ACTIONS (POST with data + secret) ──────
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    const data   = JSON.parse(e.postData.contents);
+
+    // Validate secret passed from GitHub Actions
+    const secret     = e.parameter.secret || '';
+    const storedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || '';
+    if (!secret || secret !== storedSecret) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: 'Unauthorised' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const registrations = data.registrations || [];
     writeToSheet(registrations);
     logSync(`GitHub Actions synced ${registrations.length} registrations.`);
@@ -29,6 +38,13 @@ function doPost(e) {
 // ─── CALLED MANUALLY (GET) ────────────────────────────────────
 function doGet(e) {
   try {
+    const secret       = e.parameter.secret || '';
+    const storedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || '';
+    if (!secret || secret !== storedSecret) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: 'Unauthorised' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     syncRegistrations();
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true, message: 'Sync complete' }))
@@ -42,9 +58,10 @@ function doGet(e) {
 
 // ─── FETCH FROM WORKER AND SYNC ───────────────────────────────
 function syncRegistrations() {
+  const adminSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
   const response = UrlFetchApp.fetch(`${WORKER_URL}/api/admin/registrations`, {
     method: 'GET',
-    headers: { 'X-Admin-Secret': API_SECRET },
+    headers: { 'X-Admin-Secret': adminSecret },
     muteHttpExceptions: true,
   });
 
@@ -56,6 +73,14 @@ function syncRegistrations() {
   const registrations = data.registrations || [];
   writeToSheet(registrations);
   logSync(`Synced ${registrations.length} registrations.`);
+}
+
+// ─── SET SECRET (run once manually after pasting) ─────────────
+function setSecrets() {
+  PropertiesService.getScriptProperties().setProperties({
+    'ADMIN_SECRET': 'oasis-admin-2026-xK9mP3q7*',  // change this then run once
+  });
+  Logger.log('Secret saved to Script Properties.');
 }
 
 // ─── WRITE TO SHEET ───────────────────────────────────────────
@@ -86,7 +111,6 @@ function writeToSheet(registrations) {
 
   for (let i = 1; i <= headers.length; i++) sheet.autoResizeColumn(i);
   sheet.setFrozenRows(1);
-
   sheet.getRange('H1').setValue(`Total: ${registrations.length}`)
     .setFontWeight('bold').setFontColor('#0B4F8A');
 }
