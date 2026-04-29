@@ -1,9 +1,9 @@
 name: Sync DB to Google Sheets
 
 on:
-  workflow_dispatch:    # Manual trigger from GitHub UI
+  workflow_dispatch:
   schedule:
-    - cron: '0 * * * *' # Also auto-runs every hour
+    - cron: '0 * * * *'
 
 jobs:
   sync:
@@ -15,23 +15,27 @@ jobs:
         run: |
           echo "Triggering Google Sheets sync..."
           RESPONSE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 2 \
+            -L \
+            -H "Accept: application/json" \
             "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}")
           
           echo "HTTP Status: $RESPONSE"
-          cat /tmp/response.json
+          echo "Response body:"
+          cat /tmp/response.json || echo "(empty)"
           
-          if [ "$RESPONSE" != "200" ]; then
+          if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
+            echo "✅ Sync triggered successfully"
+          else
             echo "❌ Sync failed with HTTP $RESPONSE"
             exit 1
           fi
-          
-          echo "✅ Sync successful"
 
       - name: Summary
+        if: always()
         run: |
-          echo "## ✅ Google Sheets Sync Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Triggered by** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Time** | $(date) |" >> $GITHUB_STEP_SUMMARY
+          echo "## Sync Result" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "Time: $(date)" >> $GITHUB_STEP_SUMMARY
