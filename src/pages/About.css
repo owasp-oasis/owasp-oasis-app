@@ -1,0 +1,153 @@
+/* ── Story ── */
+.about-story {
+  max-width: 780px;
+}
+
+.about-story-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+
+.about-story-header h2 {
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  color: var(--blue-dark);
+}
+
+.story-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.story-body p {
+  font-size: 1.02rem;
+  color: var(--gray-600);
+  line-height: 1.8;
+}
+
+/* ── Team ── */
+.team-section {
+  background: var(--gray-100);
+}
+
+.team-heading {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  color: var(--blue-dark);
+  margin-bottom: 10px;
+}
+
+.team-sub {
+  color: var(--gray-600);
+  margin-bottom: 48px;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.team-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.team-card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 32px;
+  border: 1px solid var(--gray-200);
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+
+.team-avatar {
+  width: 64px;
+  height: 64px;
+  background: var(--blue-dark);
+  color: var(--white);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.team-avatar--advisor {
+  background: var(--blue);
+}
+
+.team-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.team-info h3 {
+  font-size: 1.2rem;
+  color: var(--blue-dark);
+}
+
+.team-role {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.team-bio {
+  font-size: 0.95rem;
+  color: var(--gray-600);
+  line-height: 1.7;
+  margin-top: 4px;
+}
+
+.team-github {
+  font-size: 0.88rem;
+  color: var(--blue);
+  font-weight: 600;
+}
+
+/* ── Advisor ── */
+.advisor-section {
+  margin-bottom: 32px;
+}
+
+.advisor-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  margin-bottom: 16px;
+}
+
+.team-card--advisor {
+  border-left: 4px solid var(--blue);
+}
+
+/* ── Growing ── */
+.team-growing {
+  text-align: center;
+  padding: 24px;
+  background: var(--white);
+  border-radius: 10px;
+  border: 1px dashed var(--gray-200);
+}
+
+.team-growing p {
+  color: var(--gray-600);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 600px) {
+  .team-card {
+    flex-direction: column;
+  }
+}

@@ -1,20 +1,19 @@
 /**
  * OWASP OASIS — Cloudflare Worker
  * Full security hardening — every input exception + duplicate handled
+ * React SPA served via ASSETS binding; API routes handled by worker.
  */
-
-import HTML from './index.html';
 
 /* ─── CONFIG ─────────────────────────────────────────────────── */
 const RATE_LIMIT_WINDOW_SEC = 60;
 const RATE_LIMIT_MAX        = 5;
 const CSRF_COOKIE           = '__csrf';
 const CSRF_HEADER           = 'x-csrf-token';
-const MAX_BODY_BYTES        = 8_192; // 8KB max request body — prevents DoS via large payloads
+const MAX_BODY_BYTES        = 8_192;
 
-/* ─── ALLOWED VALUES (whitelist approach) ────────────────────── */
-const ALLOWED_ROLES         = new Set(['validator', 'general', '']);
-const ALLOWED_METHODS       = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
+/* ─── ALLOWED VALUES ─────────────────────────────────────────── */
+const ALLOWED_ROLES   = new Set(['validator', 'sponsor', 'general', '']);
+const ALLOWED_METHODS = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
 
 /* ─── SECURITY HEADERS ───────────────────────────────────────── */
 const SEC_HEADERS = {
@@ -23,7 +22,7 @@ const SEC_HEADERS = {
     "script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com",
     "font-src https://fonts.gstatic.com",
-    "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com",
+    "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com https://avatars.githubusercontent.com",
     "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -40,15 +39,20 @@ const SEC_HEADERS = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
+const ALLOWED_ORIGINS = [
+  'https://www.owasp-oasis.com',
+  'https://owasp-oasis.com',
+  'https://www.owasp-oasis.org',
+  'https://owasp-oasis.org',
+  'https://preview.owasp-oasis.bluejar.org',
+];
+
 function secHeaders(res, request) {
   const r = new Response(res.body, res);
   for (const [k, v] of Object.entries(SEC_HEADERS)) r.headers.set(k, v);
-  // Allow both .com and .org origins for API responses
   if (request) {
     const origin = request.headers.get('Origin') || '';
-    const allowed = ['https://www.owasp-oasis.com','https://www.owasp-oasis.org',
-                     'https://owasp-oasis.com','https://owasp-oasis.org'];
-    if (allowed.includes(origin)) {
+    if (ALLOWED_ORIGINS.includes(origin)) {
       r.headers.set('Access-Control-Allow-Origin', origin);
       r.headers.set('Access-Control-Allow-Credentials', 'true');
     }
@@ -57,23 +61,21 @@ function secHeaders(res, request) {
 }
 
 /* ─── RESPONSE HELPERS ───────────────────────────────────────── */
-const jsonOk  = (data, req)        => secHeaders(Response.json({ ok: true,  ...data },     { status: 200 }), req);
+const jsonOk  = (data, req)            => secHeaders(Response.json({ ok: true,  ...data },     { status: 200 }), req);
 const jsonErr = (msg, status=400, req) => secHeaders(Response.json({ ok: false, error: msg }, { status }), req);
 
-/* ─── CORS (same-origin only — no external API access) ──────── */
+/* ─── CORS preflight ─────────────────────────────────────────── */
 function handleOptions(request) {
   const origin = request.headers.get('Origin') || '';
-  const allowed = ['https://www.owasp-oasis.com','https://www.owasp-oasis.org',
-                   'https://owasp-oasis.com','https://owasp-oasis.org'];
-  const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin':  allowOrigin,
-      'Access-Control-Allow-Methods': 'GET, POST',
-      'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token',
+      'Access-Control-Allow-Origin':      allowOrigin,
+      'Access-Control-Allow-Methods':     'GET, POST',
+      'Access-Control-Allow-Headers':     'Content-Type, X-CSRF-Token',
       'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Max-Age':       '86400',
+      'Access-Control-Max-Age':           '86400',
     },
   });
 }
@@ -87,7 +89,6 @@ function generateCSRF() {
 
 function getCookieValue(request, name) {
   const cookie = request.headers.get('Cookie') || '';
-  // Safe regex — name is a constant, never user input
   const match  = cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
   return match ? match[1] : null;
 }
@@ -95,13 +96,10 @@ function getCookieValue(request, name) {
 function validateCSRF(request) {
   const cookieToken = getCookieValue(request, CSRF_COOKIE);
   const headerToken = request.headers.get(CSRF_HEADER);
-  // Both must be present and non-empty
   if (!cookieToken || !headerToken) return false;
   if (typeof cookieToken !== 'string' || typeof headerToken !== 'string') return false;
-  // Must be exactly 64 hex chars (32 bytes)
   if (!/^[0-9a-f]{64}$/.test(cookieToken)) return false;
   if (cookieToken.length !== headerToken.length) return false;
-  // Constant-time comparison — prevents timing side-channel
   let diff = 0;
   for (let i = 0; i < cookieToken.length; i++) {
     diff |= cookieToken.charCodeAt(i) ^ headerToken.charCodeAt(i);
@@ -111,73 +109,59 @@ function validateCSRF(request) {
 
 /* ─── RATE LIMITING ──────────────────────────────────────────── */
 async function checkRateLimit(env, ip) {
-  if (!env.RATE_KV) return { allowed: true }; // skip if KV not bound
-  const key = `rl:${await hashString(ip)}`; // hash IP in key too
+  if (!env.RATE_KV) return { allowed: true };
+  const key = `rl:${await hashString(ip)}`;
   let count = 0;
   try {
     const raw = await env.RATE_KV.get(key);
     count = raw ? parseInt(raw, 10) : 0;
     if (isNaN(count) || count < 0) count = 0;
   } catch {
-    // KV read failure — fail open (don't block user for infra issues)
     return { allowed: true };
   }
   if (count >= RATE_LIMIT_MAX) return { allowed: false };
   try {
     await env.RATE_KV.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW_SEC });
-  } catch {
-    // KV write failure — non-fatal, still allow
-  }
+  } catch { /* non-fatal */ }
   return { allowed: true };
 }
 
 /* ─── INPUT VALIDATION ───────────────────────────────────────── */
-// RFC 5322 simplified — catches obvious invalids, allows legit addresses
 const EMAIL_RE = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
 const GH_RE    = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
 const MAX      = { email: 254, name: 100, github: 39, org: 120, why: 1000 };
 
 function sanitize(val) {
   if (val === null || val === undefined) return '';
-  if (typeof val !== 'string') return '';       // reject non-strings entirely
-  return val
-    .replace(/<[^>]*>/g, '')                    // strip HTML tags
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // strip control chars
-    .trim();
+  if (typeof val !== 'string') return '';
+  return val.replace(/<[^>]*>/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
 }
 
 function vEmail(val) {
-  const v = sanitize(val);
-  if (!v)                return { ok: false, error: 'Email is required' };
+  const v = sanitize(val).toLowerCase();
+  if (!v) return { ok: false, error: 'Email is required' };
   if (v.length > MAX.email) return { ok: false, error: 'Email address is too long' };
   if (!EMAIL_RE.test(v)) return { ok: false, error: 'Please enter a valid email address' };
-  // Block disposable/test domains
   const domain = v.split('@')[1].toLowerCase();
   const blocked = ['test.com', 'example.com', 'mailinator.com', 'guerrillamail.com', 'tempmail.com', 'throwam.com'];
   if (blocked.includes(domain)) return { ok: false, error: 'Please use a real email address' };
-  return { ok: true, val: v.toLowerCase() };
+  return { ok: true, val: v };
 }
 
 function vName(val) {
   const v = sanitize(val);
-  if (!v)                return { ok: false, error: 'Name is required' };
-  if (v.length < 2)      return { ok: false, error: 'Name must be at least 2 characters' };
+  if (!v) return { ok: false, error: 'Name is required' };
+  if (v.length < 2) return { ok: false, error: 'Name must be at least 2 characters' };
   if (v.length > MAX.name) return { ok: false, error: 'Name is too long' };
   return { ok: true, val: v };
 }
 
 function vGitHub(val) {
   const v = sanitize(val).replace(/^@/, '');
-  if (!v) return { ok: true, val: '' }; // optional
+  if (!v) return { ok: true, val: '' };
   if (v.length > MAX.github) return { ok: false, error: 'GitHub username is too long (max 39 chars)' };
   if (v.startsWith('-') || v.endsWith('-')) return { ok: false, error: 'GitHub username cannot start or end with a hyphen' };
-  if (!GH_RE.test(v))  return { ok: false, error: 'Invalid GitHub username format' };
-  return { ok: true, val: v };
-}
-
-function vText(val, max, fieldName = 'Field') {
-  const v = sanitize(val);
-  if (v.length > max)  return { ok: false, error: `${fieldName} is too long (max ${max} chars)` };
+  if (!GH_RE.test(v)) return { ok: false, error: 'Invalid GitHub username format' };
   return { ok: true, val: v };
 }
 
@@ -187,28 +171,20 @@ function vRole(val) {
   return { ok: true, val: v };
 }
 
-/* ─── BODY PARSER — size-limited, typed ─────────────────────── */
+/* ─── BODY PARSER ────────────────────────────────────────────── */
 async function parseBody(request) {
-  // Reject if Content-Type is not application/json
   const ct = request.headers.get('Content-Type') || '';
-  if (!ct.includes('application/json')) {
-    return { ok: false, error: 'Content-Type must be application/json' };
-  }
-  // Enforce max body size
+  if (!ct.includes('application/json')) return { ok: false, error: 'Content-Type must be application/json' };
   const contentLength = parseInt(request.headers.get('Content-Length') || '0', 10);
-  if (contentLength > MAX_BODY_BYTES) {
-    return { ok: false, error: 'Request body too large' };
-  }
+  if (contentLength > MAX_BODY_BYTES) return { ok: false, error: 'Request body too large' };
   let body;
   try {
-    // Read with size limit
     const text = await request.text();
     if (text.length > MAX_BODY_BYTES) return { ok: false, error: 'Request body too large' };
     body = JSON.parse(text);
   } catch {
     return { ok: false, error: 'Invalid JSON in request body' };
   }
-  // Must be a plain object — reject arrays, strings, null
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, error: 'Request body must be a JSON object' };
   }
@@ -225,25 +201,453 @@ async function hashString(str) {
 async function isEmailRegistered(env, email) {
   if (!env.DB) return false;
   try {
-    const row = await env.DB.prepare(
-      'SELECT id FROM registrations WHERE email = ? LIMIT 1'
-    ).bind(email).first();
+    const row = await env.DB.prepare('SELECT id FROM registrations WHERE email = ? LIMIT 1').bind(email).first();
     return !!row;
-  } catch {
-    return false; // fail open — don't block registration on DB read error
+  } catch { return false; }
+}
+
+/* ─── LEADERBOARD HELPERS ────────────────────────────────────── */
+const BOT_TO_TOOL = {
+  'appsecai-app[bot]': 'AppSecAI',
+  'appsecai-bot':      'AppSecAI',
+  'dryrun-bot':        'DryRun Security',
+  'dryrun-security':   'DryRun Security',
+};
+
+function lbJson(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=300',
+    },
+  });
+}
+
+function parseQuery(url) {
+  const sort = url.searchParams.get('sort') ?? '';
+  const dir  = url.searchParams.get('dir') === 'asc' ? 'ASC' : 'DESC';
+  const q    = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+  return { sort, dir, q };
+}
+
+async function handleMeta(env) {
+  const row     = await env.DB.prepare("SELECT value FROM sync_state WHERE key = 'last_synced_at'").first();
+  const running = await env.DB.prepare("SELECT value FROM sync_state WHERE key = 'sync_running'").first();
+  return lbJson({ last_synced_at: row?.value ?? null, sync_running: running?.value === '1' });
+}
+
+async function handleRepos(env, url) {
+  const { sort, dir, q } = parseQuery(url);
+  const VALID = new Set(['name', 'language', 'open_prs', 'stars']);
+  const col   = VALID.has(sort) ? sort : 'open_prs';
+  const rows  = await env.DB.prepare(`
+    SELECT r.id, r.name, r.full_name, r.description, r.language,
+           r.open_prs, r.stars, r.upstream_url, r.synced_at,
+           COUNT(DISTINCT p.id)                 AS total_prs,
+           COUNT(DISTINCT pp.login)              AS contributors,
+           COALESCE(SUM(p.consensus_accept), 0)  AS total_accept,
+           COALESCE(SUM(p.consensus_modify), 0)  AS total_modify,
+           COALESCE(SUM(p.consensus_reject), 0)  AS total_reject
+    FROM repos r
+    LEFT JOIN pull_requests p  ON p.repo_name = r.name
+    LEFT JOIN pr_participants pp ON pp.repo_name = r.name
+    GROUP BY r.id ORDER BY ${col} ${dir}
+  `).all();
+  let results = rows.results;
+  if (q) results = results.filter(r =>
+    String(r.name ?? '').toLowerCase().includes(q) ||
+    String(r.language ?? '').toLowerCase().includes(q) ||
+    String(r.description ?? '').toLowerCase().includes(q)
+  );
+  return lbJson(results);
+}
+
+async function handlePRs(env, url) {
+  const { sort, dir, q } = parseQuery(url);
+  const VALID = new Set(['repo_name','number','title','state','comment_count','participants',
+    'consensus_accept','consensus_modify','consensus_reject','updated_at']);
+  const col = VALID.has(sort) ? sort : 'updated_at';
+  const rows = await env.DB.prepare(`
+    SELECT id, repo_name, number, title, state, author, html_url,
+           comment_count, participants,
+           consensus_accept, consensus_modify, consensus_reject,
+           merged_upstream, merged_at, created_at, updated_at
+    FROM pull_requests ORDER BY ${col} ${dir} LIMIT 500
+  `).all();
+  let results = rows.results;
+  if (q) results = results.filter(r =>
+    String(r.repo_name ?? '').toLowerCase().includes(q) ||
+    String(r.title ?? '').toLowerCase().includes(q) ||
+    String(r.author ?? '').toLowerCase().includes(q)
+  );
+  return lbJson(results);
+}
+
+async function handleContributors(env, url) {
+  const { sort, dir, q } = parseQuery(url);
+  const VALID = new Set(['login','prs_worked','total_interactions','reactions_received',
+    'accepts','modifies','rejects','reputation','avg_per_pr']);
+  const col = VALID.has(sort) ? sort : 'reputation';
+  const rows = await env.DB.prepare(`
+    SELECT c.login, c.avatar_url, c.prs_worked, c.total_interactions,
+           COALESCE(c.reactions_received, 0) AS reactions_received,
+           c.accepts, c.modifies, c.rejects,
+           ROUND(c.total_interactions + COALESCE(c.reactions_received, 0) * 0.25, 2) AS reputation,
+           CASE WHEN c.prs_worked > 0
+             THEN ROUND(CAST(c.total_interactions AS REAL) / c.prs_worked, 2)
+             ELSE 0 END AS avg_per_pr
+    FROM contributors c ORDER BY ${col} ${dir}
+  `).all();
+  let results = rows.results;
+  if (q) results = results.filter(r => String(r.login ?? '').toLowerCase().includes(q));
+  return lbJson(results);
+}
+
+async function handleMaintainers(env, url) {
+  const { sort, dir, q } = parseQuery(url);
+  const VALID = new Set(['repo_name','total_submitted','total_merged','merge_rate']);
+  const col = VALID.has(sort) ? sort : 'merge_rate';
+  const rows = await env.DB.prepare(`
+    SELECT p.repo_name, r.upstream_url,
+           COUNT(*)                                                         AS total_submitted,
+           SUM(p.merged_upstream)                                           AS total_merged,
+           CASE WHEN COUNT(*) > 0
+             THEN ROUND(CAST(SUM(p.merged_upstream) AS REAL) / COUNT(*) * 100, 1)
+             ELSE 0 END AS merge_rate,
+           SUM(p.consensus_accept) AS total_accept_consensus
+    FROM pull_requests p JOIN repos r ON r.name = p.repo_name
+    GROUP BY p.repo_name ORDER BY ${col} ${dir}
+  `).all();
+  let results = rows.results;
+  if (q) results = results.filter(r => String(r.repo_name ?? '').toLowerCase().includes(q));
+  return lbJson(results);
+}
+
+async function handleTools(env, url) {
+  const { q } = parseQuery(url);
+  const fixRows = await env.DB.prepare(`
+    SELECT author, COUNT(*) AS total_prs, SUM(merged_upstream) AS accepted_upstream,
+           COUNT(DISTINCT repo_name) AS projects_worked, SUM(comment_count) AS total_comments,
+           SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
+           SUM(consensus_reject) AS total_reject
+    FROM pull_requests WHERE author IS NOT NULL GROUP BY author ORDER BY total_prs DESC
+  `).all();
+
+  const fixToolMap = new Map();
+  for (const r of fixRows.results) {
+    const toolName = BOT_TO_TOOL[r.author];
+    if (!toolName) continue;
+    const existing = fixToolMap.get(toolName);
+    if (existing) {
+      existing.total_prs         += r.total_prs;
+      existing.accepted_upstream += r.accepted_upstream ?? 0;
+      existing.projects_worked   += r.projects_worked ?? 0;
+      existing.interactions      += r.total_comments ?? 0;
+      existing.total_accept      += r.total_accept ?? 0;
+      existing.total_modify      += r.total_modify ?? 0;
+      existing.total_reject      += r.total_reject ?? 0;
+    } else {
+      fixToolMap.set(toolName, {
+        login: r.author, name: toolName, total_prs: r.total_prs,
+        accepted_upstream: r.accepted_upstream ?? 0, projects_worked: r.projects_worked ?? 0,
+        interactions: r.total_comments ?? 0, total_accept: r.total_accept ?? 0,
+        total_modify: r.total_modify ?? 0, total_reject: r.total_reject ?? 0,
+      });
+    }
+  }
+
+  const detectRows = await env.DB.prepare(`
+    SELECT detection_tool, COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_name) AS projects_worked,
+           SUM(merged_upstream) AS accepted_upstream,
+           SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
+           SUM(consensus_reject) AS total_reject
+    FROM pull_requests WHERE detection_tool IS NOT NULL GROUP BY detection_tool ORDER BY vulnerabilities DESC
+  `).all();
+
+  const tools = [];
+  for (const [name, fix] of fixToolMap.entries()) {
+    tools.push({ name, role: 'fix', card_key: `fix:${name}`, login: fix.login,
+      total_prs: fix.total_prs, vulnerabilities: fix.total_prs,
+      accepted_upstream: fix.accepted_upstream, projects_worked: fix.projects_worked,
+      interactions: fix.interactions, total_accept: fix.total_accept,
+      total_modify: fix.total_modify, total_reject: fix.total_reject });
+  }
+  for (const d of detectRows.results) {
+    tools.push({ name: d.detection_tool, role: 'detect', card_key: `detect:${d.detection_tool}`,
+      login: null, total_prs: null, vulnerabilities: d.vulnerabilities,
+      accepted_upstream: d.accepted_upstream ?? 0, projects_worked: d.projects_worked,
+      interactions: null, total_accept: d.total_accept ?? 0,
+      total_modify: d.total_modify ?? 0, total_reject: d.total_reject ?? 0 });
+  }
+
+  let results = tools;
+  if (q) results = results.filter(r => String(r.name ?? '').toLowerCase().includes(q));
+  return lbJson(results);
+}
+
+/* ─── GITHUB SYNC ────────────────────────────────────────────── */
+const ORG = 'owasp-oasis';
+const META_REPOS = new Set(['project-overview', 'project-planning', 'project-website']);
+
+async function ghFetch(path, token) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'oasis-worker-sync/1.0',
+    },
+  });
+  if (!res.ok) throw new Error(`GitHub API ${path} → ${res.status}`);
+  return res.json();
+}
+
+async function ghFetchAll(path, token) {
+  const results = [];
+  let page = 1;
+  while (true) {
+    const sep  = path.includes('?') ? '&' : '?';
+    const data = await ghFetch(`${path}${sep}per_page=100&page=${page}`, token);
+    if (!Array.isArray(data) || data.length === 0) break;
+    results.push(...data);
+    if (data.length < 100) break;
+    page++;
+  }
+  return results;
+}
+
+function parseDecision(body) {
+  if (!body) return null;
+  const lower = body.toLowerCase();
+  if (!lower.includes('validation summary:') && !lower.includes('rejection summary:')) return null;
+  if (lower.includes('rejection summary:') && lower.includes('reject')) return 'reject';
+  if (lower.includes('validation summary:')) {
+    for (const line of body.split('\n')) {
+      const l = line.toLowerCase();
+      if (l.includes('decision')) {
+        if (l.includes('accept')) return 'accept';
+        if (l.includes('modify')) return 'modify';
+        if (l.includes('reject')) return 'reject';
+      }
+    }
+  }
+  return null;
+}
+
+function parseDetectionTool(body) {
+  if (!body) return null;
+  const m = body.match(/\*\*[Dd]etected\s+[Bb]y[:\*]+\*?\*?\s*([^\n*|]+)/);
+  if (m) return normaliseToolName(m[1]);
+  if (/appsecai-diff-hash/i.test(body) || /AppSecAI Vulnerability ID/i.test(body)) return 'AppSecAI';
+  if (/[Dd]etected\s+[Bb]y[:\s]+AppSec\s*AI/i.test(body)) return 'AppSecAI';
+  if (/Semgrep\s+OSS/i.test(body)) return 'Semgrep OSS';
+  if (/OpenGrep/i.test(body)) return 'OpenGrep';
+  if (/\b(javascript|python|java|go|ruby)\.[a-z]+\.[a-z]+\.[a-z]/.test(body)) return 'Semgrep OSS';
+  if (/##\s+What\s+SAST\s+Found/i.test(body)) return 'SAST (unknown)';
+  return null;
+}
+
+function normaliseToolName(raw) {
+  const l = raw.trim().toLowerCase();
+  if (l.includes('appsec') || l.includes('fenix')) return 'AppSecAI';
+  if (l.includes('opengrep')) return 'OpenGrep';
+  if (l.includes('semgrep')) return 'Semgrep OSS';
+  return raw.trim().slice(0, 60) || 'SAST (unknown)';
+}
+
+async function getSyncState(db, key) {
+  const row = await db.prepare('SELECT value FROM sync_state WHERE key = ?').bind(key).first();
+  return row?.value ?? '2020-01-01T00:00:00Z';
+}
+
+async function setSyncState(db, key, value) {
+  await db.prepare('INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)').bind(key, value).run();
+}
+
+async function rebuildContributors(db, syncStart) {
+  const rows = await db.prepare(`
+    SELECT login,
+           COUNT(DISTINCT pr_id)                                 AS prs_worked,
+           SUM(interactions)                                      AS total_interactions,
+           SUM(reactions_received)                                AS reactions_received,
+           SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)  AS accepts,
+           SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)  AS modifies,
+           SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)  AS rejects
+    FROM pr_participants GROUP BY login
+  `).all();
+
+  for (const row of rows.results) {
+    const existing = await db.prepare('SELECT avatar_url FROM contributors WHERE login = ?').bind(row.login).first();
+    await db.prepare(`
+      INSERT OR REPLACE INTO contributors
+        (login, avatar_url, prs_worked, total_interactions, reactions_received, accepts, modifies, rejects, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      row.login,
+      existing?.avatar_url ?? `https://github.com/${row.login}.png?size=64`,
+      row.prs_worked, row.total_interactions, row.reactions_received ?? 0,
+      row.accepts, row.modifies, row.rejects, syncStart
+    ).run();
   }
 }
 
-async function isAlreadyApplied(env, email, role) {
-  if (!env.DB) return false;
+async function runSync(env) {
+  const token = env.GITHUB_TOKEN;
+  const db    = env.DB;
+  const stats = { repos: 0, prs: 0, comments: 0 };
+
   try {
-    const row = await env.DB.prepare(
-      'SELECT id FROM applications WHERE email = ? AND role = ? LIMIT 1'
-    ).bind(email, role).first();
-    return !!row;
-  } catch {
-    return false;
+    const since     = await getSyncState(db, 'last_synced_at');
+    const syncStart = new Date().toISOString();
+    const allRepos  = await ghFetchAll(`/orgs/${ORG}/repos?type=public`, token);
+    const repos     = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
+
+    for (const repo of repos) {
+      const detail       = await ghFetch(`/repos/${ORG}/${repo.name}`, token);
+      const upstreamUrl  = detail.parent?.html_url ?? null;
+
+      await db.prepare(`
+        INSERT OR REPLACE INTO repos (id, name, full_name, description, language, open_prs, stars, upstream_url, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(repo.id, repo.name, repo.full_name, repo.description ?? null,
+        repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart).run();
+      stats.repos++;
+
+      const openPRs   = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
+      const closedPRs = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
+      const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
+
+      for (const pr of prs) {
+        stats.prs++;
+        const participantMap = new Map();
+        const ensure = l => {
+          if (!participantMap.has(l)) participantMap.set(l, { interactions: 0, decision: null, reactions_received: 0 });
+          return participantMap.get(l);
+        };
+
+        const comments = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/${pr.number}/comments`, token);
+        stats.comments += comments.length;
+
+        let consensusAccept = 0, consensusModify = 0, consensusReject = 0;
+
+        for (const comment of comments) {
+          const login = comment.user?.login;
+          if (!login || login.endsWith('[bot]')) continue;
+          const p = ensure(login);
+          p.interactions++;
+          const decision = parseDecision(comment.body);
+          if (decision) {
+            p.decision = decision;
+            if (decision === 'accept') consensusAccept++;
+            if (decision === 'modify') consensusModify++;
+            if (decision === 'reject') consensusReject++;
+          }
+          try {
+            const reactions = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/comments/${comment.id}/reactions`, token);
+            for (const rxn of reactions) {
+              const rLogin = rxn.user?.login;
+              if (!rLogin || rLogin === login || rLogin.endsWith('[bot]')) continue;
+              p.reactions_received++;
+              if (rxn.content === '+1' && decision) {
+                if (decision === 'accept') consensusAccept++;
+                if (decision === 'modify') consensusModify++;
+                if (decision === 'reject') consensusReject++;
+              }
+              ensure(rLogin).interactions++;
+            }
+          } catch { /* skip */ }
+        }
+
+        const detectionTool = parseDetectionTool(pr.body);
+        const existingRow   = await db.prepare('SELECT merged_upstream FROM pull_requests WHERE repo_name = ? AND number = ?').bind(repo.name, pr.number).first();
+        const mergedUpstream = existingRow?.merged_upstream ?? 0;
+        const state = pr.state === 'open' ? 'open' : 'closed';
+
+        await db.prepare(`
+          INSERT OR REPLACE INTO pull_requests
+            (id, repo_name, number, title, state, author, html_url, comment_count,
+             participants, consensus_accept, consensus_modify, consensus_reject,
+             merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          pr.id, repo.name, pr.number, pr.title, state,
+          pr.user?.login ?? null, pr.html_url, comments.length,
+          participantMap.size, consensusAccept, consensusModify, consensusReject,
+          mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
+          pr.created_at, pr.updated_at, detectionTool ?? null, syncStart
+        ).run();
+
+        for (const [login, data] of participantMap.entries()) {
+          await db.prepare(`
+            INSERT OR REPLACE INTO pr_participants
+              (pr_id, repo_name, pr_number, login, interactions, decision, reactions_received)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).bind(pr.id, repo.name, pr.number, login, data.interactions, data.decision ?? null, data.reactions_received).run();
+        }
+      }
+
+      const openCount = await db.prepare("SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'").bind(repo.name).first();
+      await db.prepare('UPDATE repos SET open_prs = ?, synced_at = ? WHERE name = ?').bind(openCount?.c ?? 0, syncStart, repo.name).run();
+    }
+
+    await rebuildContributors(db, syncStart);
+    await setSyncState(db, 'last_synced_at', syncStart);
+    await setSyncState(db, 'sync_running', '0');
+    return { ok: true, message: `Sync complete at ${syncStart}`, stats };
+  } catch (err) {
+    await setSyncState(db, 'sync_running', '0');
+    return { ok: false, message: err?.message ?? String(err), stats };
   }
+}
+
+/* ─── REGISTER HANDLER ───────────────────────────────────────── */
+async function handleRegister(request, env) {
+  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
+
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rl = await checkRateLimit(env, ip);
+  if (!rl.allowed) return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
+
+  const parsed = await parseBody(request);
+  if (!parsed.ok) return jsonErr(parsed.error, 400, request);
+  const body = parsed.val;
+
+  // name is optional for the React form (project-website style)
+  const nameVal = body.name ? body.name : (body.email ? body.email.split('@')[0] : '');
+  const nameRes = vName(nameVal);
+  if (!nameRes.ok) return jsonErr(nameRes.error, 400, request);
+
+  const emailRes = vEmail(body.email);
+  if (!emailRes.ok) return jsonErr(emailRes.error, 400, request);
+
+  const ghRes = vGitHub(body.github ?? '');
+  if (!ghRes.ok) return jsonErr(ghRes.error, 400, request);
+
+  // Accept both 'role' and 'type' fields for compatibility
+  const roleVal = body.role ?? body.type ?? '';
+  const roleRes = vRole(roleVal);
+  if (!roleRes.ok) return jsonErr(roleRes.error, 400, request);
+
+  const isDuplicate = await isEmailRegistered(env, emailRes.val);
+  if (isDuplicate) return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
+
+  if (env.DB) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO registrations (name, email, github, role, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(nameRes.val, emailRes.val, ghRes.val, roleRes.val, await hashString(ip), new Date().toISOString()).run();
+    } catch (err) {
+      if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
+        return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
+      }
+      console.error('DB error (register):', err?.message);
+      return jsonErr('Registration failed — please try again.', 500, request);
+    }
+  }
+
+  return jsonOk({ message: 'Registered successfully. We\'ll be in touch!' }, request);
 }
 
 /* ─── MAIN HANDLER ───────────────────────────────────────────── */
@@ -252,24 +656,19 @@ export default {
     const url    = new URL(request.url);
     const method = request.method;
 
-    /* Block unsupported HTTP methods */
     if (!ALLOWED_METHODS.has(method)) {
-      return secHeaders(new Response('Method Not Allowed', {
-        status: 405,
-        headers: { Allow: 'GET, POST, OPTIONS, HEAD' },
-      }));
+      return secHeaders(new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, POST, OPTIONS, HEAD' } }));
     }
 
-    /* Handle CORS preflight */
     if (method === 'OPTIONS') return handleOptions(request);
 
-    /* HTTPS enforcement — skip on localhost */
-    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost' ||
+                    url.hostname === '0.0.0.0'   || (env.ENVIRONMENT !== 'production');
+
     if (url.protocol === 'http:' && !isLocal) {
       return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 301);
     }
 
-    /* Apex → www redirect (.com and .org) */
     if (!isLocal && url.hostname === 'owasp-oasis.com') {
       return Response.redirect(`https://www.owasp-oasis.com${url.pathname}${url.search}`, 301);
     }
@@ -277,56 +676,36 @@ export default {
       return Response.redirect(`https://www.owasp-oasis.org${url.pathname}${url.search}`, 301);
     }
 
-    /* Wrap everything in a top-level try/catch — no unhandled Worker crashes */
     try {
-
-      /* GET / — serve HTML */
-      if ((method === 'GET' || method === 'HEAD') &&
-          (url.pathname === '/' || url.pathname === '/index.html')) {
+      /* GET /api/csrf — generate CSRF token, set cookie, return token */
+      if (method === 'GET' && url.pathname === '/api/csrf') {
         const csrf = generateCSRF();
-        const html = HTML.replace(
-          '<meta name="csrf-token" content=""/><!-- Injected by Cloudflare Worker -->',
-          `<meta name="csrf-token" content="${csrf}"/>`
-        );
-        return secHeaders(new Response(method === 'HEAD' ? null : html, {
-          status: 200,
-          headers: {
-            'Content-Type':  'text/html; charset=utf-8',
-            'Cache-Control': 'no-store, no-cache, must-revalidate',
-            'Set-Cookie':    `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; Secure; HttpOnly; Max-Age=3600`,
-          },
-        }));
+        const res = Response.json({ token: csrf }, { status: 200 });
+        const r = secHeaders(res, request);
+        r.headers.set('Set-Cookie',
+          `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; Secure; HttpOnly; Max-Age=3600`);
+        r.headers.set('Cache-Control', 'no-store');
+        return r;
       }
 
       /* GET /api/count */
       if (method === 'GET' && url.pathname === '/api/count') {
         try {
-          const row = env.DB ? await env.DB.prepare(
-            'SELECT COUNT(*) as count FROM registrations'
-          ).first() : { count: 0 };
+          const row = env.DB ? await env.DB.prepare('SELECT COUNT(*) as count FROM registrations').first() : { count: 0 };
           return jsonOk({ count: row?.count || 0 }, request);
-        } catch {
-          return jsonOk({ count: 0 }, request);
-        }
+        } catch { return jsonOk({ count: 0 }, request); }
       }
 
       /* POST /api/register */
       if (method === 'POST' && url.pathname === '/api/register') {
-        return await handleRegister(request, env);
+        return handleRegister(request, env);
       }
 
-      /* POST /api/apply */
-      if (method === 'POST' && url.pathname === '/api/apply') {
-        return await handleApply(request, env);
-      }
-
-      /* GET /api/admin/registrations — for Google Sheets sync */
+      /* GET /api/admin/registrations */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
-        const secret = request.headers.get('X-Admin-Secret');
+        const secret    = request.headers.get('X-Admin-Secret');
         const envSecret = env.ADMIN_SECRET || '';
-        if (!secret || !envSecret || secret !== envSecret) {
-          return jsonErr('Unauthorised', 401, request);
-        }
+        if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
         try {
           const rows = await env.DB.prepare(
             'SELECT id, name, email, github, role, created_at FROM registrations ORDER BY created_at DESC'
@@ -338,147 +717,51 @@ export default {
         }
       }
 
-      /* 404 for everything else */
-      return secHeaders(new Response(JSON.stringify({ error: 'Not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      }));
+      /* Leaderboard API */
+      if (method === 'GET' && url.pathname === '/api/leaderboard/meta')         return handleMeta(env);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/repos')        return handleRepos(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/prs')          return handlePRs(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/contributors') return handleContributors(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')  return handleMaintainers(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')        return handleTools(env, url);
+
+      /* Manual sync trigger */
+      if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
+        if (!env.DB) return jsonErr('DB not available', 503, request);
+        const lastManual = await env.DB.prepare("SELECT value FROM sync_state WHERE key = 'last_manual_sync'").first();
+        if (lastManual?.value) {
+          const elapsed = Date.now() - new Date(lastManual.value).getTime();
+          if (elapsed < 10 * 60 * 1000) {
+            const waitSec = Math.ceil((10 * 60 * 1000 - elapsed) / 1000);
+            return jsonErr(`Rate-limited. Try again in ${waitSec}s.`, 429, request);
+          }
+        }
+        await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')").run();
+        await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)").bind(new Date().toISOString()).run();
+        const result = await runSync(env);
+        return Response.json(result);
+      }
+
+      /* All other routes — serve React SPA via ASSETS */
+      if (env.ASSETS) {
+        return env.ASSETS.fetch(request);
+      }
+
+      return new Response('Not found', { status: 404 });
 
     } catch (err) {
-      /* Top-level catch — never expose internals */
       console.error('Unhandled Worker error:', err?.message);
       return jsonErr('An unexpected error occurred. Please try again.', 500);
     }
   },
+
+  /* Cron — every 4 hours */
+  async scheduled(_event, env, _ctx) {
+    console.log('Starting scheduled GitHub sync...');
+    if (env.DB) {
+      await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')").run();
+    }
+    const result = await runSync(env);
+    console.log('Sync result:', JSON.stringify(result));
+  },
 };
-
-/* ─── REGISTER HANDLER ───────────────────────────────────────── */
-async function handleRegister(request, env) {
-  const req = request;
-  /* 1. CSRF */
-  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, req);
-
-  /* 2. Rate limit */
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const rl = await checkRateLimit(env, ip);
-  if (!rl.allowed) return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
-
-  /* 3. Parse body */
-  const parsed = await parseBody(request);
-  if (!parsed.ok) return jsonErr(parsed.error, 400, request);
-  const body = parsed.val;
-
-  /* 4. Validate every field */
-  const nameRes  = vName(body.name);
-  if (!nameRes.ok) return jsonErr(nameRes.error, 400, request);
-
-  const emailRes = vEmail(body.email);
-  if (!emailRes.ok) return jsonErr(emailRes.error, 400, request);
-
-  const ghRes = vGitHub(body.github);
-  if (!ghRes.ok) return jsonErr(ghRes.error, 400, request);
-
-  const roleRes = vRole(body.role);
-  if (!roleRes.ok) return jsonErr(roleRes.error);
-
-  /* 5. Explicit duplicate check — return friendly message */
-  const isDuplicate = await isEmailRegistered(env, emailRes.val);
-  if (isDuplicate) {
-    return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
-  }
-
-  /* 6. Write to D1 */
-  if (env.DB) {
-    try {
-      await env.DB.prepare(
-        `INSERT INTO registrations (name, email, github, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(
-        nameRes.val,
-        emailRes.val,
-        ghRes.val,
-        roleRes.val,
-        await hashString(ip),
-        new Date().toISOString(),
-      ).run();
-    } catch (err) {
-      console.error('DB error (register):', err?.message);
-      if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
-        return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
-      }
-      return jsonErr('Registration failed — please try again.', 500, request);
-    }
-  }
-
-  return jsonOk({ message: 'Registered successfully. We\'ll be in touch!' }, request);
-}
-
-/* ─── APPLY HANDLER ──────────────────────────────────────────── */
-async function handleApply(request, env) {
-  /* 1. CSRF */
-  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403);
-
-  /* 2. Rate limit */
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const rl = await checkRateLimit(env, ip);
-  if (!rl.allowed) return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
-
-  /* 3. Parse body */
-  const parsed = await parseBody(request);
-  if (!parsed.ok) return jsonErr(parsed.error, 400, request);
-  const body = parsed.val;
-
-  /* 4. Validate every field individually with clear errors */
-  const nameRes  = vName(body.name);
-  if (!nameRes.ok) return jsonErr(nameRes.error, 400, request);
-
-  const emailRes = vEmail(body.email);
-  if (!emailRes.ok) return jsonErr(emailRes.error, 400, request);
-
-  const ghRes = vGitHub(body.github);
-  if (!ghRes.ok) return jsonErr(ghRes.error, 400, request);
-
-  const orgRes = vText(body.org, MAX.org, 'Organisation');
-  if (!orgRes.ok) return jsonErr(orgRes.error);
-
-  const whyRes = vText(body.why, MAX.why, 'Message');
-  if (!whyRes.ok) return jsonErr(whyRes.error);
-
-  /* Role is required for applications (unlike registration) */
-  const roleRes = vRole(body.role);
-  if (!roleRes.ok || !roleRes.val) return jsonErr('Please select a role to apply for', 400, request);
-
-  /* 5. Explicit duplicate check — friendly message, no info leak */
-  const isDuplicate = await isAlreadyApplied(env, emailRes.val, roleRes.val);
-  if (isDuplicate) {
-    return jsonOk({ message: 'You\'ve already applied for this role. We\'ll review it soon!' }, request);
-  }
-
-  /* 6. Write to D1 */
-  if (env.DB) {
-    try {
-      await env.DB.prepare(
-        `INSERT INTO applications (email, name, github, org, why, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(
-        emailRes.val,
-        nameRes.val,
-        ghRes.val,
-        orgRes.val,
-        whyRes.val,
-        roleRes.val,
-        await hashString(ip),
-        new Date().toISOString(),
-      ).run();
-    } catch (err) {
-      console.error('DB error (apply):', err?.message);
-      // Handle race-condition duplicate
-      if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
-        return jsonOk({ message: 'You\'ve already applied for this role. We\'ll review it soon!' }, request);
-      }
-      return jsonErr('Application failed — please try again.', 500, request);
-    }
-  }
-
-  return jsonOk({ message: 'Application received! We\'ll be in touch when the project launches.' }, request);
-}

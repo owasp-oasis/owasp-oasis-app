@@ -2,11 +2,27 @@
   "name": "owasp-oasis",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev":    "wrangler dev",
-    "deploy": "wrangler deploy"
+    "dev": "wrangler dev --var ENVIRONMENT:development",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy:preview": "npm run build && wrangler deploy --env preview",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "@cloudflare/workers-types": "^4.20260426.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.3.5",
+    "wrangler": "^4.78.0"
   }
 }

@@ -1,0 +1,139 @@
+.sortable-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sortable-table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sortable-table-search {
+  flex: 1;
+  max-width: 360px;
+  padding: 9px 14px;
+  border: 2px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: var(--font);
+  color: var(--gray-800);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.sortable-table-search:focus {
+  border-color: var(--blue);
+}
+
+.sortable-table-count {
+  font-size: 0.85rem;
+  color: var(--gray-400);
+  white-space: nowrap;
+}
+
+.sortable-table-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--gray-400);
+  font-size: 0.95rem;
+  background: var(--gray-100);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.sortable-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+}
+
+.sortable-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.sortable-table thead {
+  position: relative;
+  z-index: 10;
+}
+
+.sortable-table thead th {
+  background: var(--gray-100);
+  padding: 11px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gray-600);
+  border-bottom: 2px solid var(--gray-200);
+  user-select: none;
+  white-space: nowrap;
+  overflow: visible;
+  position: relative;
+}
+
+/* Icon-only columns: shrink to fit the emoji */
+.sortable-table thead th:has(.col-header-tip) {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  padding: 11px 6px;
+  text-align: center;
+}
+
+.sortable-table tbody td:has(.col-banded),
+.sortable-table tbody td:has(.consensus-accept),
+.sortable-table tbody td:has(.consensus-modify),
+.sortable-table tbody td:has(.consensus-reject),
+.sortable-table tbody td:has(.reputation-score) {
+  text-align: right;
+}
+
+.sortable-table thead th.sortable {
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sortable-table thead th.sortable:hover {
+  background: var(--gray-200);
+  color: var(--blue-dark);
+}
+
+.sort-indicator {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.sortable-table tbody tr {
+  border-bottom: 1px solid var(--gray-200);
+  transition: background 0.1s;
+}
+
+.sortable-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.sortable-table tbody tr:hover {
+  background: #f4f8ff;
+}
+
+.sortable-table tbody td {
+  padding: 10px 10px;
+  color: var(--gray-800);
+  vertical-align: middle;
+}
+
+.sortable-table a {
+  color: var(--blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.sortable-table a:hover {
+  text-decoration: underline;
+}

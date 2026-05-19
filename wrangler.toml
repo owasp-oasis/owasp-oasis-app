@@ -2,13 +2,6 @@ name       = "owasp-oasis"
 main       = "worker.js"
 compatibility_date = "2024-01-01"
 workers_dev = true
-find_additional_modules = false
-
-# ── Tell Wrangler to treat .html as text modules ──
-[[rules]]
-type = "Text"
-globs = ["**/*.html"]
-fallthrough = true
 
 # ── .com routes ──
 [[routes]]
@@ -40,6 +33,39 @@ binding    = "RATE_KV"
 id         = "4668dfe626b144de82ceec91df80c7ce"
 preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 
+# ── Cron triggers ──
+[triggers]
+crons = ["0 */4 * * *"]
+
 # ── Environment variables ──
 [vars]
 ENVIRONMENT = "production"
+
+# ── Preview environment — deploys to preview.owasp-oasis.bluejar.org ──
+[env.preview]
+name = "owasp-oasis-preview"
+workers_dev = false
+
+[env.preview.assets]
+directory = "./dist"
+binding   = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[env.preview.routes]]
+pattern = "preview.owasp-oasis.bluejar.org"
+custom_domain = true
+
+[[env.preview.d1_databases]]
+binding       = "DB"
+database_name = "oasis-db"
+database_id   = "2198ce30-3090-4805-884a-317dc6b9db58"
+
+[[env.preview.kv_namespaces]]
+binding = "RATE_KV"
+id      = "6dabc90e4b6b432cac87fb1c7a2ab631"
+
+[env.preview.vars]
+ENVIRONMENT = "production"
+
+[env.preview.triggers]
+crons = ["0 */4 * * *"]

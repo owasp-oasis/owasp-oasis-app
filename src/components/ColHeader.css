@@ -1,0 +1,58 @@
+.col-header-tip {
+  position: relative;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Ensure the tooltip escapes the th's overflow context */
+  overflow: visible;
+}
+
+/* Tooltip appears BELOW the icon so it falls inside the table body
+   and is not clipped by the scroll container's top edge */
+.col-header-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gray-800);
+  color: var(--white);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Arrow pointing UP (tooltip is below the icon) */
+.col-header-tip::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--gray-800);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 500;
+}
+
+/* Show on hover of the span itself — reliable regardless of th overflow */
+.col-header-tip:hover::after,
+.col-header-tip:hover::before {
+  opacity: 1;
+}
+
+/* Make thead cells not clip the tooltip */
+.sortable-table thead th {
+  overflow: visible;
+}
