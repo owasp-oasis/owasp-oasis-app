@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Overview | OASIS</title>
+<meta name="description" content="How OASIS Works — a practical, community-driven model turning automated findings into human-validated upstream security improvements."/>
+<meta name="referrer" content="strict-origin-when-cross-origin"/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg width='256' height='256' viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform='translate(-19.2,-10) scale(1.15)'%3E%3Cpath d='M128 20 L56 44 V120 C56 166 86 204 128 220 C170 204 200 166 200 120 V44 Z' fill='%230B4F8A'/%3E%3Cpath d='M128 36 L72 56 V118 C72 156 96 188 128 200 C160 188 184 156 184 118 V56 Z' fill='%230F6FCF'/%3E%3Ccircle cx='128' cy='120' r='40' fill='%23FFFFFF'/%3E%3Ccircle cx='128' cy='120' r='25' fill='%230F6FCF'/%3E%3Cline x1='96' y1='80' x2='80' y2='60' stroke='%234CD964' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='80' cy='60' r='5' fill='%234CD964'/%3E%3Cline x1='128' y1='72' x2='128' y2='48' stroke='%234CD964' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='128' cy='48' r='5' fill='%234CD964'/%3E%3Cline x1='160' y1='80' x2='176' y2='60' stroke='%234CD964' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='176' cy='60' r='5' fill='%234CD964'/%3E%3C/g%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+*{margin:0}
+:root{
+  --ink:#07111f;
+  --ink-soft:#243247;
+  --muted:#61738b;
+  --blue-dark:#0b4f8a;
+  --blue:#0f6fcf;
+  --blue-mid:#1558d6;
+  --blue-soft:#e7f1ff;
+  --green:#0d9e52;
+  --green-bright:#4cd964;
+  --green-soft:#e8f9ef;
+  --paper:#f7fbff;
+  --line:rgba(15,111,207,.16);
+  --line-strong:rgba(15,111,207,.28);
+  --white:#fff;
+  --shadow:0 18px 50px rgba(11,79,138,.14);
+  --serif:"DM Serif Display",Georgia,serif;
+  --sans:"Geist",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"Geist Mono","Courier New",monospace;
+}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{
+  min-width:320px;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+button{cursor:pointer;font:inherit}
+.shell{min-height:100vh;display:flex;flex-direction:column}
+.wrap{width:min(1080px,calc(100% - 40px));margin:0 auto}
+.skip{position:absolute;left:-999px;top:12px;background:var(--ink);color:#fff;padding:10px 14px;border-radius:6px;z-index:1000}
+.skip:focus{left:12px}
+
+/* ── Nav ── */
+.nav{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--line);background:rgba(247,251,255,.9);backdrop-filter:blur(16px)}
+.nav .wrap{height:72px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;color:var(--blue);letter-spacing:.01em}
+.brand svg{width:34px;height:34px;flex:0 0 auto}
+.brand span{font-size:20px}
+.nav-links{display:flex;align-items:center;gap:4px}
+.nav-links a{font-size:14px;font-weight:600;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .15s,background .15s}
+.nav-links a:hover{color:var(--blue);background:var(--blue-soft)}
+.nav-links a.active{color:var(--blue);background:var(--blue-soft)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 16px;border-radius:8px;border:1px solid transparent;font-weight:700;text-decoration:none;transition:transform .18s,box-shadow .18s,background .18s,border-color .18s,color .18s}
+.btn:hover{transform:translateY(-1px);text-decoration:none}
+.btn.primary{background:var(--blue);color:#fff;box-shadow:0 8px 22px rgba(15,111,207,.22)}
+.btn.primary:hover{background:#1280ed;box-shadow:0 12px 28px rgba(15,111,207,.28)}
+.btn.secondary{background:#fff;color:var(--blue-dark);border-color:var(--line-strong)}
+.btn.secondary:hover{border-color:var(--blue);color:var(--blue)}
+
+/* ── Page hero ── */
+.page-hero{background:linear-gradient(135deg,var(--blue-dark) 0%,var(--blue) 100%);color:#fff;padding:64px 0 56px;text-align:center}
+.page-hero h1{font-family:var(--serif);font-size:clamp(2rem,5vw,3rem);font-weight:400;margin-bottom:14px}
+.page-hero p{font-size:1.1rem;opacity:.85;max-width:600px;margin:0 auto}
+
+/* ── Utilities ── */
+.section{padding:68px 0;border-top:1px solid var(--line)}
+.section-alt{background:#fff}
+.eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.14em}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:0.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.badge-blue{background:var(--blue-soft);color:var(--blue-dark)}
+.badge-green{background:var(--green-soft);color:var(--green)}
+.badge-purple{background:#ede9fe;color:#5b21b6}
+.text-center{text-align:center}
+
+/* ── Guiding Principles ── */
+.principles-section{background:#fff}
+.principles-header{margin-bottom:40px}
+.principles-header h2{font-family:var(--serif);font-size:clamp(1.6rem,3vw,2.2rem);font-weight:400;color:var(--ink);margin-bottom:12px}
+.principles-header p{color:var(--muted);font-size:0.97rem;line-height:1.7;max-width:660px}
+.principle-cards-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:0}
+.principle-btn{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:24px 20px;
+  text-align:left;
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  transition:box-shadow .15s,border-color .15s;
+  font-family:var(--sans);
+  width:100%;
+}
+.principle-btn:hover{box-shadow:0 4px 16px rgba(11,79,138,.1)}
+.principle-btn--green{border-top:4px solid var(--green-bright)}
+.principle-btn--blue{border-top:4px solid var(--blue)}
+.principle-btn--purple{border-top:4px solid #7c3aed}
+.principle-btn--open{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent;box-shadow:0 4px 16px rgba(11,79,138,.1)}
+.principle-tag{display:inline-block;padding:3px 12px;border-radius:999px;font-size:0.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.principle-tag--green{background:var(--green-soft);color:var(--green)}
+.principle-tag--blue{background:var(--blue-soft);color:var(--blue-dark)}
+.principle-tag--purple{background:#ede9fe;color:#5b21b6}
+.principle-btn p{font-size:0.9rem;color:var(--muted);line-height:1.6;flex:1}
+.principle-btn-more{font-size:0.8rem;font-weight:600;color:#9aabc0}
+.principle-btn:hover .principle-btn-more{color:var(--blue)}
+.principle-detail{
+  background:#fff;
+  border:1px solid var(--line);
+  border-top:none;
+  border-radius:0 0 10px 10px;
+  padding:28px;
+  margin-bottom:20px;
+  box-shadow:0 4px 16px rgba(11,79,138,.1);
+  display:none;
+}
+.principle-detail.open{display:block}
+.principle-detail--green{border-top:3px solid var(--green-bright)}
+.principle-detail--blue{border-top:3px solid var(--blue)}
+.principle-detail--purple{border-top:3px solid #7c3aed}
+.principle-cols{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.principle-col h4{font-size:0.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9aabc0;margin-bottom:12px;font-family:var(--mono)}
+.principle-col ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+.principle-col li{display:flex;gap:9px;font-size:0.9rem;color:var(--muted);line-height:1.5;align-items:flex-start}
+.principle-col li span{flex-shrink:0;font-weight:700;margin-top:1px}
+.principle-col--not li{color:#9aabc0}
+.check-icon{color:var(--green)}
+.cross-icon{color:#c0c9d4}
+
+/* ── Problem / Solution ── */
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:start}
+.problem-col{display:flex;flex-direction:column;gap:14px}
+.problem-col h2{font-family:var(--serif);font-size:clamp(1.3rem,2.5vw,1.7rem);font-weight:400;color:var(--ink);line-height:1.2}
+.problem-col p{font-size:0.95rem;color:var(--muted);line-height:1.75}
+
+/* ── Step cards (summary) ── */
+.how-section{background:#fff}
+.how-title{font-family:var(--serif);font-size:clamp(1.5rem,3vw,2rem);font-weight:400;color:var(--ink);margin-bottom:10px}
+.how-sub{color:var(--muted);margin-bottom:40px;font-size:0.97rem}
+.step-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.step-card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:24px 18px;display:flex;flex-direction:column;gap:10px}
+.step-num{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:1rem;font-weight:700;color:#fff;flex-shrink:0}
+.step-num--green{background:var(--green)}
+.step-num--blue{background:var(--blue)}
+.step-num--purple{background:#7c3aed}
+.step-card h3{font-size:0.97rem;color:var(--ink)}
+.step-card p{font-size:0.87rem;color:var(--muted);line-height:1.6}
+
+/* ── Workflow steps (detailed) ── */
+.workflow-title{font-family:var(--serif);font-size:clamp(1.4rem,3vw,2rem);font-weight:400;color:var(--ink);margin-bottom:32px}
+.workflow-steps{display:flex;flex-direction:column;gap:18px}
+.workflow-step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:28px;border-left:4px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.workflow-step--green{border-left-color:var(--green-bright)}
+.workflow-step--blue{border-left-color:var(--blue)}
+.workflow-step--purple{border-left-color:#7c3aed}
+.workflow-step-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.workflow-step-num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:0.95rem;font-weight:700;color:#fff;flex-shrink:0}
+.workflow-step-num--green{background:var(--green)}
+.workflow-step-num--blue{background:var(--blue)}
+.workflow-step-num--purple{background:#7c3aed}
+.workflow-step-head h3{font-size:1.05rem;color:var(--ink);flex:1}
+.workflow-step p{font-size:0.93rem;color:var(--muted);line-height:1.75}
+
+/* ── GitHub CTA ── */
+.github-section{background:#fff}
+.github-section h2{font-family:var(--serif);font-size:1.6rem;font-weight:400;color:var(--ink);margin-bottom:10px}
+.github-section p{color:var(--muted);margin-bottom:24px}
+
+/* ── Footer ── */
+.footer{padding:28px 0;border-top:1px solid var(--line);color:#7d90a8;margin-top:auto}
+.footer .wrap{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.footer-brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px}
+.footer-brand svg{width:24px;height:24px}
+.footer small{font-family:var(--mono)}
+
+:focus-visible{outline:3px solid rgba(76,217,100,.65);outline-offset:3px;border-radius:6px}
+
+@media(max-width:900px){
+  .nav-links a[data-path]{display:none}
+  .principle-cards-row{grid-template-columns:1fr}
+  .step-cards{grid-template-columns:1fr 1fr}
+  .principle-btn--open{border-bottom-left-radius:10px;border-bottom-right-radius:10px;border-bottom-color:var(--line)}
+  .principle-detail{border-radius:10px;border-top:3px solid var(--line)}
+  .principle-detail--green{border-top-color:var(--green-bright)}
+  .principle-detail--blue{border-top-color:var(--blue)}
+  .principle-detail--purple{border-top-color:#7c3aed}
+}
+@media(max-width:680px){
+  .wrap{width:calc(100% - 28px)}
+  .nav .wrap{height:64px}
+  .brand span{font-size:18px}
+  .section{padding:48px 0}
+  .problem-grid{grid-template-columns:1fr}
+  .step-cards{grid-template-columns:1fr}
+  .principle-cols{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<div class="shell">
+  <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
+    <defs>
+      <symbol id="shield" viewBox="0 0 256 256">
+        <g transform="translate(-19.2,-10) scale(1.15)">
+          <path d="M128 20 L56 44 V120 C56 166 86 204 128 220 C170 204 200 166 200 120 V44 Z" fill="#0B4F8A" stroke="#0B4F8A" stroke-width="4" stroke-linejoin="round"/>
+          <path d="M128 36 L72 56 V118 C72 156 96 188 128 200 C160 188 184 156 184 118 V56 Z" fill="#0F6FCF"/>
+          <circle cx="128" cy="120" r="40" fill="#fff"/>
+          <circle cx="128" cy="120" r="25" fill="#0F6FCF"/>
+          <line x1="96" y1="80" x2="80" y2="60" stroke="#4CD964" stroke-width="6" stroke-linecap="round"/>
+          <circle cx="80" cy="60" r="5" fill="#4CD964"/>
+          <line x1="128" y1="72" x2="128" y2="48" stroke="#4CD964" stroke-width="6" stroke-linecap="round"/>
+          <circle cx="128" cy="48" r="5" fill="#4CD964"/>
+          <line x1="160" y1="80" x2="176" y2="60" stroke="#4CD964" stroke-width="6" stroke-linecap="round"/>
+          <circle cx="176" cy="60" r="5" fill="#4CD964"/>
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="/" aria-label="OASIS home">
+        <svg viewBox="0 0 256 256" aria-hidden="true"><use href="#shield"/></svg>
+        <span>OASIS</span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="/" data-path="/">Home</a>
+        <a href="/about" data-path="/about">About</a>
+        <a href="/overview" data-path="/overview">Overview</a>
+        <a href="/leaderboards" data-path="/leaderboards">Leaderboards</a>
+        <a href="/sponsors" data-path="/sponsors">Sponsors</a>
+        <a class="btn primary" href="/#register-form">Join Team OASIS</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <div class="page-hero">
+      <div class="wrap">
+        <h1>How OASIS Works</h1>
+        <p>A practical, community-driven operating model that turns automated
+        findings into human-validated upstream security improvements.</p>
+      </div>
+    </div>
+
+    <!-- Guiding Principles -->
+    <section class="section principles-section">
+      <div class="wrap">
+        <div class="principles-header">
+          <h2>Guiding Principles</h2>
+          <p>Three principles govern everything OASIS does — how we select repositories,
+          how we validate fixes, and how we work together as a community.</p>
+        </div>
+
+        <div class="principle-cards-row" id="principle-cards">
+
+          <!-- Impact -->
+          <button class="principle-btn principle-btn--green" data-principle="impact" aria-expanded="false">
+            <svg width="38" height="38" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+              <circle cx="20" cy="20" r="18" stroke="#4CD964" stroke-width="2" fill="#e8f9ef"/>
+              <circle cx="20" cy="20" r="11" stroke="#4CD964" stroke-width="2" fill="none"/>
+              <circle cx="20" cy="20" r="4" fill="#4CD964"/>
+              <line x1="20" y1="2" x2="20" y2="8" stroke="#4CD964" stroke-width="2" stroke-linecap="round"/>
+              <line x1="20" y1="32" x2="20" y2="38" stroke="#4CD964" stroke-width="2" stroke-linecap="round"/>
+              <line x1="2" y1="20" x2="8" y2="20" stroke="#4CD964" stroke-width="2" stroke-linecap="round"/>
+              <line x1="32" y1="20" x2="38" y2="20" stroke="#4CD964" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span class="principle-tag principle-tag--green">Impact</span>
+            <p>Work on repositories where acceptance is plausible. Focus on practical outcomes, not raw PR volume.</p>
+            <span class="principle-btn-more">&#9660; See more</span>
+          </button>
+
+          <!-- Credibility -->
+          <button class="principle-btn principle-btn--blue" data-principle="credibility" aria-expanded="false">
+            <svg width="38" height="38" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+              <rect x="8" y="4" width="24" height="30" rx="3" stroke="#0F6FCF" stroke-width="2" fill="#e7f1ff"/>
+              <path d="M14 13h12M14 19h12M14 25h8" stroke="#0F6FCF" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="29" cy="30" r="7" fill="#0F6FCF"/>
+              <path d="M26 30l2 2 4-4" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="principle-tag principle-tag--blue">Credibility</span>
+            <p>Treat automation as a source of candidate fixes, not a source of truth. Human review is what makes a fix trustworthy.</p>
+            <span class="principle-btn-more">&#9660; See more</span>
+          </button>
+
+          <!-- Village -->
+          <button class="principle-btn principle-btn--purple" data-principle="village" aria-expanded="false">
+            <svg width="38" height="38" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+              <circle cx="20" cy="13" r="5" stroke="#7C3AED" stroke-width="2" fill="#ede9fe"/>
+              <circle cx="8" cy="28" r="4" stroke="#7C3AED" stroke-width="2" fill="#ede9fe"/>
+              <circle cx="32" cy="28" r="4" stroke="#7C3AED" stroke-width="2" fill="#ede9fe"/>
+              <path d="M15 18c-3 1-6 4-6 7M25 18c3 1 6 4 6 7M14 26c2-3 10-3 12 0" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span class="principle-tag principle-tag--purple">Village</span>
+            <p>Keep the authoritative review and decision process under the OWASP project. This work belongs to the community.</p>
+            <span class="principle-btn-more">&#9660; See more</span>
+          </button>
+        </div>
+
+        <!-- Detail panels — shown below the row, JS controlled -->
+        <div class="principle-detail principle-detail--green" id="detail-impact" role="region" aria-label="Impact details">
+          <div class="principle-cols">
+            <div class="principle-col">
+              <h4>This project will&hellip;</h4>
+              <ul>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Work on repositories where upstream acceptance is plausible</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Minimize implementation effort</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Measure success by upstream acceptance rate, not activity metrics</li>
+              </ul>
+            </div>
+            <div class="principle-col principle-col--not">
+              <h4>This project will not&hellip;</h4>
+              <ul>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Aim for raw PR volume</li>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Wait for opt-in from upstream projects before beginning</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="principle-detail principle-detail--blue" id="detail-credibility" role="region" aria-label="Credibility details">
+          <div class="principle-cols">
+            <div class="principle-col">
+              <h4>This project will&hellip;</h4>
+              <ul>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Treat automation as a source of candidate fixes, not a source of truth</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Require human validation before any upstream submission</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Use weighted reviewer credibility rather than a fixed approval count</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Clearly communicate OWASP community review in every upstream PR</li>
+              </ul>
+            </div>
+            <div class="principle-col principle-col--not">
+              <h4>This project will not&hellip;</h4>
+              <ul>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Submit AI-generated fixes directly to upstream projects without human review</li>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Claim OASIS bypasses maintainers — maintainers still decide what merges</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="principle-detail principle-detail--purple" id="detail-village" role="region" aria-label="Village details">
+          <div class="principle-cols">
+            <div class="principle-col">
+              <h4>This project will&hellip;</h4>
+              <ul>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Keep the authoritative review and decision process under the OWASP project</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Operate transparently — the GitHub-based workflow is auditable by anyone</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Build trusted relationships between validators, project owners, and maintainers</li>
+                <li><span class="check-icon" aria-hidden="true">&#10003;</span>Welcome validators at all experience levels</li>
+              </ul>
+            </div>
+            <div class="principle-col principle-col--not">
+              <h4>This project will not&hellip;</h4>
+              <ul>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Allow any single vendor to control governance, fix selection, or validation outcomes</li>
+                <li><span class="cross-icon" aria-hidden="true">&#10005;</span>Publicly expose unresolved vulnerabilities by default</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Problem / Solution -->
+    <section class="section">
+      <div class="wrap problem-grid">
+        <div class="problem-col">
+          <span class="badge badge-blue">The Problem</span>
+          <h2>Two communities that need each other — with no way to connect</h2>
+          <p>Open-source maintainers are drowning in noise. AI tools are flooding
+          repositories with unvetted fix proposals — "AI slop PRs." Maintainers
+          push back on all AI-generated contributions, even good ones. Real
+          vulnerabilities go unfixed.</p>
+          <p>Meanwhile, tens of thousands of AppSec professionals have exactly the
+          expertise needed to validate those fixes, and no mechanism to deliver
+          it. They can assess vulnerabilities and judge fix quality. They've
+          just never had a delivery mechanism.</p>
+        </div>
+        <div class="problem-col">
+          <span class="badge badge-green">The Solution</span>
+          <h2>OASIS is the community validation layer</h2>
+          <p>New Fix Automation tooling, recently made possible by generative AI,
+          can generate candidate fixes very quickly. OASIS brings in a community
+          of human validators to review, validate, improve, and help advance
+          credible fixes upstream.</p>
+          <p>AI creates the urgency. Fix Automation creates the opportunity.
+          Human expertise makes the work credible. Team OASIS marshals the
+          community to deliver human-validated fixes at scale.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works — summary cards -->
+    <section class="section how-section">
+      <div class="wrap">
+        <h2 class="how-title text-center">How it works</h2>
+        <p class="how-sub text-center">A focused, low-commitment habit — not a second job. A single validation takes roughly eight minutes.</p>
+        <div class="step-cards">
+          <div class="step-card">
+            <div class="step-num step-num--green">1</div>
+            <h3>Scan &amp; Generate</h3>
+            <p>OASIS project leaders use fix automation tools to scan important open-source repositories and generate candidate security fixes.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-num step-num--blue">2</div>
+            <h3>Community Validates</h3>
+            <p>AppSec professionals review candidate fixes through a structured GitHub workflow. Is this a real vulnerability? Is this a good fix?</p>
+          </div>
+          <div class="step-card">
+            <div class="step-num step-num--purple">3</div>
+            <h3>Tag &amp; Score</h3>
+            <p>Validators annotate fixes. A credibility-weighted scoring system separates signal from noise — senior expertise carries more weight.</p>
+          </div>
+          <div class="step-card">
+            <div class="step-num step-num--green">4</div>
+            <h3>Submit Upstream</h3>
+            <p>Top-scoring fixes are offered to open-source maintainers carrying OASIS community endorsement — not raw AI output.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow — detailed steps -->
+    <section class="section">
+      <div class="wrap">
+        <h2 class="workflow-title text-center">The Workflow</h2>
+        <div class="workflow-steps">
+          <div class="workflow-step workflow-step--green">
+            <div class="workflow-step-head">
+              <div class="workflow-step-num workflow-step-num--green">1</div>
+              <h3>Scan &amp; Generate</h3>
+              <span class="badge badge-green">Impact</span>
+            </div>
+            <p>OASIS project leaders use fix automation tools — static analysis, SAST, dependency analysis, and LLM-assisted fix generation — to scan important open-source repositories and generate candidate security fixes. Multiple tools may contribute fixes to the same vulnerability, providing a community benchmarking mechanism to compare tool efficacy.</p>
+          </div>
+          <div class="workflow-step workflow-step--blue">
+            <div class="workflow-step-head">
+              <div class="workflow-step-num workflow-step-num--blue">2</div>
+              <h3>Community Validation</h3>
+              <span class="badge badge-blue">Credibility</span>
+            </div>
+            <p>OASIS community members review candidate fixes through a structured, GitHub-centered workflow. Validators don't need to write code — only interpret it. They assess two questions: Is this a real vulnerability? Is this a good fix? A credibility-weighted system means senior expertise carries more weight than volume alone. Think Duolingo — a focused, low-commitment habit rather than a second job.</p>
+          </div>
+          <div class="workflow-step workflow-step--purple">
+            <div class="workflow-step-head">
+              <div class="workflow-step-num workflow-step-num--purple">3</div>
+              <h3>Tag &amp; Score</h3>
+              <span class="badge badge-purple">Village</span>
+            </div>
+            <p>Validators annotate fixes using a structured tag system: whether the fix correctly addresses the vulnerability, whether it introduces unnecessary dependencies, whether a better approach exists. This creates a clean feedback loop back to the tools that generated the fixes. Contributing vendors get the feedback that improves their product performance.</p>
+          </div>
+          <div class="workflow-step workflow-step--green">
+            <div class="workflow-step-head">
+              <div class="workflow-step-num workflow-step-num--green">4</div>
+              <h3>Upstream Submission</h3>
+              <span class="badge badge-green">Impact</span>
+            </div>
+            <p>Fixes that reach the validation threshold are passively offered to open-source projects — carrying the OASIS community's endorsement. Maintainers receive a community-vetted, credible contribution rather than raw AI output. They keep full control of what merges. Contributors get professional validation, reputation, and the satisfaction of securing software the world depends on.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GitHub CTA -->
+    <section class="section github-section">
+      <div class="wrap text-center">
+        <h2>Full project documentation</h2>
+        <p>The complete operating model, workflow states, roles, and design
+        decisions are documented in the public GitHub project.</p>
+        <a href="https://github.com/owasp-oasis/project-overview" target="_blank" rel="noopener noreferrer" class="btn secondary">
+          View on GitHub
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-brand">
+        <svg viewBox="0 0 256 256" aria-hidden="true"><use href="#shield"/></svg>
+        <span>OASIS | Proposed OWASP project</span>
+      </div>
+      <small>Vendor-neutral. Community-driven. Open source.</small>
+    </div>
+  </footer>
+</div>
+
+<script>
+// Active nav link
+(function() {
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-links a[data-path]').forEach(a => {
+    if (a.dataset.path === path) a.classList.add('active');
+  });
+})();
+
+// Guiding Principles accordion
+(function() {
+  const btns = document.querySelectorAll('.principle-btn');
+  let open = null;
+
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.principle;
+      const detail = document.getElementById('detail-' + key);
+      const moreSpan = btn.querySelector('.principle-btn-more');
+
+      if (open === key) {
+        // close
+        btn.classList.remove('principle-btn--open');
+        btn.setAttribute('aria-expanded', 'false');
+        detail.classList.remove('open');
+        moreSpan.innerHTML = '&#9660; See more';
+        open = null;
+      } else {
+        // close previously open
+        if (open) {
+          const prevBtn = document.querySelector('.principle-btn[data-principle="' + open + '"]');
+          const prevDetail = document.getElementById('detail-' + open);
+          const prevMore = prevBtn.querySelector('.principle-btn-more');
+          prevBtn.classList.remove('principle-btn--open');
+          prevBtn.setAttribute('aria-expanded', 'false');
+          prevDetail.classList.remove('open');
+          prevMore.innerHTML = '&#9660; See more';
+        }
+        // open this one
+        btn.classList.add('principle-btn--open');
+        btn.setAttribute('aria-expanded', 'true');
+        detail.classList.add('open');
+        moreSpan.innerHTML = '&#9650; See less';
+        open = key;
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev":    "wrangler dev",
+    "dev":    "wrangler dev --var ENVIRONMENT:development",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

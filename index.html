@@ -63,9 +63,10 @@ button{cursor:pointer}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;color:var(--blue);letter-spacing:.01em}
 .brand svg{width:34px;height:34px;flex:0 0 auto}
 .brand span{font-size:20px}
-.nav-links{display:flex;align-items:center;gap:20px}
-.nav-links a{font-size:14px;font-weight:600;color:var(--muted);text-decoration:none}
-.nav-links a:hover{color:var(--blue)}
+.nav-links{display:flex;align-items:center;gap:4px}
+.nav-links a{font-size:14px;font-weight:600;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .15s,background .15s}
+.nav-links a:hover{color:var(--blue);background:var(--blue-soft)}
+.nav-links a.active{color:var(--blue);background:var(--blue-soft)}
 .btn{
   display:inline-flex;
   align-items:center;
@@ -253,10 +254,12 @@ button{cursor:pointer}
   .ethos-strip,.steps,.reasons{grid-template-columns:1fr 1fr}
   .section-head{grid-template-columns:1fr;gap:16px}
 }
+@media(max-width:900px){
+  .nav-links a[data-path]{display:none}
+}
 @media(max-width:680px){
   .wrap{width:min(100% - 28px,1080px)}
   .nav .wrap{height:64px}
-  .nav-links a:not(.btn){display:none}
   .brand span{font-size:18px}
   .hero{padding:42px 0 34px}
   .hero h1{font-size:clamp(38px,11vw,56px)}
@@ -317,15 +320,17 @@ to{transform:rotate(360deg);}}
 
   <header class="nav">
     <div class="wrap">
-      <a class="brand" href="#top" aria-label="OASIS home">
+      <a class="brand" href="/" aria-label="OASIS home">
         <svg viewBox="0 0 256 256" aria-hidden="true"><use href="#shield"/></svg>
         <span>OASIS</span>
       </a>
       <nav class="nav-links" aria-label="Main navigation">
-        <a href="#how">How it works</a>
-        <a href="#ethos">Ethos</a>
-        <a href="#join">Why join</a>
-        <a class="btn primary" href="#register-form">Join</a>
+        <a href="/" data-path="/">Home</a>
+        <a href="/about" data-path="/about">About</a>
+        <a href="/overview" data-path="/overview">Overview</a>
+        <a href="/leaderboards" data-path="/leaderboards">Leaderboards</a>
+        <a href="/sponsors" data-path="/sponsors">Sponsors</a>
+        <a class="btn primary" href="/#register-form">Join Team OASIS</a>
       </nav>
     </div>
   </header>
@@ -628,6 +633,16 @@ document.addEventListener('keydown', event => {
     submitRegistration();
   }
 });
+
+// Active nav link
+(function() {
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-links a[data-path]').forEach(a => {
+    if (a.dataset.path === path || (path === '/' && a.dataset.path === '/')) {
+      a.classList.add('active');
+    }
+  });
+})();
 </script>
 </body>
 </html>
