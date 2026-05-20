@@ -1,5 +1,27 @@
 import RegisterForm from '../components/RegisterForm'
+import QuotesCarousel from '../components/QuotesCarousel'
+import type { Quote } from '../components/QuotesCarousel'
 import './Home.css'
+
+// TODO: Replace with third-party quotes — these are placeholder quotes from OASIS co-founders
+const quotes: Quote[] = [
+  {
+    name: 'Chris Holt',
+    title: 'Community Architect',
+    company: 'Intigriti',
+    quote: 'It feels good to do good. OASIS is an opportunity for every hacker, developer, and security-interested practitioner to move the needle on securing open-source code. AI finally enables fixing vulnerabilities at the speed of compute, but we need to build trust in the tools first.',
+    photoUrl: '/headshots/chris-holt.jpg',
+    linkedinUrl: 'https://www.linkedin.com/in/flyingtoasters/',
+  },
+  {
+    name: 'Michael Cartsonis',
+    title: 'Co-Founder, VP of Product',
+    company: 'AppSecAI',
+    quote: "For the past 3 years, I've been building AI tools to enable developers and appsec teams to remediate at the speed of compute. OASIS takes that concept to the masses to showcase the power of AI to remediate vulnerabilities, and truly left-shift security up the supply chain.",
+    photoUrl: '/headshots/michael-cartsonis.jpg',
+    linkedinUrl: 'https://www.linkedin.com/in/cartsoni/',
+  },
+]
 
 const ShieldSVG = () => (
   <svg viewBox="0 0 256 256" aria-hidden="true" className="shield-svg">
@@ -127,6 +149,9 @@ export default function Home() {
           </aside>
         </div>
       </section>
+
+      {/* ── Quotes carousel ── */}
+      <QuotesCarousel quotes={quotes} />
 
       {/* ── How it works ── */}
       <section className="home-section" id="how">

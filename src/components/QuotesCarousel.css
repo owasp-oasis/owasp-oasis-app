@@ -1,0 +1,262 @@
+/* ── Section wrapper ─────────────────────────────────────────── */
+.home-quotes-section {
+  padding: 56px 0;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.home-quotes-title {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  color: var(--ink);
+  text-align: center;
+  margin-bottom: 40px;
+  line-height: 1.1;
+}
+
+/* ── Carousel outer ──────────────────────────────────────────── */
+.quotes-carousel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  /* Clip the side tiles */
+  overflow: hidden;
+  /* Padding so arrows don't overlap tiles */
+  padding: 0 52px;
+}
+
+.quotes-carousel--single {
+  padding: 0;
+  overflow: visible;
+  justify-content: center;
+}
+
+/* ── Track ───────────────────────────────────────────────────── */
+.carousel-track {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  /* Prevent track from shrinking narrower than 3 tiles */
+  min-width: 0;
+}
+
+/* ── Tiles ───────────────────────────────────────────────────── */
+.carousel-tile {
+  flex: 0 0 auto;
+  width: min(520px, 56vw);
+  transition: transform 0.35s ease, opacity 0.35s ease, box-shadow 0.35s ease;
+}
+
+.carousel-tile--active {
+  transform: scale(1);
+  opacity: 1;
+  z-index: 2;
+}
+
+.carousel-tile--prev,
+.carousel-tile--next {
+  transform: scale(0.87);
+  opacity: 0.6;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.carousel-tile--prev:hover,
+.carousel-tile--next:hover {
+  opacity: 0.8;
+}
+
+/* In single-tile mode, the tile can be wider */
+.quotes-carousel--single .carousel-tile {
+  width: min(600px, 80vw);
+}
+
+/* ── Quote card ──────────────────────────────────────────────── */
+.quote-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+}
+
+.carousel-tile--active .quote-card {
+  background: var(--white);
+  box-shadow: var(--shadow);
+  border-color: var(--line-strong);
+}
+
+.quote-text {
+  font-family: var(--serif);
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  font-style: italic;
+  font-weight: 400;
+  quotes: none;
+  flex: 1;
+}
+
+/* ── Attribution row ─────────────────────────────────────────── */
+.quote-attribution {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
+/* ── Avatar ──────────────────────────────────────────────────── */
+.quote-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.quote-avatar--photo {
+  object-fit: cover;
+  border: 2px solid var(--line);
+}
+
+.quote-avatar--initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 2px solid var(--line);
+}
+
+/* ── Person text ─────────────────────────────────────────────── */
+.quote-person {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.quote-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--blue-dark);
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.quote-name:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.quote-role {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ── Arrow buttons ───────────────────────────────────────────── */
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--white);
+  color: var(--ink-soft);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(11,79,138,.10);
+  flex-shrink: 0;
+}
+
+.carousel-arrow:hover {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--white);
+  box-shadow: 0 4px 14px rgba(15,111,207,.25);
+}
+
+.carousel-arrow--left  { left: 4px; }
+.carousel-arrow--right { right: 4px; }
+
+/* ── Dot indicators ──────────────────────────────────────────── */
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.carousel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: var(--line-strong);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.carousel-dot--active {
+  background: var(--blue);
+  transform: scale(1.35);
+}
+
+.carousel-dot:hover:not(.carousel-dot--active) {
+  background: var(--blue-mid);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  /* Switch to single-tile on mobile regardless of quote count */
+  .carousel-tile--prev,
+  .carousel-tile--next {
+    display: none;
+  }
+
+  .quotes-carousel {
+    padding: 0 44px;
+    overflow: visible;
+  }
+
+  .carousel-tile {
+    width: 100%;
+    max-width: 500px;
+  }
+}
+
+@media (max-width: 520px) {
+  .quotes-carousel {
+    padding: 0 36px;
+  }
+
+  .quote-card {
+    padding: 24px 20px;
+  }
+
+  .carousel-arrow {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+}
