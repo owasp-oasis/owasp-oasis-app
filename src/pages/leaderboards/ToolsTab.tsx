@@ -90,7 +90,7 @@ function FixCard({ tool }: { tool: Tool }) {
         <StatRow label="PRs submitted" value={tool.total_prs} note="(one per vulnerability)" />
         <StatRow label="Accepted upstream" value={tool.accepted_upstream} />
         <StatRow label="Projects worked on" value={tool.projects_worked} />
-        <StatRow label="Interactions" value={tool.interactions} note="(comments on PRs)" />
+        <StatRow label="OASIS interactions" value={tool.interactions} note="(template-matched comments on PRs)" />
       </div>
 
       <div className="tool-sentiment">

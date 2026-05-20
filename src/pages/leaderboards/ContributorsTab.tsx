@@ -8,6 +8,7 @@ interface Contributor {
   avatar_url: string | null
   prs_worked: number
   total_interactions: number
+  non_oasis_interactions: number
   reactions_received: number
   accepts: number
   modifies: number
@@ -69,11 +70,23 @@ const columns: Column<Contributor>[] = [
   // ── Scoring section (banded) ─────────────────────────────────
   {
     key: 'total_interactions',
-    label: <ColHeader icon="💬" label="Interactions (comments + reactions given)" />,
+    label: <ColHeader icon="🗳" label="OASIS interactions (votes + reactions given)" />,
     sortable: true,
     searchable: false,
     align: 'right',
     render: (v) => <span className="col-banded">{String(v)}</span>,
+  },
+  {
+    key: 'non_oasis_interactions',
+    label: <ColHeader icon="💬" label="Non-OASIS comments" />,
+    sortable: true,
+    searchable: false,
+    align: 'right',
+    render: (v) => (
+      <span className="col-banded" style={{ color: Number(v) > 0 ? 'var(--muted)' : 'inherit' }}>
+        {String(v)}
+      </span>
+    ),
   },
   {
     key: 'reactions_received',
@@ -130,7 +143,7 @@ export default function ContributorsTab({ data, loading }: Props) {
             Reputation = total_interactions + (reactions_received × 0.25)
           </code>
           <ul>
-            <li><strong>💬 Interactions</strong> — every comment posted or reaction given on any PR</li>
+            <li><strong>🗳 OASIS interactions</strong> — OASIS-template votes cast and reactions given on any PR (non-OASIS comments are tracked separately and do not count toward reputation)</li>
             <li><strong>⭐ Reactions received</strong> — reactions left by others on your comments; each adds 0.25 pts</li>
             <li><strong>📊 Avg / PR</strong> — total_interactions ÷ number of PRs worked on</li>
           </ul>

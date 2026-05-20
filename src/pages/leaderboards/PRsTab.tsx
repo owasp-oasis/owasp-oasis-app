@@ -12,6 +12,8 @@ interface PR {
   author: string | null
   html_url: string
   comment_count: number
+  oasis_comment_count: number
+  non_oasis_comment_count: number
   participants: number
   consensus_accept: number
   consensus_modify: number
@@ -163,11 +165,23 @@ export default function PRsTab({ data, loading }: Props) {
       align: 'center',
     },
     {
-      key: 'comment_count',
-      label: <ColHeader icon="💬" label="Total Comments" />,
+      key: 'oasis_comment_count',
+      label: <ColHeader icon="🗳" label="OASIS Votes" />,
       sortable: true,
       searchable: false,
       align: 'right',
+    },
+    {
+      key: 'non_oasis_comment_count',
+      label: <ColHeader icon="💬" label="Non-OASIS" />,
+      sortable: true,
+      searchable: false,
+      align: 'right',
+      render: (v) => (
+        <span style={{ color: Number(v) > 0 ? 'var(--muted)' : 'inherit' }}>
+          {String(v)}
+        </span>
+      ),
     },
     {
       key: 'consensus_accept',

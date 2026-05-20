@@ -266,12 +266,16 @@ async function handleRepos(env, url) {
 
 async function handlePRs(env, url) {
   const { sort, dir, q } = parseQuery(url);
-  const VALID = new Set(['repo_name','number','title','state','comment_count','participants',
+  const VALID = new Set(['repo_name','number','title','state','comment_count',
+    'oasis_comment_count','non_oasis_comment_count','participants',
     'consensus_accept','consensus_modify','consensus_reject','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const rows = await env.DB.prepare(`
     SELECT id, repo_name, number, title, state, author, html_url,
-           comment_count, participants,
+           comment_count,
+           COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
+           COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,
+           participants,
            consensus_accept, consensus_modify, consensus_reject,
            merged_upstream, merged_at, created_at, updated_at
     FROM pull_requests ORDER BY ${col} ${dir} LIMIT 500
@@ -287,12 +291,13 @@ async function handlePRs(env, url) {
 
 async function handleContributors(env, url) {
   const { sort, dir, q } = parseQuery(url);
-  const VALID = new Set(['login','prs_worked','total_interactions','reactions_received',
-    'accepts','modifies','rejects','reputation','avg_per_pr']);
+  const VALID = new Set(['login','prs_worked','total_interactions','non_oasis_interactions',
+    'reactions_received','accepts','modifies','rejects','reputation','avg_per_pr']);
   const col = VALID.has(sort) ? sort : 'reputation';
   const rows = await env.DB.prepare(`
     SELECT c.login, c.avatar_url, c.prs_worked, c.total_interactions,
-           COALESCE(c.reactions_received, 0) AS reactions_received,
+           COALESCE(c.non_oasis_interactions, 0)  AS non_oasis_interactions,
+           COALESCE(c.reactions_received, 0)       AS reactions_received,
            c.accepts, c.modifies, c.rejects,
            ROUND(c.total_interactions + COALESCE(c.reactions_received, 0) * 0.25, 2) AS reputation,
            CASE WHEN c.prs_worked > 0
@@ -329,7 +334,8 @@ async function handleTools(env, url) {
   const { q } = parseQuery(url);
   const fixRows = await env.DB.prepare(`
     SELECT author, COUNT(*) AS total_prs, SUM(merged_upstream) AS accepted_upstream,
-           COUNT(DISTINCT repo_name) AS projects_worked, SUM(comment_count) AS total_comments,
+           COUNT(DISTINCT repo_name) AS projects_worked,
+           SUM(COALESCE(oasis_comment_count, 0)) AS total_comments,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
     FROM pull_requests WHERE author IS NOT NULL GROUP BY author ORDER BY total_prs DESC
@@ -469,12 +475,13 @@ async function setSyncState(db, key, value) {
 async function rebuildContributors(db, syncStart) {
   const rows = await db.prepare(`
     SELECT login,
-           COUNT(DISTINCT pr_id)                                 AS prs_worked,
-           SUM(interactions)                                      AS total_interactions,
-           SUM(reactions_received)                                AS reactions_received,
-           SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)  AS accepts,
-           SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)  AS modifies,
-           SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)  AS rejects
+           COUNT(DISTINCT pr_id)                                          AS prs_worked,
+           SUM(interactions)                                               AS total_interactions,
+           SUM(COALESCE(non_oasis_interactions, 0))                        AS non_oasis_interactions,
+           SUM(reactions_received)                                          AS reactions_received,
+           SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)            AS accepts,
+           SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)            AS modifies,
+           SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)            AS rejects
     FROM pr_participants GROUP BY login
   `).all();
 
@@ -482,12 +489,14 @@ async function rebuildContributors(db, syncStart) {
     const existing = await db.prepare('SELECT avatar_url FROM contributors WHERE login = ?').bind(row.login).first();
     await db.prepare(`
       INSERT OR REPLACE INTO contributors
-        (login, avatar_url, prs_worked, total_interactions, reactions_received, accepts, modifies, rejects, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (login, avatar_url, prs_worked, total_interactions, non_oasis_interactions,
+         reactions_received, accepts, modifies, rejects, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       row.login,
       existing?.avatar_url ?? `https://github.com/${row.login}.png?size=64`,
-      row.prs_worked, row.total_interactions, row.reactions_received ?? 0,
+      row.prs_worked, row.total_interactions, row.non_oasis_interactions ?? 0,
+      row.reactions_received ?? 0,
       row.accepts, row.modifies, row.rejects, syncStart
     ).run();
   }
@@ -523,7 +532,7 @@ async function runSync(env) {
         stats.prs++;
         const participantMap = new Map();
         const ensure = l => {
-          if (!participantMap.has(l)) participantMap.set(l, { interactions: 0, decision: null, reactions_received: 0 });
+          if (!participantMap.has(l)) participantMap.set(l, { interactions: 0, non_oasis_interactions: 0, decision: null, reactions_received: 0 });
           return participantMap.get(l);
         };
 
@@ -531,6 +540,7 @@ async function runSync(env) {
         stats.comments += comments.length;
 
         let consensusAccept = 0, consensusModify = 0, consensusReject = 0;
+        let oasisCommentCount = 0, nonOasisCommentCount = 0;
 
         for (const comment of comments) {
           const login = comment.user?.login;
@@ -540,9 +550,14 @@ async function runSync(env) {
           const decision = parseDecision(comment.body);
           if (decision) {
             p.decision = decision;
+            oasisCommentCount++;
             if (decision === 'accept') consensusAccept++;
             if (decision === 'modify') consensusModify++;
             if (decision === 'reject') consensusReject++;
+          } else {
+            // Non-OASIS comment — track separately, does not affect consensus or trust status
+            p.non_oasis_interactions++;
+            nonOasisCommentCount++;
           }
           try {
             const reactions = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/comments/${comment.id}/reactions`, token);
@@ -560,6 +575,10 @@ async function runSync(env) {
           } catch { /* skip */ }
         }
 
+        // participants = only those who left at least one OASIS-template comment
+        // (non-OASIS commenters are tracked but don't count toward trust thresholds)
+        const oasisParticipantCount = [...participantMap.values()].filter(p => p.decision !== null).length;
+
         const detectionTool = parseDetectionTool(pr.body);
         const existingRow   = await db.prepare('SELECT merged_upstream FROM pull_requests WHERE repo_name = ? AND number = ?').bind(repo.name, pr.number).first();
         const mergedUpstream = existingRow?.merged_upstream ?? 0;
@@ -568,13 +587,15 @@ async function runSync(env) {
         await db.prepare(`
           INSERT OR REPLACE INTO pull_requests
             (id, repo_name, number, title, state, author, html_url, comment_count,
+             oasis_comment_count, non_oasis_comment_count,
              participants, consensus_accept, consensus_modify, consensus_reject,
              merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           pr.id, repo.name, pr.number, pr.title, state,
           pr.user?.login ?? null, pr.html_url, comments.length,
-          participantMap.size, consensusAccept, consensusModify, consensusReject,
+          oasisCommentCount, nonOasisCommentCount,
+          oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
           mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
           pr.created_at, pr.updated_at, detectionTool ?? null, syncStart
         ).run();
@@ -582,9 +603,9 @@ async function runSync(env) {
         for (const [login, data] of participantMap.entries()) {
           await db.prepare(`
             INSERT OR REPLACE INTO pr_participants
-              (pr_id, repo_name, pr_number, login, interactions, decision, reactions_received)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).bind(pr.id, repo.name, pr.number, login, data.interactions, data.decision ?? null, data.reactions_received).run();
+              (pr_id, repo_name, pr_number, login, interactions, non_oasis_interactions, decision, reactions_received)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(pr.id, repo.name, pr.number, login, data.interactions, data.non_oasis_interactions, data.decision ?? null, data.reactions_received).run();
         }
       }
 
