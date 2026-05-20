@@ -10,7 +10,7 @@ const quotes: Quote[] = [
     title: 'Community Architect',
     company: 'Intigriti',
     quote: 'It feels good to do good. OASIS is an opportunity for every hacker, developer, and security-interested practitioner to move the needle on securing open-source code. AI finally enables fixing vulnerabilities at the speed of compute, but we need to build trust in the tools first.',
-    photoUrl: '/headshots/chris-holt.jpg',
+    photoUrl: '/headshots/chris-holt.jpeg',
     linkedinUrl: 'https://www.linkedin.com/in/flyingtoasters/',
   },
   {
@@ -18,7 +18,7 @@ const quotes: Quote[] = [
     title: 'Co-Founder, VP of Product',
     company: 'AppSecAI',
     quote: "For the past 3 years, I've been building AI tools to enable developers and appsec teams to remediate at the speed of compute. OASIS takes that concept to the masses to showcase the power of AI to remediate vulnerabilities, and truly left-shift security up the supply chain.",
-    photoUrl: '/headshots/michael-cartsonis.jpg',
+    photoUrl: '/headshots/michael-cartsonis.jpeg',
     linkedinUrl: 'https://www.linkedin.com/in/cartsoni/',
   },
 ]
