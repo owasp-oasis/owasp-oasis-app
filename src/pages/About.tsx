@@ -5,7 +5,7 @@ const team = [
     name: 'Chris Holt',
     role: 'Project Lead & Technical Architect',
     bio: `Chris has run bug bounty programs and community for one of the world's largest bug bounty platforms, where distributed communities of experts proved they could do offensive security work at scale. That model — crowdsourced expertise applied to a hard problem — is exactly what OASIS brings to the defense side. When fix automation made it possible to generate candidate patches at speed, Chris saw the opportunity to build the community mechanism that would make those fixes credible and trustworthy for open source maintainers.`,
-    github: 'chrisholt',
+    github: 'humor4fun',
   },
   {
     name: 'Michael Cartsonis',
