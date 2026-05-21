@@ -246,7 +246,7 @@ async function handleRepos(env, url) {
     SELECT r.id, r.name, r.full_name, r.description, r.language,
            r.open_prs, r.stars, r.upstream_url, r.synced_at,
            COUNT(DISTINCT p.id)                 AS total_prs,
-           COUNT(DISTINCT pp.login)              AS contributors,
+           COUNT(DISTINCT CASE WHEN pp.decision IS NOT NULL THEN pp.login END) AS contributors,
            COALESCE(SUM(p.consensus_accept), 0)  AS total_accept,
            COALESCE(SUM(p.consensus_modify), 0)  AS total_modify,
            COALESCE(SUM(p.consensus_reject), 0)  AS total_reject
@@ -463,6 +463,31 @@ function normaliseToolName(raw) {
   return raw.trim().slice(0, 60) || 'SAST (unknown)';
 }
 
+// Detect automated/bot accounts that should not appear in OASIS tracking.
+// Checks both the [bot] GitHub suffix and common patterns in the login name.
+// Real humans very rarely use these strings in GitHub usernames.
+function isAutomatedAccount(login) {
+  if (!login) return true;
+  const l = login.toLowerCase();
+  return (
+    login.endsWith('[bot]')       ||
+    l.includes('bot')             ||
+    l.includes('ci')              ||
+    l.includes('auto')            ||
+    l.includes('deploy')          ||
+    l.includes('release')         ||
+    l.includes('dependabot')      ||
+    l.includes('renovate')        ||
+    l.includes('stale')           ||
+    l.includes('codecov')         ||
+    l.includes('coveralls')       ||
+    l.includes('imgbot')          ||
+    l.includes('allcontributors') ||
+    l.includes('snyk')            ||
+    l.includes('sonar')
+  );
+}
+
 async function getSyncState(db, key) {
   const row = await db.prepare('SELECT value FROM sync_state WHERE key = ?').bind(key).first();
   return row?.value ?? '2020-01-01T00:00:00Z';
@@ -544,26 +569,32 @@ async function runSync(env) {
 
         for (const comment of comments) {
           const login = comment.user?.login;
-          if (!login || login.endsWith('[bot]')) continue;
+          // Skip automated/bot accounts — they must not appear in any OASIS tracking
+          if (!login || isAutomatedAccount(login)) continue;
           const p = ensure(login);
-          p.interactions++;
           const decision = parseDecision(comment.body);
           if (decision) {
+            // OASIS-template comment — counts toward interactions, consensus, and trust
+            p.interactions++;
             p.decision = decision;
             oasisCommentCount++;
             if (decision === 'accept') consensusAccept++;
             if (decision === 'modify') consensusModify++;
             if (decision === 'reject') consensusReject++;
           } else {
-            // Non-OASIS comment — track separately, does not affect consensus or trust status
+            // Non-OASIS comment — tracked separately, does NOT affect reputation,
+            // consensus, trust status, or contributor counts
             p.non_oasis_interactions++;
             nonOasisCommentCount++;
+            continue; // skip reactions fetch — non-OASIS engagement is not credited
           }
+          // Reactions are only fetched for OASIS-template comments
           try {
             const reactions = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/comments/${comment.id}/reactions`, token);
             for (const rxn of reactions) {
               const rLogin = rxn.user?.login;
-              if (!rLogin || rLogin === login || rLogin.endsWith('[bot]')) continue;
+              // Skip self-reactions, bots, and automated accounts
+              if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
               p.reactions_received++;
               if (rxn.content === '+1' && decision) {
                 if (decision === 'accept') consensusAccept++;
