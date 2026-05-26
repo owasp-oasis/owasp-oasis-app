@@ -245,15 +245,13 @@ async function handleRepos(env, url) {
   const rows  = await env.DB.prepare(`
     SELECT r.id, r.name, r.full_name, r.description, r.language,
            r.open_prs, r.stars, r.upstream_url, r.synced_at,
-           COUNT(DISTINCT p.id)                 AS total_prs,
-           COUNT(DISTINCT CASE WHEN pp.decision IS NOT NULL THEN pp.login END) AS contributors,
-           COALESCE(SUM(p.consensus_accept), 0)  AS total_accept,
-           COALESCE(SUM(p.consensus_modify), 0)  AS total_modify,
-           COALESCE(SUM(p.consensus_reject), 0)  AS total_reject
+           (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name)                             AS total_prs,
+           (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
+           (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_accept,
+           (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_modify,
+           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject
     FROM repos r
-    LEFT JOIN pull_requests p  ON p.repo_name = r.name
-    LEFT JOIN pr_participants pp ON pp.repo_name = r.name
-    GROUP BY r.id ORDER BY ${col} ${dir}
+    ORDER BY ${col} ${dir}
   `).all();
   let results = rows.results;
   if (q) results = results.filter(r =>
@@ -702,6 +700,64 @@ async function handleRegister(request, env) {
   return jsonOk({ message: 'Registered successfully. We\'ll be in touch!' }, request);
 }
 
+async function handleFeedback(request, env) {
+  const parsed = await parseBody(request);
+  if (!parsed.ok) return jsonErr(parsed.error, 400, request);
+  const body = parsed.val;
+
+  const description = (body.description ?? '').toString().trim();
+  if (!description || description.length < 10) {
+    return jsonErr('Description must be at least 10 characters.', 400, request);
+  }
+  if (description.length > 5000) {
+    return jsonErr('Description must be 5000 characters or fewer.', 400, request);
+  }
+
+  const VALID_SEVERITY = new Set(['bug', 'suggestion', 'other']);
+  const severity = VALID_SEVERITY.has(body.severity) ? body.severity : 'other';
+
+  const contact = (body.contact ?? '').toString().trim().slice(0, 200) || null;
+
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    console.error('handleFeedback: GITHUB_TOKEN not set');
+    return jsonErr('Feedback service unavailable.', 503, request);
+  }
+
+  const severityLabel = severity === 'bug' ? '[Bug]' : severity === 'suggestion' ? '[Suggestion]' : '[Feedback]';
+  const issueTitle = `${severityLabel} Preview site feedback`;
+  const issueBody = [
+    `**Type:** ${severity}`,
+    contact ? `**Contact:** ${contact}` : null,
+    '',
+    '**Description:**',
+    description,
+    '',
+    '---',
+    `_Submitted via preview site feedback form on ${new Date().toUTCString()}_`,
+  ].filter(line => line !== null).join('\n');
+
+  const ghRes = await fetch('https://api.github.com/repos/owasp-oasis/owasp-oasis-app/issues', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+      'User-Agent': 'owasp-oasis-worker/1.0',
+    },
+    body: JSON.stringify({ title: issueTitle, body: issueBody, labels: ['preview-feedback'] }),
+  });
+
+  if (!ghRes.ok) {
+    const errText = await ghRes.text().catch(() => '');
+    console.error('GitHub issue creation failed:', ghRes.status, errText);
+    return jsonErr('Failed to submit feedback. Please try again.', 502, request);
+  }
+
+  return jsonOk({ message: 'Feedback submitted. Thank you!' }, request);
+}
+
 /* ─── MAIN HANDLER ───────────────────────────────────────────── */
 export default {
   async fetch(request, env) {
@@ -751,6 +807,11 @@ export default {
       /* POST /api/register */
       if (method === 'POST' && url.pathname === '/api/register') {
         return handleRegister(request, env);
+      }
+
+      /* POST /api/feedback — create GitHub issue for preview site feedback */
+      if (method === 'POST' && url.pathname === '/api/feedback') {
+        return handleFeedback(request, env);
       }
 
       /* GET /api/admin/registrations */

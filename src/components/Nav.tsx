@@ -6,7 +6,7 @@ const links = [
   { to: '/about', label: 'About', exact: false },
   { to: '/overview', label: 'Overview', exact: false },
   { to: '/leaderboards', label: 'Leaderboards', exact: false },
-  { to: '/sponsors', label: 'Sponsors', exact: false },
+  { to: '/support', label: 'Support', exact: false },
 ]
 
 export default function Nav() {

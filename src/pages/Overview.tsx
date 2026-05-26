@@ -36,6 +36,7 @@ const principles = [
   {
     label: 'Impact',
     color: 'green' as const,
+    statement: 'Focus on impact.',
     summary: 'Work on repositories where acceptance is plausible. Focus on practical outcomes, not raw PR volume.',
     icon: (
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -61,6 +62,7 @@ const principles = [
   {
     label: 'Credibility',
     color: 'blue' as const,
+    statement: 'Acceptance builds credibility.',
     summary: 'Treat automation as a source of candidate fixes, not a source of truth. Human review is what makes a fix trustworthy.',
     icon: (
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -84,6 +86,7 @@ const principles = [
   {
     label: 'Village',
     color: 'purple' as const,
+    statement: 'It takes a village.',
     summary: 'Keep the authoritative review and decision process under the OWASP project. This work belongs to the community.',
     icon: (
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -149,6 +152,7 @@ export default function Overview() {
                 >
                   <div className="principle-card-icon">{p.icon}</div>
                   <span className={`principle-tag principle-tag--${p.color}`}>{p.label}</span>
+                  <p className="principle-statement">{p.statement}</p>
                   <p>{p.summary}</p>
                   <span className="principle-card-more">
                     {isOpen ? '▲ See less' : '▼ See more'}
