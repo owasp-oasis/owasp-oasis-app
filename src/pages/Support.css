@@ -1,6 +1,3 @@
-/* Support page — inherits shared sponsor styles from Sponsors.css */
-@import './Sponsors.css';
-
 /* ── Shared title/sub styles (namespaced to support) ── */
 .support-section-title {
   font-size: clamp(1.4rem, 3vw, 1.9rem);

@@ -51,13 +51,13 @@ export default function Sponsors() {
           <h1>Sponsors</h1>
           <p>
             OASIS is community-powered and open to corporate participation.
-            Sponsorship is strictly resource-based — it does not influence
+            Sponsorship is strictly resource-based &mdash; it does not influence
             project governance, fix selection, or validation outcomes.
           </p>
         </div>
       </div>
 
-      {/* Participation models — above the sponsor list */}
+      {/* Participation models */}
       <section className="section-sm sponsors-tiers">
         <div className="container">
           <h2 className="sponsors-section-title">Participation Models</h2>
@@ -83,7 +83,7 @@ export default function Sponsors() {
           <p className="sponsors-section-sub">
             These organizations believed in OASIS from the start and provide the
             tool licenses and operational resources that make the project possible.
-            Vendor neutrality is not just a principle — it's what makes OASIS
+            Vendor neutrality is not just a principle &mdash; it&rsquo;s what makes OASIS
             credible to open-source maintainers and the broader community.
           </p>
 
@@ -118,11 +118,11 @@ export default function Sponsors() {
             ))}
           </div>
 
-          {/* Future sponsor slot — links to the interest form below */}
+          {/* Future sponsor slot */}
           <div className="sponsor-slots">
             <a href="#sponsor-interest" className="sponsor-slot-placeholder">
               <span>Your organization here</span>
-              <span className="sponsor-slot-cta">Register interest →</span>
+              <span className="sponsor-slot-cta">Register interest &rarr;</span>
             </a>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function Sponsors() {
             <h2>Interested in supporting OASIS?</h2>
             <p>
               Register your interest and the OASIS team will be in touch. All we
-              need is your email — no commitment required.
+              need is your email &mdash; no commitment required.
             </p>
             <p>
               Corporate sponsorship does not influence OASIS governance, fix

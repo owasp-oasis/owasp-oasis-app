@@ -7,6 +7,7 @@ const links = [
   { to: '/overview', label: 'Overview', exact: false },
   { to: '/leaderboards', label: 'Leaderboards', exact: false },
   { to: '/support', label: 'Support', exact: false },
+  { to: '/sponsors', label: 'Sponsors', exact: false },
 ]
 
 export default function Nav() {
