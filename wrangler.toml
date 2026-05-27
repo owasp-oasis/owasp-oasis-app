@@ -23,9 +23,9 @@ zone_name = "owasp-oasis.org"
 
 # ── D1 Database ──
 [[d1_databases]]
-binding              = "DB"
-database_name        = "oasis-db"
-database_id          = "d14003aa-36a7-42f3-8374-7cd060b56333"
+binding       = "DB"
+database_name = "oasis-db"
+database_id   = "d14003aa-36a7-42f3-8374-7cd060b56333"
 
 # ── KV Namespace (rate limiting) ──
 [[kv_namespaces]]
@@ -41,31 +41,33 @@ crons = ["0 */4 * * *"]
 [vars]
 ENVIRONMENT = "production"
 
-# ── Preview environment — deploys to preview.owasp-oasis.bluejar.org ──
+# ── Preview environment ──
 [env.preview]
-name = "owasp-oasis-preview"
+name        = "owasp-oasis-preview"
+main        = "worker.js"
 workers_dev = false
 
 [env.preview.assets]
-directory = "./dist"
-binding   = "ASSETS"
+directory          = "./dist"
+binding            = "ASSETS"
 not_found_handling = "single-page-application"
 
 [[env.preview.routes]]
-pattern = "preview.owasp-oasis.bluejar.org"
-custom_domain = true
+pattern   = "preview.owasp-oasis.org/*"
+zone_name = "owasp-oasis.org"
 
 [[env.preview.d1_databases]]
 binding       = "DB"
 database_name = "oasis-db"
-database_id   = "2198ce30-3090-4805-884a-317dc6b9db58"
+database_id   = "d14003aa-36a7-42f3-8374-7cd060b56333"
 
 [[env.preview.kv_namespaces]]
-binding = "RATE_KV"
-id      = "6dabc90e4b6b432cac87fb1c7a2ab631"
+binding    = "RATE_KV"
+id         = "4668dfe626b144de82ceec91df80c7ce"
+preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 
 [env.preview.vars]
-ENVIRONMENT = "production"
+ENVIRONMENT = "preview"
 
 [env.preview.triggers]
 crons = ["0 */4 * * *"]
