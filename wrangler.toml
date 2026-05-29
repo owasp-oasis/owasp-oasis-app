@@ -43,7 +43,7 @@ ENVIRONMENT = "production"
 
 # ── Preview environment ──
 [env.preview]
-name        = "owasp-oasis-preview"
+name        = "owasp-oasis-app-preview"
 main        = "worker.js"
 workers_dev = false
 
