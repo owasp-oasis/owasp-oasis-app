@@ -102,7 +102,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
 export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) {
   const { user } = useAuth()
 
-  const [activeTab, setActiveTab]       = useState<Tab>('pr')
+  const [activeTab, setActiveTab]       = useState<Tab>('summary')
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
@@ -120,7 +120,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     if (!pr) return
     if (pr.id !== prevPrId.current) {
       prevPrId.current = pr.id
-      setActiveTab('pr')
+      setActiveTab('summary')
       setVoteDecision(null)
       setCommentCount(null)
       setDetails(null)
@@ -181,11 +181,11 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   const stateClass = activePR.state === 'open' ? 'state-badge state-open' : 'state-badge state-closed'
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: 'summary',  label: 'Summary' },
     { id: 'pr',       label: 'PR' },
     { id: 'body',     label: 'Body' },
     { id: 'changes',  label: 'Changes' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
-    { id: 'summary',  label: 'Summary' },
   ]
 
   // SummaryTab needs details augmented with consensus counts from the leaderboard PR
@@ -227,12 +227,14 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
             <span className="prp-vote-label">Your vote:</span>
             {(['accept', 'modify', 'reject'] as Decision[]).map(d => {
               const isVoted  = myVote === d
+              const isOther  = !!myVote && myVote !== d
               const isActive = voteDecision === d && !myVote
               const classes  = [
                 'prp-vote-btn',
                 `prp-vote-btn--${d}`,
                 isVoted  ? 'prp-vote-btn--voted'  : '',
                 isActive ? 'prp-vote-btn--active' : '',
+                isOther  ? 'prp-vote-btn--other'  : '',
               ].filter(Boolean).join(' ')
 
               return (
