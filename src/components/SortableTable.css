@@ -8,6 +8,15 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sortable-table-toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .sortable-table-search {
@@ -152,29 +161,4 @@
   border-left: 3px solid var(--blue);
 }
 
-/* Title cell in PR table — no underline, inherits row style */
-.pr-row-title {
-  font-size: inherit;
-  color: inherit;
-}
 
-/* Per-row agreement highlight (user voted, compared to crowd plurality) */
-.pr-row-agree td {
-  background: #f0fdf4;
-  box-shadow: inset 3px 0 0 #16a34a;
-}
-
-.pr-row-agree:hover td,
-.pr-row-agree.sortable-table-row--active td {
-  background: #dcfce7;
-}
-
-.pr-row-disagree td {
-  background: #fffbeb;
-  box-shadow: inset 3px 0 0 #d97706;
-}
-
-.pr-row-disagree:hover td,
-.pr-row-disagree.sortable-table-row--active td {
-  background: #fef3c7;
-}

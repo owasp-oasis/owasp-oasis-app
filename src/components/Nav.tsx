@@ -98,9 +98,11 @@ export default function Nav() {
           )
         )}
 
-        <a href="/#register-form" className="nav-cta btn btn-primary" onClick={closeMenu}>
-          Join Team OASIS
-        </a>
+        {!user && (
+          <a href="/#register-form" className="nav-cta btn btn-primary" onClick={closeMenu}>
+            Join Team OASIS
+          </a>
+        )}
 
         <button
           className={`nav-hamburger${menuOpen ? ' nav-hamburger--open' : ''}`}

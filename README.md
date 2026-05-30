@@ -190,9 +190,9 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `Footer` | Site-wide footer |
 | `PreviewBanner` | Dismissible banner shown on the preview environment indicating the site is in staging; includes a link to submit feedback |
 | `RegisterForm` | Validator/sponsor registration form — posts to `POST /api/register` |
-| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs |
+| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
 | `QuotesCarousel` | Auto-advancing animated carousel for testimonial/quote content on the Home page |
-| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Changes** (side-by-side or unified diff per file), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
+| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
 | `VoteForm` | Form inside the PR Panel for submitting an accept/modify/reject vote; builds the OASIS validation comment template and posts to `POST /api/vote` |
 | `VoteModal` | Modal wrapper that prompts unauthenticated users to sign in with GitHub before voting |
 
@@ -291,6 +291,32 @@ Rejection summary:
 
 ---
 
+## PR Leaderboard table
+
+The **PRs tab** in the leaderboard is the primary work queue for validators.
+
+### Columns
+
+| Column | Notes |
+|---|---|
+| Pull Request | Combined column: muted repo-name link (top) + PR number and full title below. Title truncated by CSS ellipsis — no JS slice. |
+| Status | OASIS status badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). Header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| My Vote | Shown only when logged in. Displays the user's vote with coloured badge. Row gets a coloured left-border inset shadow: green = Accept, amber = Modify, red = Reject. Also shows `pr-row-agree` (green tint) or `pr-row-disagree` (amber tint) bg overlay when the user's vote matches/diverges from the crowd plurality. |
+| Consensus | Compact stacked bar (Accept/Modify/Reject proportions) + total vote count. Tooltip shows breakdown including OASIS vs non-OASIS comment counts. |
+| Participants | Total unique participants. |
+| Last updated | Formatted date. |
+| ›  | Hover-only chevron signalling the row is clickable. |
+
+### Filter pills
+
+"Quick filters:" pills sit to the **right** of the search input in the shared toolbar. When logged in, a **Needs My Vote** pill appears showing the count of unreviewed open PRs. Selecting it when there are none shows: _"You've reviewed all open PRs — great work!"_ with a "View all PRs" inline button.
+
+### Status thresholds (stub)
+
+`Trusted` requires ≥10 participants and ≥75% Accept votes among open PRs. These thresholds are explicitly marked as stubs in the UI and TODO list — they will be ratified by the OASIS community.
+
+---
+
 ## PR Panel
 
 The PR Panel is a slide-out side panel that loads live GitHub data for any PR in the leaderboard.
@@ -312,7 +338,7 @@ All endpoints look up `repo_name` and PR `number` from D1 by the internal `id`, 
 |---|---|
 | Summary | CWE ID and description, CVE/CAPEC/CVSS, severity, TL;DR, detection tool, consensus vote counts, participant count |
 | Body | Full PR description rendered as GitHub-flavoured markdown, including Mermaid diagrams and `<details>`/`<summary>` HTML |
-| Changes | Per-file diff with syntax-aware side-by-side or unified view; additions highlighted green, deletions red |
+| Diffs | Per-file sub-tab bar (last 2 path segments as tab label, full path in tooltip, `+add −del` churn inline). Diff view dropdown (Split / Split+char / Unified / Unified+char) lives inside this tab. Column widths set via `<colgroup>` for correct sizing. |
 | Comments | GitHub issue comments with author avatar, OASIS decision badge (Accept/Modify/Reject), emoji reactions |
 | PR | Direct link to open the PR on GitHub |
 

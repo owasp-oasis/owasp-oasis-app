@@ -1,6 +1,14 @@
 /**
- * ChangesTab — diff viewer for PR file changes.
- * Supports four view modes controlled by the parent panel:
+ * ChangesTab (labelled "Diffs" in the tab bar) — diff viewer for PR file changes.
+ *
+ * Layout:
+ *   - Summary line: "N files changed +X −Y"
+ *   - Horizontal scrollable file sub-tab bar (last 2 path segments as label,
+ *     full path in title tooltip, +add −del churn inline)
+ *   - Diff view dropdown (Split / Unified / char variants) on the right of the sub-tab bar
+ *   - Active file diff rendered below
+ *
+ * Supports four view modes (controlled internally):
  *   split          — side-by-side, line-level highlighting
  *   split+char     — side-by-side, intra-line character highlights on modified lines
  *   unified        — single-column git-diff style
@@ -24,8 +32,10 @@ interface FileEntry {
 
 interface Props {
   prId: number
-  diffView: DiffView
-  charDiff: boolean
+  // diffView and charDiff are now managed internally; these props are kept for
+  // backward-compat but ignored if provided. The parent no longer needs to pass them.
+  diffView?: DiffView
+  charDiff?: boolean
 }
 
 /* ── Diff row types ─────────────────────────────────────────── */
@@ -162,6 +172,13 @@ function SplitDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean 
   return (
     <div className="prp-diff-wrap">
       <table className="prp-diff-table">
+        <colgroup>
+          <col style={{ width: '40px' }} />
+          <col style={{ width: 'calc(50% - 42px)' }} />
+          <col style={{ width: '2px' }} />
+          <col style={{ width: '40px' }} />
+          <col style={{ width: 'calc(50% - 42px)' }} />
+        </colgroup>
         <tbody>
           {rows.map((row, i) => {
             if (row.type === 'hunk') {
@@ -246,6 +263,12 @@ function UnifiedDiffTable({ patch, charDiff }: { patch: string; charDiff: boolea
   return (
     <div className="prp-diff-wrap">
       <table className="prp-diff-table prp-diff-table--unified">
+        <colgroup>
+          <col style={{ width: '36px' }} />
+          <col style={{ width: '36px' }} />
+          <col style={{ width: '18px' }} />
+          <col />
+        </colgroup>
         <tbody>
           {rows.map((row, i) => {
             if (row.type === 'hunk') {
@@ -314,12 +337,22 @@ function statusClass(status: string): string {
   }
 }
 
+/** Return the last 2 path segments of a filename, e.g. "src/foo/bar.ts" → "foo/bar.ts" */
+function shortName(filename: string): string {
+  const parts = filename.split('/')
+  return parts.length > 2 ? parts.slice(-2).join('/') : filename
+}
+
 /* ── Main component ─────────────────────────────────────────── */
-export default function ChangesTab({ prId, diffView, charDiff }: Props) {
-  const [files, setFiles]       = useState<FileEntry[] | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+export default function ChangesTab({ prId }: Props) {
+  const [files, setFiles]         = useState<FileEntry[] | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [activeFile, setActiveFile] = useState<string | null>(null)
+
+  // Diff view controls — managed internally
+  const [diffView, setDiffView] = useState<DiffView>('split')
+  const [charDiff, setCharDiff] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -331,21 +364,12 @@ export default function ChangesTab({ prId, diffView, charDiff }: Props) {
         if (!d.ok) { setError(d.error ?? 'Failed to load files'); return }
         const f = d.files ?? []
         setFiles(f)
-        if (f.length <= 5) setExpanded(new Set(f.map(x => x.filename)))
+        setActiveFile(f[0]?.filename ?? null)
       })
       .catch(err => { if (!cancelled) setError((err as Error).message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [prId])
-
-  function toggle(filename: string) {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(filename)) next.delete(filename)
-      else next.add(filename)
-      return next
-    })
-  }
 
   if (loading) return <div className="prp-loading">Loading file changes…</div>
   if (error)   return <div className="prp-error">{error}</div>
@@ -354,39 +378,71 @@ export default function ChangesTab({ prId, diffView, charDiff }: Props) {
   const totalAdd = files.reduce((s, f) => s + f.additions, 0)
   const totalDel = files.reduce((s, f) => s + f.deletions, 0)
 
+  const currentFile = files.find(f => f.filename === activeFile) ?? files[0]
+
   return (
     <div>
+      {/* Summary line */}
       <div className="prp-changes-summary">
         {files.length} file{files.length !== 1 ? 's' : ''} changed &nbsp;
         <span className="prp-stat-add">+{totalAdd}</span> &nbsp;
         <span className="prp-stat-del">−{totalDel}</span>
       </div>
 
-      {files.map(file => {
-        const isOpen = expanded.has(file.filename)
-        return (
-          <div key={file.filename} className="prp-file-entry">
-            <div className="prp-file-header" onClick={() => toggle(file.filename)}>
-              <span className="prp-file-toggle">{isOpen ? '▾' : '▸'}</span>
-              <span className="prp-file-name">{file.filename}</span>
-              <span className={statusClass(file.status)}>{file.status}</span>
-              <span className="prp-file-churn">
+      {/* File sub-tab bar + diff view dropdown */}
+      <div className="prp-file-tabs-bar">
+        <div className="prp-file-tabs">
+          {files.map(file => (
+            <button
+              key={file.filename}
+              className={`prp-file-tab${activeFile === file.filename ? ' prp-file-tab--active' : ''}`}
+              title={file.filename}
+              onClick={() => setActiveFile(file.filename)}
+            >
+              <span className="prp-file-tab-name">{shortName(file.filename)}</span>
+              <span className="prp-file-tab-churn">
                 <span className="prp-stat-add">+{file.additions}</span>
                 {' '}
                 <span className="prp-stat-del">−{file.deletions}</span>
               </span>
-            </div>
+              <span className={statusClass(file.status)} style={{ fontSize: '0.62rem', padding: '1px 5px' }}>
+                {file.status}
+              </span>
+            </button>
+          ))}
+        </div>
 
-            {isOpen && (
-              file.patch
-                ? diffView === 'unified'
-                  ? <UnifiedDiffTable patch={file.patch} charDiff={charDiff} />
-                  : <SplitDiffTable   patch={file.patch} charDiff={charDiff} />
-                : <p className="prp-no-patch">No patch available (binary or large file).</p>
-            )}
-          </div>
-        )
-      })}
+        {/* Diff view dropdown — right side of the sub-tab bar */}
+        <div className="prp-diff-controls">
+          <select
+            className="prp-diff-select"
+            aria-label="Diff view mode"
+            value={`${diffView}${charDiff ? '+char' : ''}`}
+            onChange={e => {
+              const v = e.target.value
+              setDiffView(v.startsWith('unified') ? 'unified' : 'split')
+              setCharDiff(v.endsWith('+char'))
+            }}
+          >
+            <option value="split">Split</option>
+            <option value="split+char">Split + char diff</option>
+            <option value="unified">Unified</option>
+            <option value="unified+char">Unified + char diff</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Active file diff */}
+      {currentFile && (
+        <div className="prp-file-diff-body">
+          {currentFile.patch
+            ? diffView === 'unified'
+              ? <UnifiedDiffTable patch={currentFile.patch} charDiff={charDiff} />
+              : <SplitDiffTable   patch={currentFile.patch} charDiff={charDiff} />
+            : <p className="prp-no-patch">No patch available (binary or large file).</p>
+          }
+        </div>
+      )}
     </div>
   )
 }

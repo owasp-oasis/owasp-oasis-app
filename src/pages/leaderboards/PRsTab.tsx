@@ -34,23 +34,30 @@ const VOTE_LABEL: Record<Decision, string> = {
   reject: '✗ Reject',
 }
 
-/** Returns a CSS class for the row based on whether the user's vote
- *  agrees with or contradicts the crowd plurality.
- *  Returns '' when the user hasn't voted, has the only vote, or there's a tie. */
-function getAgreementClass(pr: AugmentedPR, myVote: Decision | undefined): string {
-  if (!myVote) return ''
-  const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
-  if (total <= 1) return '' // only the user's vote — no crowd yet
-  const counts: Record<Decision, number> = {
-    accept: pr.consensus_accept,
-    modify: pr.consensus_modify,
-    reject: pr.consensus_reject,
+/** Returns CSS class(es) for row highlighting based on vote state and crowd agreement. */
+function getRowClass(pr: AugmentedPR, myVote: Decision | undefined): string {
+  const classes: string[] = []
+
+  if (myVote) {
+    classes.push(`pr-row-voted--${myVote}`)
+
+    const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
+    if (total > 1) {
+      const counts: Record<Decision, number> = {
+        accept: pr.consensus_accept,
+        modify: pr.consensus_modify,
+        reject: pr.consensus_reject,
+      }
+      const max = Math.max(...Object.values(counts))
+      const leaders = (Object.entries(counts) as [Decision, number][]).filter(([, v]) => v === max)
+      if (leaders.length === 1) {
+        const crowdLeader = leaders[0][0]
+        classes.push(myVote === crowdLeader ? 'pr-row-agree' : 'pr-row-disagree')
+      }
+    }
   }
-  const max = Math.max(...Object.values(counts))
-  const leaders = (Object.entries(counts) as [Decision, number][]).filter(([, v]) => v === max)
-  if (leaders.length > 1) return '' // tie — ambiguous
-  const crowdLeader = leaders[0][0]
-  return myVote === crowdLeader ? 'pr-row-agree' : 'pr-row-disagree'
+
+  return classes.join(' ')
 }
 
 type OASISStatus = 'Needs Review' | 'Trusted' | 'Rejected' | 'Accepted'
@@ -135,11 +142,45 @@ function StatusKey() {
               </li>
             ))}
           </ul>
-          <p className="status-key-stub-note">
-            Trust criteria are a stub — thresholds will be refined by the community.
-          </p>
+          <div className="status-key-trust-criteria">
+            <h4>Trusted criteria <span className="todo-badge" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>TODO</span></h4>
+            <ul>
+              <li><strong>{TRUST_MIN_CONTRIBUTORS}+ participants</strong> have interacted with the PR</li>
+              <li><strong>{Math.round(TRUST_MIN_ACCEPT_RATE * 100)}%+ of votes</strong> are Accept</li>
+              <li>The PR is <strong>still open</strong> in the fork</li>
+            </ul>
+            <p className="status-key-stub-note">
+              Thresholds are a stub — they will be reviewed and ratified by the OASIS community.
+            </p>
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Compact stacked consensus bar + total count for use in the table cell. */
+function ConsensusMiniBar({ accept, modify, reject, oasisVotes, nonOasisVotes }: {
+  accept: number
+  modify: number
+  reject: number
+  oasisVotes: number
+  nonOasisVotes: number
+}) {
+  const total = accept + modify + reject
+  const tooltip = `Accept: ${accept} | Modify: ${modify} | Reject: ${reject}\nOASIS votes: ${oasisVotes} | Non-OASIS: ${nonOasisVotes}`
+  return (
+    <div className="consensus-mini-wrap" title={tooltip}>
+      {total > 0 ? (
+        <div className="consensus-bar consensus-bar--mini">
+          {accept > 0 && <div className="cb-accept" style={{ flex: accept }} />}
+          {modify > 0 && <div className="cb-modify" style={{ flex: modify }} />}
+          {reject > 0 && <div className="cb-reject" style={{ flex: reject }} />}
+        </div>
+      ) : (
+        <div className="consensus-bar consensus-bar--mini consensus-bar--empty" />
+      )}
+      <span className="consensus-mini-count">{total} {total === 1 ? 'vote' : 'votes'}</span>
     </div>
   )
 }
@@ -161,7 +202,6 @@ interface Props { data: PR[]; loading: boolean }
 
 export default function PRsTab({ data, loading }: Props) {
   const [filter, setFilter] = useState<FilterMode>('needs-my-vote')
-  const [showStamp, setShowStamp] = useState(false)
   const { user } = useAuth()
 
   // My votes state
@@ -220,7 +260,6 @@ export default function PRsTab({ data, loading }: Props) {
       setShowSignIn(true)
       return
     }
-    // If clicking the same PR that's open, close it; otherwise switch
     if (panelPR?.id === pr.id) {
       setPanelPR(null)
     } else {
@@ -230,26 +269,23 @@ export default function PRsTab({ data, loading }: Props) {
 
   const columns: Column<AugmentedPR>[] = [
     {
-      key: 'repo_name',
-      label: 'Repository',
-      render: (v) => (
-        <a
-          href={`https://github.com/owasp-oasis/${v}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
-        >
-          {String(v)}
-        </a>
-      ),
-    },
-    {
       key: 'title',
       label: 'Pull Request',
-      render: (v, row) => (
-        <span className="pr-row-title" title={String(v)}>
-          #{row.number} {String(v).length > 55 ? String(v).slice(0, 55) + '…' : String(v)}
-        </span>
+      render: (_v, row) => (
+        <div className="pr-row-combined">
+          <a
+            className="pr-row-repo"
+            href={`https://github.com/owasp-oasis/${row.repo_name}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+          >
+            {row.repo_name}
+          </a>
+          <span className="pr-row-title" title={row.title}>
+            #{row.number} {row.title}
+          </span>
+        </div>
       ),
     },
     {
@@ -259,64 +295,6 @@ export default function PRsTab({ data, loading }: Props) {
       searchable: false,
       render: (v) => <StatusBadge status={v as OASISStatus} />,
       align: 'center',
-    },
-    {
-      key: 'oasis_comment_count',
-      label: <ColHeader icon="🗳" label="OASIS Votes" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-    },
-    {
-      key: 'non_oasis_comment_count',
-      label: <ColHeader icon="💬" label="Non-OASIS" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-      render: (v) => (
-        <span style={{ color: Number(v) > 0 ? 'var(--muted)' : 'inherit' }}>
-          {String(v)}
-        </span>
-      ),
-    },
-    {
-      key: 'consensus_accept',
-      label: <ColHeader icon="✅" label="Accept votes" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-      render: (v) => <span className="consensus-accept">{String(v)}</span>,
-    },
-    {
-      key: 'consensus_modify',
-      label: <ColHeader icon="⚠️" label="Modify votes" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-      render: (v) => <span className="consensus-modify">{String(v)}</span>,
-    },
-    {
-      key: 'consensus_reject',
-      label: <ColHeader icon="👎" label="Reject votes" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-      render: (v) => <span className="consensus-reject">{String(v)}</span>,
-    },
-    {
-      key: 'participants',
-      label: <ColHeader icon="👥" label="Participants" />,
-      sortable: true,
-      searchable: false,
-      align: 'right',
-    },
-    {
-      key: 'updated_at',
-      label: <ColHeader icon="📅" label="Last updated" />,
-      sortable: true,
-      searchable: false,
-      render: (v) => v ? new Date(String(v)).toLocaleDateString() : '—',
-      align: 'right',
     },
     ...(user ? [{
       key: 'id' as keyof AugmentedPR,
@@ -334,6 +312,45 @@ export default function PRsTab({ data, loading }: Props) {
         )
       },
     }] : []),
+    {
+      key: 'consensus_accept',
+      label: <ColHeader icon="📊" label="Consensus" />,
+      sortable: true,
+      searchable: false,
+      align: 'left',
+      render: (_v, row) => (
+        <ConsensusMiniBar
+          accept={row.consensus_accept}
+          modify={row.consensus_modify}
+          reject={row.consensus_reject}
+          oasisVotes={row.oasis_comment_count}
+          nonOasisVotes={row.non_oasis_comment_count}
+        />
+      ),
+    },
+    {
+      key: 'participants',
+      label: <ColHeader icon="👥" label="Participants" />,
+      sortable: true,
+      searchable: false,
+      align: 'right',
+    },
+    {
+      key: 'updated_at',
+      label: <ColHeader icon="📅" label="Last updated" />,
+      sortable: true,
+      searchable: false,
+      render: (v) => v ? new Date(String(v)).toLocaleDateString() : '—',
+      align: 'right',
+    },
+    {
+      key: 'id' as keyof AugmentedPR,
+      label: '',
+      sortable: false,
+      searchable: false,
+      align: 'right',
+      render: () => <span className="row-chevron" aria-hidden="true">›</span>,
+    },
   ]
 
   const augmented = useMemo<AugmentedPR[]>(() =>
@@ -373,67 +390,42 @@ export default function PRsTab({ data, loading }: Props) {
     return filter === 'all' ? augmented : augmented.filter(pr => pr.oasis_status === filter)
   }, [augmented, filter, myVotes])
 
+  const emptyMessage = useMemo(() => {
+    if (filter === 'needs-my-vote') {
+      return (
+        <span>
+          You&apos;ve reviewed all open PRs — great work!{' '}
+          <button
+            className="pr-empty-filter-link"
+            onClick={() => setFilter('all')}
+          >
+            View all PRs
+          </button>
+        </span>
+      )
+    }
+    return 'No PRs match this filter.'
+  }, [filter])
+
+  const filterBar = (
+    <div className="pr-filter-bar">
+      <span className="pr-filter-label">Quick filters:</span>
+      {visibleFilters.map(({ id, label }) => (
+        <button
+          key={id}
+          className={`pr-filter-btn${filter === id ? ' pr-filter-btn--active' : ''}${id === 'needs-my-vote' ? ' pr-filter-btn--mine' : ''}`}
+          onClick={() => setFilter(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
   if (loading) return <div className="tab-loading">Loading PRs…</div>
 
   return (
     <>
-      {/* OASIS Stamp of Trust — toggleable panel */}
-      <div className="stamp-info-bar">
-        <span className="stamp-info-summary">
-          <strong>OASIS Stamp of Trust</strong> — criteria for the <em>Trusted</em> status
-        </span>
-        <button
-          className="rep-info-toggle"
-          onClick={() => setShowStamp(s => !s)}
-          aria-expanded={showStamp}
-        >
-          ⓘ {showStamp ? 'Hide criteria' : 'Show criteria'}
-        </button>
-      </div>
-
-      {showStamp && (
-        <div className="stamp-criteria-card">
-          <div className="todo-banner" style={{ marginBottom: 14 }}>
-            <span className="todo-badge">TODO</span>
-            <div>
-              These criteria are a <strong>stub</strong>. Thresholds will be reviewed
-              and ratified by the OASIS community before they carry formal weight.
-            </div>
-          </div>
-          <h4>Current criteria for <span className="state-badge state-trusted" style={{ fontSize: '0.8rem' }}>Trusted</span></h4>
-          <ul>
-            <li>
-              <strong>{TRUST_MIN_CONTRIBUTORS}+ participants</strong> have interacted with the PR
-            </li>
-            <li>
-              <strong>{Math.round(TRUST_MIN_ACCEPT_RATE * 100)}%+ of votes</strong> are Accept
-              (i.e. consensus_accept / total_votes ≥ {TRUST_MIN_ACCEPT_RATE})
-            </li>
-            <li>
-              The PR is <strong>still open</strong> in the fork — Rejected and Accepted PRs are excluded
-            </li>
-          </ul>
-          <p className="stamp-criteria-note">
-            A <em>Trusted</em> PR is considered ready for OASIS project owners to evaluate for
-            upstream submission. Meeting the threshold does not guarantee submission — that decision
-            remains with the project owners.
-          </p>
-        </div>
-      )}
-
-      <div className="pr-filter-bar">
-        <span className="pr-filter-label">Show:</span>
-        {visibleFilters.map(({ id, label }) => (
-          <button
-            key={id}
-            className={`pr-filter-btn${filter === id ? ' pr-filter-btn--active' : ''}${id === 'needs-my-vote' ? ' pr-filter-btn--mine' : ''}`}
-            onClick={() => setFilter(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <SortableTable
         columns={columns}
         data={filtered}
@@ -441,10 +433,11 @@ export default function PRsTab({ data, loading }: Props) {
         defaultDir="desc"
         rowKey="id"
         searchPlaceholder="Filter by repo or title…"
-        emptyMessage="No PRs match this filter."
+        emptyMessage={emptyMessage}
         onRowClick={handleRowClick}
         activeRowKey={panelPR?.id}
-        rowClassName={(pr) => getAgreementClass(pr, myVotes.get(pr.id))}
+        rowClassName={(pr) => getRowClass(pr, myVotes.get(pr.id))}
+        toolbarRight={filterBar}
       />
 
       {/* Side panel */}

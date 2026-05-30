@@ -435,6 +435,71 @@
   font-size: 0.88rem;
 }
 
+/* ── Diffs Tab — file sub-tab bar ───────────────────────────── */
+.prp-file-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0;
+}
+
+.prp-file-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 1;
+  padding-bottom: 0;
+  /* hide scrollbar but keep scrollable */
+  scrollbar-width: none;
+}
+.prp-file-tabs::-webkit-scrollbar { display: none; }
+
+.prp-file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  border-radius: 4px 4px 0 0;
+  transition: color 0.12s, background 0.12s;
+  flex-shrink: 0;
+}
+
+.prp-file-tab:hover {
+  color: var(--ink);
+  background: var(--gray-100);
+}
+
+.prp-file-tab--active {
+  color: var(--blue);
+  font-weight: 600;
+  border-bottom-color: var(--blue);
+  background: none;
+}
+
+.prp-file-tab-name {
+  font-family: var(--mono);
+}
+
+.prp-file-tab-churn {
+  font-size: 0.68rem;
+  opacity: 0.75;
+}
+
+.prp-file-diff-body {
+  /* ensure the diff wrapper sits directly below the sub-tab bar */
+}
+
 /* ── Changes Tab ─────────────────────────────────────────────── */
 .prp-changes-summary {
   font-size: 0.82rem;
@@ -510,8 +575,7 @@
 }
 
 .prp-diff-num {
-  width: 40px;
-  min-width: 40px;
+  /* Width set via <colgroup> — do not override with width here */
   padding: 1px 6px;
   text-align: right;
   color: var(--gray-400);
@@ -528,14 +592,13 @@
   vertical-align: top;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 0; /* forces table to respect layout */
-  width: 50%;
+  /* max-width: 0 trick removed — colgroup handles widths instead */
 }
 
 .prp-diff-sep {
-  width: 1px;
-  background: var(--line);
+  /* Width set via <colgroup>: 2px */
   padding: 0;
+  background: var(--line);
 }
 
 .prp-diff-cell--add   { background: #ecfdf5; color: #065f46; }
@@ -603,11 +666,7 @@
   table-layout: fixed;
 }
 
-/* Two narrow line-number columns, one gutter symbol column, one full-width content column */
-.prp-diff-table--unified .prp-diff-num {
-  width: 36px;
-  min-width: 36px;
-}
+/* Column widths for unified view are set via <colgroup> in the component */
 
 .prp-diff-gutter {
   width: 18px;

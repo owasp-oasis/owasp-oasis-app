@@ -18,11 +18,12 @@ interface Props<T extends Record<string, any>> {
   defaultSort?: keyof T
   defaultDir?: 'asc' | 'desc'
   searchPlaceholder?: string
-  emptyMessage?: string
+  emptyMessage?: ReactNode
   rowKey: keyof T
   onRowClick?: (row: T) => void
   activeRowKey?: unknown   // value of rowKey for the currently-active (highlighted) row
   rowClassName?: (row: T) => string  // optional extra CSS class per row
+  toolbarRight?: ReactNode  // rendered flush-right in the toolbar row (e.g. filter pills)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +38,7 @@ export default function SortableTable<T extends Record<string, any>>({
   onRowClick,
   activeRowKey,
   rowClassName,
+  toolbarRight,
 }: Props<T>) {
   const [sortKey, setSortKey] = useState<keyof T | null>(defaultSort ?? null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultDir)
@@ -93,6 +95,11 @@ export default function SortableTable<T extends Record<string, any>>({
         <span className="sortable-table-count">
           {sorted.length} {sorted.length === 1 ? 'result' : 'results'}
         </span>
+        {toolbarRight && (
+          <div className="sortable-table-toolbar-right">
+            {toolbarRight}
+          </div>
+        )}
       </div>
 
       {sorted.length === 0 ? (

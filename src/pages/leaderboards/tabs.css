@@ -204,12 +204,157 @@
   flex-wrap: wrap;
 }
 
+/* ── Consensus mini-bar (PR table cell) ───────────────────────── */
+.consensus-mini-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 80px;
+}
+
+.consensus-bar--mini {
+  height: 6px;
+  border-radius: 100px;
+}
+
+.consensus-bar--empty {
+  background: var(--gray-200);
+}
+
+.consensus-mini-count {
+  font-size: 0.72rem;
+  color: var(--gray-400);
+  white-space: nowrap;
+}
+
+/* ── Combined PR + repo cell ──────────────────────────────────── */
+.pr-row-combined {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pr-row-repo {
+  font-size: 0.75rem;
+  color: var(--gray-400) !important;
+  font-weight: 400 !important;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pr-row-repo:hover {
+  color: var(--blue) !important;
+  text-decoration: underline;
+}
+
+.pr-row-title {
+  font-size: 0.88rem;
+  color: var(--gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 420px;
+}
+
+/* ── Row chevron affordance ───────────────────────────────────── */
+.row-chevron {
+  font-size: 1.1rem;
+  color: var(--gray-300);
+  opacity: 0;
+  transition: opacity 0.1s;
+  line-height: 1;
+  display: inline-block;
+}
+
+tr:hover .row-chevron {
+  opacity: 1;
+}
+
+/* ── Vote-colored row borders ─────────────────────────────────── */
+.pr-row-voted--accept td {
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+.pr-row-voted--modify td {
+  box-shadow: inset 3px 0 0 #ca8a04;
+}
+.pr-row-voted--reject td {
+  box-shadow: inset 3px 0 0 #dc2626;
+}
+
+/* agree/disagree layered on top — keep the agree/disagree bg color change */
+.pr-row-agree td {
+  background: #f0fdf4;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+.pr-row-agree:hover td,
+.pr-row-agree.sortable-table-row--active td {
+  background: #dcfce7;
+}
+.pr-row-disagree td {
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #d97706;
+}
+.pr-row-disagree:hover td,
+.pr-row-disagree.sortable-table-row--active td {
+  background: #fef3c7;
+}
+
+/* ── Empty state "View all" button ───────────────────────────── */
+.pr-empty-filter-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+/* ── Status key trust criteria section ───────────────────────── */
+.status-key-trust-criteria {
+  border-top: 1px solid var(--gray-200);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.status-key-trust-criteria h4 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--blue-dark);
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.status-key-trust-criteria ul {
+  list-style: disc;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.status-key-trust-criteria li {
+  font-size: 0.82rem;
+  color: var(--gray-600);
+  line-height: 1.5;
+}
+
 /* ── PR filter bar ────────────────────────────────────────────── */
 .pr-filter-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
