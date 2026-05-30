@@ -123,15 +123,6 @@ export default function Leaderboards() {
       <section className="section">
         <div className="container">
 
-          {/* Sync status bar — read only, no refresh button */}
-          <div className="lb-sync-bar">
-            <span className="lb-sync-time">
-              {meta.sync_running
-                ? '⟳ Sync in progress…'
-                : `Last updated: ${timeAgo(meta.last_synced_at)}`}
-            </span>
-          </div>
-
           {/* Sentinel — zero-height, triggers tab docking when scrolled past */}
           <div ref={sentinelRef} style={{ height: 0 }} aria-hidden="true" />
 
@@ -149,6 +140,10 @@ export default function Leaderboards() {
                 {tab.label}
               </button>
             ))}
+            {/* Sync status chip — right side of tab bar */}
+            <span className="lb-sync-chip" title={meta.last_synced_at ?? undefined}>
+              {meta.sync_running ? '⟳ syncing…' : `↻ ${timeAgo(meta.last_synced_at)}`}
+            </span>
           </div>
 
           {/* Tab panels */}

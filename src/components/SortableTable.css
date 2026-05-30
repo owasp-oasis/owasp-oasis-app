@@ -8,11 +8,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
-.sortable-table-toolbar-right {
-  margin-left: auto;
+/* Second row: filter pills / any extra toolbar content, left-justified below search */
+.sortable-table-subbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;

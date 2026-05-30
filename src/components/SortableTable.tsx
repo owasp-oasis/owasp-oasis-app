@@ -95,12 +95,12 @@ export default function SortableTable<T extends Record<string, any>>({
         <span className="sortable-table-count">
           {sorted.length} {sorted.length === 1 ? 'result' : 'results'}
         </span>
-        {toolbarRight && (
-          <div className="sortable-table-toolbar-right">
-            {toolbarRight}
-          </div>
-        )}
       </div>
+      {toolbarRight && (
+        <div className="sortable-table-subbar">
+          {toolbarRight}
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <div className="sortable-table-empty">{query ? 'No results match your search.' : emptyMessage}</div>
