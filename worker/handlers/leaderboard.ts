@@ -418,7 +418,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
   // ── Human validators aggregate ────────────────────────────────
   // All OASIS-template comments posted by non-bot humans.
   // Exclude any known validator bot logins.
-  const allBotLogins = [...Object.keys(BOT_TO_TOOL), ...validatorBotLogins];
+  const allBotLogins = [...new Set([...Object.keys(BOT_TO_TOOL), ...validatorBotLogins])];
   const botPlaceholders = allBotLogins.map(() => '?').join(', ');
   const humanQuery = allBotLogins.length > 0
     ? `SELECT

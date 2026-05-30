@@ -206,6 +206,21 @@ export function parseGitHubUrl(url: string): { owner: string; repo: string } | n
 }
 
 /* ─── BOT DETECTION ──────────────────────────────────────────── */
+
+/**
+ * Validator bots are a special class of automated account: they post OASIS-template
+ * comments with real accept/modify/reject decisions on tracked PRs, just like human
+ * validators. They must be allowed through the isAutomatedAccount() guard in sync so
+ * their pr_comments rows are written; they are excluded from pr_participants and
+ * contributors tracking.
+ */
+export const VALIDATOR_BOT_LOGINS = new Set(Object.keys(BOT_TO_VALIDATOR_TOOL));
+
+export function isValidatorBot(login: string | undefined | null): boolean {
+  if (!login) return false;
+  return VALIDATOR_BOT_LOGINS.has(login);
+}
+
 // Detect automated/bot accounts that should not appear in OASIS tracking.
 // Checks both the [bot] GitHub suffix and common patterns in the login name.
 export function isAutomatedAccount(login: string | undefined | null): boolean {

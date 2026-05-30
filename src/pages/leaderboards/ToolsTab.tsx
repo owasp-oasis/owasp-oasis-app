@@ -253,10 +253,12 @@ interface SectionProps {
   role: ToolRole
   tools: Tool[]
   description: string
+  /** When provided, renders the section header + this message instead of hiding when tools is empty. */
+  emptyMessage?: string
 }
 
-function ToolsSection({ role, tools, description }: SectionProps) {
-  if (tools.length === 0) return null
+function ToolsSection({ role, tools, description, emptyMessage }: SectionProps) {
+  if (tools.length === 0 && !emptyMessage) return null
   const color = ROLE_COLORS[role]
   return (
     <section className="tools-section">
@@ -269,14 +271,19 @@ function ToolsSection({ role, tools, description }: SectionProps) {
         </h2>
         <p className="tools-section-desc">{description}</p>
       </div>
-      <div className="tools-grid">
-        {tools.map(tool => {
-          if (role === 'detect')   return <DetectCard   key={tool.card_key} tool={tool} />
-          if (role === 'fix')      return <FixCard      key={tool.card_key} tool={tool} />
-          if (role === 'validate') return <ValidateCard key={tool.card_key} tool={tool} />
-          return null
-        })}
-      </div>
+      {tools.length === 0
+        ? <p className="tools-section-empty">{emptyMessage}</p>
+        : (
+          <div className="tools-grid">
+            {tools.map(tool => {
+              if (role === 'detect')   return <DetectCard   key={tool.card_key} tool={tool} />
+              if (role === 'fix')      return <FixCard      key={tool.card_key} tool={tool} />
+              if (role === 'validate') return <ValidateCard key={tool.card_key} tool={tool} />
+              return null
+            })}
+          </div>
+        )
+      }
     </section>
   )
 }
@@ -332,6 +339,7 @@ export default function ToolsTab({ data, loading }: Props) {
         role="validate"
         tools={validateTools}
         description="Review patches and render accept, modify, or reject verdicts using the OASIS comment template."
+        emptyMessage="Validation data will populate after the next cron sync."
       />
     </>
   )

@@ -19,7 +19,7 @@ import {
 import {
   ORG, META_REPOS,
   ghFetch, ghFetchAll,
-  parseDecision, parseDetectionTool, isAutomatedAccount, reactionPolarity,
+  parseDecision, parseDetectionTool, isAutomatedAccount, isValidatorBot, reactionPolarity,
   isHeadMergedUpstream, parseGitHubUrl,
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
@@ -69,7 +69,59 @@ async function processPR(
 
   for (const comment of comments) {
     const login = comment.user?.login;
-    // Skip automated/bot accounts — they must not appear in any OASIS tracking
+
+    // ── Validator-bot special path ────────────────────────────────
+    // Validator bots (e.g. dryrun-security[bot]) post real OASIS-template comments
+    // with accept/modify/reject decisions. We write their pr_comments rows (and fetch
+    // reactions) so the validate-tools leaderboard can count them, but we skip
+    // pr_participants and contributors tracking — they are not human contributors.
+    if (login && isValidatorBot(login)) {
+      const decision = parseDecision(comment.body);
+      if (decision) {
+        oasisCommentCount++;
+        if (decision === 'accept') consensusAccept++;
+        if (decision === 'modify') consensusModify++;
+        if (decision === 'reject') consensusReject++;
+        commentRows.push({
+          id: comment.id,
+          prId: pr.id,
+          repoName,
+          prNumber: pr.number,
+          login,
+          decision,
+          createdAt: comment.created_at,
+          prCreatedAt: pr.created_at,
+        });
+        if (!opts.skipReactions) {
+          try {
+            const reactions = await ghFetchAll<GitHubReaction>(
+              `/repos/${ORG}/${repoName}/issues/comments/${comment.id}/reactions`, token,
+            );
+            for (const rxn of reactions) {
+              const rLogin = rxn.user?.login;
+              if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
+              // Reactions on validator-bot comments count toward consensus weighting
+              if (rxn.content === '+1') {
+                if (decision === 'accept') consensusAccept++;
+                if (decision === 'modify') consensusModify++;
+                if (decision === 'reject') consensusReject++;
+              }
+              // Store reaction row for potential future use (peer_score not applied to bots)
+              const polarity = reactionPolarity(rxn.content);
+              reactionRows.push({
+                commentId: comment.id,
+                reactor: rLogin,
+                content: rxn.content,
+                isPositive: polarity === 'positive',
+              });
+            }
+          } catch { /* skip — non-fatal */ }
+        }
+      }
+      continue; // skip pr_participants tracking for validator bots
+    }
+
+    // Skip all other automated/bot accounts — they must not appear in any OASIS tracking
     if (!login || isAutomatedAccount(login)) continue;
     const p = ensure(login);
     const decision = parseDecision(comment.body);

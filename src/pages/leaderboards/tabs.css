@@ -719,6 +719,17 @@ tr:hover .row-chevron {
   line-height: 1.5;
 }
 
+.tools-section-empty {
+  padding: 20px 24px;
+  text-align: center;
+  color: var(--gray-400);
+  font-size: 0.9rem;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  margin: 0;
+}
+
 /* ── Tools grid ───────────────────────────────────────────────── */
 .tools-grid {
   display: grid;
