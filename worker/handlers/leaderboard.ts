@@ -4,7 +4,7 @@
 
 import type { Env, ParsedQuery } from '../types.js';
 import { secHeaders } from '../security.js';
-import { BOT_TO_TOOL } from '../github.js';
+import { BOT_TO_TOOL, BOT_TO_VALIDATOR_TOOL } from '../github.js';
 
 /* ─── QUERY HELPER ───────────────────────────────────────────── */
 export function parseQuery(url: URL): ParsedQuery {
@@ -300,6 +300,7 @@ export async function handleMaintainers(env: Env, req: Request, url: URL): Promi
 export async function handleTools(env: Env, req: Request, url: URL): Promise<Response> {
   const { q } = parseQuery(url);
 
+  // ── Fix tools: bot accounts that author PRs ───────────────────
   const fixRows = await env.DB.prepare(`
     SELECT author, COUNT(*) AS total_prs, SUM(merged_upstream) AS accepted_upstream,
            COUNT(DISTINCT repo_name) AS projects_worked,
@@ -346,6 +347,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
     }
   }
 
+  // ── Detect tools: named by "Detected By" field in PR bodies ──
   const detectRows = await env.DB.prepare(`
     SELECT detection_tool, COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_name) AS projects_worked,
            SUM(merged_upstream) AS accepted_upstream,
@@ -362,16 +364,98 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
     total_reject: number | null;
   }>();
 
-  const tools: unknown[] = [];
-  for (const [name, fix] of fixToolMap.entries()) {
-    tools.push({
-      name, role: 'fix', card_key: `fix:${name}`, login: fix.login,
-      total_prs: fix.total_prs, vulnerabilities: fix.total_prs,
-      accepted_upstream: fix.accepted_upstream, projects_worked: fix.projects_worked,
-      interactions: fix.interactions, total_accept: fix.total_accept,
-      total_modify: fix.total_modify, total_reject: fix.total_reject,
-    });
+  // ── Validate tools: bots that post OASIS-template validation comments ──
+  // Known validator bot logins (from BOT_TO_VALIDATOR_TOOL).
+  const validatorBotLogins = Object.keys(BOT_TO_VALIDATOR_TOOL);
+
+  const validateBotMap = new Map<string, {
+    login: string; name: string; interactions: number;
+    projects_worked: number; total_accept: number; total_modify: number; total_reject: number;
+  }>();
+
+  if (validatorBotLogins.length > 0) {
+    // Query pr_comments for each known validator bot login
+    for (const botLogin of validatorBotLogins) {
+      const toolName = BOT_TO_VALIDATOR_TOOL[botLogin];
+      const botRows = await env.DB.prepare(`
+        SELECT
+          COUNT(*)                                                         AS total_comments,
+          COUNT(DISTINCT repo_name)                                        AS projects_worked,
+          SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)            AS total_accept,
+          SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)            AS total_modify,
+          SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)            AS total_reject
+        FROM pr_comments WHERE login = ?
+      `).bind(botLogin).first<{
+        total_comments: number;
+        projects_worked: number;
+        total_accept: number | null;
+        total_modify: number | null;
+        total_reject: number | null;
+      }>();
+
+      if (!botRows || botRows.total_comments === 0) continue;
+
+      const existing = validateBotMap.get(toolName);
+      if (existing) {
+        existing.interactions      += botRows.total_comments;
+        existing.projects_worked   += botRows.projects_worked;
+        existing.total_accept      += botRows.total_accept ?? 0;
+        existing.total_modify      += botRows.total_modify ?? 0;
+        existing.total_reject      += botRows.total_reject ?? 0;
+      } else {
+        validateBotMap.set(toolName, {
+          login: botLogin, name: toolName,
+          interactions:    botRows.total_comments,
+          projects_worked: botRows.projects_worked,
+          total_accept:    botRows.total_accept  ?? 0,
+          total_modify:    botRows.total_modify  ?? 0,
+          total_reject:    botRows.total_reject  ?? 0,
+        });
+      }
+    }
   }
+
+  // ── Human validators aggregate ────────────────────────────────
+  // All OASIS-template comments posted by non-bot humans.
+  // Exclude any known validator bot logins.
+  const allBotLogins = [...Object.keys(BOT_TO_TOOL), ...validatorBotLogins];
+  const botPlaceholders = allBotLogins.map(() => '?').join(', ');
+  const humanQuery = allBotLogins.length > 0
+    ? `SELECT
+         COUNT(*)                                              AS total_comments,
+         COUNT(DISTINCT login)                                 AS validator_count,
+         COUNT(DISTINCT repo_name)                            AS projects_worked,
+         SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
+         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
+         SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+       FROM pr_comments
+       WHERE login NOT IN (${botPlaceholders})`
+    : `SELECT
+         COUNT(*)                                              AS total_comments,
+         COUNT(DISTINCT login)                                 AS validator_count,
+         COUNT(DISTINCT repo_name)                            AS projects_worked,
+         SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
+         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
+         SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+       FROM pr_comments`;
+
+  const humanStmt = allBotLogins.length > 0
+    ? env.DB.prepare(humanQuery).bind(...allBotLogins)
+    : env.DB.prepare(humanQuery);
+
+  const humanRows = await humanStmt.first<{
+    total_comments: number;
+    validator_count: number;
+    projects_worked: number;
+    total_accept: number | null;
+    total_modify: number | null;
+    total_reject: number | null;
+  }>();
+
+  // ── Assemble result list (order: detect → fix → validate) ────
+  const tools: unknown[] = [];
+
+  // Detect — sorted by vulnerabilities DESC (already from DB query)
   for (const d of detectRows.results) {
     tools.push({
       name: d.detection_tool, role: 'detect', card_key: `detect:${d.detection_tool}`,
@@ -379,6 +463,45 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       accepted_upstream: d.accepted_upstream ?? 0, projects_worked: d.projects_worked,
       interactions: null, total_accept: d.total_accept ?? 0,
       total_modify: d.total_modify ?? 0, total_reject: d.total_reject ?? 0,
+      validator_count: null,
+    });
+  }
+
+  // Fix — sorted by total_prs DESC
+  const fixList = [...fixToolMap.values()].sort((a, b) => b.total_prs - a.total_prs);
+  for (const fix of fixList) {
+    tools.push({
+      name: fix.name, role: 'fix', card_key: `fix:${fix.name}`, login: fix.login,
+      total_prs: fix.total_prs, vulnerabilities: fix.total_prs,
+      accepted_upstream: fix.accepted_upstream, projects_worked: fix.projects_worked,
+      interactions: fix.interactions, total_accept: fix.total_accept,
+      total_modify: fix.total_modify, total_reject: fix.total_reject,
+      validator_count: null,
+    });
+  }
+
+  // Validate — bot validators sorted by interactions DESC, then Human aggregate
+  const validateList = [...validateBotMap.values()].sort((a, b) => b.interactions - a.interactions);
+  for (const v of validateList) {
+    tools.push({
+      name: v.name, role: 'validate', card_key: `validate:${v.name}`, login: v.login,
+      total_prs: null, vulnerabilities: null,
+      accepted_upstream: 0, projects_worked: v.projects_worked,
+      interactions: v.interactions, total_accept: v.total_accept,
+      total_modify: v.total_modify, total_reject: v.total_reject,
+      validator_count: null,
+    });
+  }
+
+  // Human aggregate card (always last in Validate section; omit if no data)
+  if (humanRows && humanRows.total_comments > 0) {
+    tools.push({
+      name: 'Human Validators', role: 'validate', card_key: 'validate:humans',
+      login: null, total_prs: null, vulnerabilities: null,
+      accepted_upstream: 0, projects_worked: humanRows.projects_worked,
+      interactions: humanRows.total_comments, total_accept: humanRows.total_accept ?? 0,
+      total_modify: humanRows.total_modify ?? 0, total_reject: humanRows.total_reject ?? 0,
+      validator_count: humanRows.validator_count,
     });
   }
 

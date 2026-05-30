@@ -7,10 +7,22 @@ export const ORG        = 'owasp-oasis';
 export const META_REPOS = new Set(['project-overview', 'project-planning', 'project-website']);
 
 export const BOT_TO_TOOL: Record<string, string> = {
-  'appsecai-app[bot]': 'AppSecAI',
-  'appsecai-bot':      'AppSecAI',
-  'dryrun-bot':        'DryRun Security',
-  'dryrun-security':   'DryRun Security',
+  'appsecai-app[bot]':    'AppSecAI',
+  'appsecai-bot':         'AppSecAI',
+  'dryrun-bot':           'DryRun Security',
+  'dryrun-security':      'DryRun Security',
+  'dryrun-security[bot]': 'DryRun Security',
+};
+
+/**
+ * Maps known bot logins to their OASIS validator tool name.
+ * Validator tools post OASIS-template comments (accept/modify/reject decisions)
+ * on tracked PRs — they play the same role as human validators.
+ * DryRun Security has a separate validator bot (dryrun-security[bot]) that is
+ * configured on repos in the OASIS project.
+ */
+export const BOT_TO_VALIDATOR_TOOL: Record<string, string> = {
+  'dryrun-security[bot]': 'DryRun Security',
 };
 
 /* ─── REACTION POLARITY ──────────────────────────────────────── */
