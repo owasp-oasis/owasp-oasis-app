@@ -525,7 +525,7 @@ async function rebuildContributors(db, syncStart) {
   }
 }
 
-async function runSync(env) {
+async function runSync(env, { skipReactions = false } = {}) {
   const token = env.GITHUB_TOKEN;
   const db    = env.DB;
   const stats = { repos: 0, prs: 0, comments: 0 };
@@ -587,21 +587,25 @@ async function runSync(env) {
             continue; // skip reactions fetch — non-OASIS engagement is not credited
           }
           // Reactions are only fetched for OASIS-template comments
-          try {
-            const reactions = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/comments/${comment.id}/reactions`, token);
-            for (const rxn of reactions) {
-              const rLogin = rxn.user?.login;
-              // Skip self-reactions, bots, and automated accounts
-              if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
-              p.reactions_received++;
-              if (rxn.content === '+1' && decision) {
-                if (decision === 'accept') consensusAccept++;
-                if (decision === 'modify') consensusModify++;
-                if (decision === 'reject') consensusReject++;
+          // Skipped on manual sync to stay within the 50-subrequest limit;
+          // the cron (1000-subrequest limit) always fetches them.
+          if (!skipReactions) {
+            try {
+              const reactions = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/comments/${comment.id}/reactions`, token);
+              for (const rxn of reactions) {
+                const rLogin = rxn.user?.login;
+                // Skip self-reactions, bots, and automated accounts
+                if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
+                p.reactions_received++;
+                if (rxn.content === '+1' && decision) {
+                  if (decision === 'accept') consensusAccept++;
+                  if (decision === 'modify') consensusModify++;
+                  if (decision === 'reject') consensusReject++;
+                }
+                ensure(rLogin).interactions++;
               }
-              ensure(rLogin).interactions++;
-            }
-          } catch { /* skip */ }
+            } catch { /* skip */ }
+          }
         }
 
         // participants = only those who left at least one OASIS-template comment
@@ -851,7 +855,7 @@ export default {
         }
         await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')").run();
         await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)").bind(new Date().toISOString()).run();
-        const result = await runSync(env);
+        const result = await runSync(env, { skipReactions: true });
         return Response.json(result);
       }
 
