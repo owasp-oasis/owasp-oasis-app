@@ -138,20 +138,16 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
     return redirectWithError('/leaderboards', 'Session creation failed');
   }
 
-  // Redirect to leaderboards with session cookie set
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: '/leaderboards',
-      'Set-Cookie': [
-        // Clear the OAuth state cookie
-        `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
-        // Set the session cookie
-        `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL_DAYS * 24 * 60 * 60}`,
-      ].join(', '),
-      'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
-    },
+  // Redirect to leaderboards with session cookie set.
+  // IMPORTANT: Set-Cookie must be separate headers — joining with ', ' breaks cookie parsing.
+  // Use Headers.append() to emit two distinct Set-Cookie headers.
+  const callbackHeaders = new Headers({
+    Location: '/leaderboards',
+    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   });
+  callbackHeaders.append('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  callbackHeaders.append('Set-Cookie', `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL_DAYS * 24 * 60 * 60}`);
+  return new Response(null, { status: 302, headers: callbackHeaders });
 }
 
 /* ─── GET /api/auth/me ───────────────────────────────────────── */
