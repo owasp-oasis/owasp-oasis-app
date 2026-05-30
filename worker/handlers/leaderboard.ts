@@ -88,25 +88,191 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
 
 export async function handleContributors(env: Env, req: Request, url: URL): Promise<Response> {
   const { sort, dir, q } = parseQuery(url);
-  const VALID = new Set(['login','prs_worked','total_interactions','non_oasis_interactions',
-    'reactions_received','accepts','modifies','rejects','reputation','avg_per_pr']);
-  const col = VALID.has(sort) ? sort : 'reputation';
+  const VALID = new Set([
+    'login', 'prs_worked', 'total_interactions', 'non_oasis_interactions',
+    'reactions_received', 'reactions_given',
+    'accepts', 'modifies', 'rejects',
+    'base_reputation', 'modified_reputation', 'rank_90d',
+    'avg_per_pr',
+  ]);
+  const col = VALID.has(sort) ? sort : 'modified_reputation';
   const rows = await env.DB.prepare(`
-    SELECT c.login, c.avatar_url, c.prs_worked, c.total_interactions,
-           COALESCE(c.non_oasis_interactions, 0)  AS non_oasis_interactions,
-           COALESCE(c.reactions_received, 0)       AS reactions_received,
-           c.accepts, c.modifies, c.rejects,
-           ROUND(c.total_interactions + COALESCE(c.reactions_received, 0) * 0.25, 2) AS reputation,
-           CASE WHEN c.prs_worked > 0
-             THEN ROUND(CAST(c.total_interactions AS REAL) / c.prs_worked, 2)
-             ELSE 0 END AS avg_per_pr
-    FROM contributors c ORDER BY ${col} ${dir}
+    SELECT
+      c.login, c.avatar_url, c.prs_worked, c.total_interactions,
+      COALESCE(c.non_oasis_interactions, 0) AS non_oasis_interactions,
+      COALESCE(c.reactions_received, 0)     AS reactions_received,
+      COALESCE(c.reactions_given, 0)        AS reactions_given,
+      c.accepts, c.modifies, c.rejects,
+      COALESCE(c.base_reputation, 0)        AS base_reputation,
+      COALESCE(c.modified_reputation, 0)    AS modified_reputation,
+      c.rank_90d,
+      c.rank_90d_oldest_activity,
+      CASE WHEN c.prs_worked > 0
+        THEN ROUND(CAST(c.total_interactions AS REAL) / c.prs_worked, 2)
+        ELSE 0 END AS avg_per_pr
+    FROM contributors c
+    ORDER BY ${col} ${dir}
   `).all();
   let results = rows.results;
   if (q) results = results.filter((r: Record<string, unknown>) =>
     String(r['login'] ?? '').toLowerCase().includes(q),
   );
   return lbResponse(results, req);
+}
+
+/**
+ * GET /api/contributors/:login
+ * Returns full contributor detail for the slide-out ContributorPanel:
+ *   - contributor row (all score columns)
+ *   - all-time rank
+ *   - contributions list (all OASIS comments with per-comment scores and bonuses)
+ */
+export async function handleContributorDetail(env: Env, req: Request, login: string): Promise<Response> {
+  // Fetch contributor row
+  const contributor = await env.DB.prepare(`
+    SELECT
+      login, avatar_url, prs_worked, total_interactions,
+      COALESCE(non_oasis_interactions, 0) AS non_oasis_interactions,
+      COALESCE(reactions_received, 0)     AS reactions_received,
+      COALESCE(reactions_given, 0)        AS reactions_given,
+      accepts, modifies, rejects,
+      COALESCE(comment_score, 0)          AS comment_score,
+      COALESCE(peer_score, 0)             AS peer_score,
+      COALESCE(reaction_score, 0)         AS reaction_score,
+      COALESCE(trust_score, 0)            AS trust_score,
+      COALESCE(base_reputation, 0)        AS base_reputation,
+      COALESCE(modified_reputation, 0)    AS modified_reputation,
+      rank_90d,
+      rank_90d_oldest_activity,
+      synced_at
+    FROM contributors WHERE login = ?
+  `).bind(login).first<Record<string, unknown>>();
+
+  if (!contributor) {
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // All-time rank: how many contributors have a higher modified_reputation
+  const rankRow = await env.DB.prepare(`
+    SELECT COUNT(*) + 1 AS rank
+    FROM contributors
+    WHERE modified_reputation > (SELECT modified_reputation FROM contributors WHERE login = ?)
+  `).bind(login).first<{ rank: number }>();
+  const allTimeRank = rankRow?.rank ?? 1;
+
+  // Contributions: all OASIS comments by this contributor with PR info and per-comment reaction scores
+  const contribRows = await env.DB.prepare(`
+    SELECT
+      pc.id            AS comment_id,
+      pc.pr_id,
+      pc.pr_number,
+      pc.repo_name,
+      pc.decision,
+      pc.created_at    AS commented_at,
+      pc.pr_created_at,
+      pr.title         AS pr_title,
+      pr.html_url      AS pr_url,
+      pr.merged_upstream,
+      -- Per-comment peer score: sum of peer_agreement for reactions on this comment
+      COALESCE((
+        SELECT SUM(0.25 + CASE WHEN cr.is_positive = 1 THEN 0.10 ELSE -0.50 END)
+        FROM comment_reactions cr WHERE cr.comment_id = pc.id
+      ), 0) AS peer_score_earned,
+      -- Reaction counts for influencer badge display
+      COALESCE((SELECT COUNT(*)                                  FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS total_reactions,
+      COALESCE((SELECT SUM(CASE WHEN cr.is_positive = 1 THEN 1 ELSE 0 END) FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS positive_reactions,
+      COALESCE((SELECT SUM(CASE WHEN cr.is_positive = 0 THEN 1 ELSE 0 END) FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS negative_reactions
+    FROM pr_comments pc
+    JOIN pull_requests pr ON pr.id = pc.pr_id
+    WHERE pc.login = ?
+    ORDER BY pc.created_at DESC
+  `).bind(login).all<Record<string, unknown>>();
+
+  // Compute per-comment bonuses in TypeScript (mirrors rebuildContributors logic)
+  // Load all pr_comments for each PR this contributor commented on, to correctly
+  // assign early_mover ranks and influencer titles
+  const prIds = [...new Set(contribRows.results.map(r => r['pr_id'] as number))];
+
+  // For each PR, load all comments (not just this contributor's) to compute ranks
+  const prCommentsByPR = new Map<number, Array<{
+    id: number; login: string; created_at: string; pr_created_at: string;
+    total_reactions: number; positive_reactions: number; negative_reactions: number;
+  }>>();
+
+  for (const prId of prIds) {
+    const allPRComments = await env.DB.prepare(`
+      SELECT
+        pc.id, pc.login, pc.created_at, pc.pr_created_at,
+        COALESCE((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS total_reactions,
+        COALESCE((SELECT SUM(CASE WHEN cr.is_positive = 1 THEN 1 ELSE 0 END) FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS positive_reactions,
+        COALESCE((SELECT SUM(CASE WHEN cr.is_positive = 0 THEN 1 ELSE 0 END) FROM comment_reactions cr WHERE cr.comment_id = pc.id), 0) AS negative_reactions
+      FROM pr_comments pc WHERE pc.pr_id = ?
+      ORDER BY pc.created_at ASC
+    `).bind(prId).all<{
+      id: number; login: string; created_at: string; pr_created_at: string;
+      total_reactions: number; positive_reactions: number; negative_reactions: number;
+    }>();
+    prCommentsByPR.set(prId, allPRComments.results);
+  }
+
+  // Build bonus map per comment_id
+  const commentBonuses = new Map<number, { early_mover: number; early_bird: number; influencer: number }>();
+  const now = Date.now();
+
+  for (const [, prComments] of prCommentsByPR.entries()) {
+    if (prComments.length === 0) continue;
+    const prCreatedMs = new Date(prComments[0].pr_created_at).getTime();
+    const prAgeHours  = (now - prCreatedMs) / 3_600_000;
+    const applyEarlyMover = prAgeHours > 72;
+    const N = prComments.length;
+    const bucket1End = Math.max(1, Math.floor(N * 0.01));
+    const bucket2End = bucket1End + Math.floor(N * 0.09);
+    const bucket3End = bucket2End + Math.floor(N * 0.15);
+
+    let maxTotal = -1, maxPositive = -1, maxNegative = -1;
+    let topTotalId = -1, topPositiveId = -1, topNegativeId = -1;
+    for (const c of prComments) {
+      if ((c.total_reactions    ?? 0) > maxTotal)    { maxTotal    = c.total_reactions;    topTotalId    = c.id; }
+      if ((c.positive_reactions ?? 0) > maxPositive) { maxPositive = c.positive_reactions; topPositiveId = c.id; }
+      if ((c.negative_reactions ?? 0) > maxNegative) { maxNegative = c.negative_reactions; topNegativeId = c.id; }
+    }
+
+    for (let rank = 1; rank <= prComments.length; rank++) {
+      const c = prComments[rank - 1];
+      const bonus = { early_mover: 0, early_bird: 0, influencer: 0 };
+      commentBonuses.set(c.id, bonus);
+
+      if (applyEarlyMover) {
+        if (rank <= bucket1End)       bonus.early_mover = 0.20;
+        else if (rank <= bucket2End)  bonus.early_mover = 0.10;
+        else if (rank <= bucket3End)  bonus.early_mover = 0.05;
+      }
+      const hoursAfterPR = (new Date(c.created_at).getTime() - prCreatedMs) / 3_600_000;
+      if (hoursAfterPR <= 24)      bonus.early_bird = 0.25;
+      else if (hoursAfterPR <= 96) bonus.early_bird = 0.10;
+
+      if (c.id === topTotalId    && maxTotal    > 0) bonus.influencer += 0.10;
+      if (c.id === topPositiveId && maxPositive > 0) bonus.influencer += 0.20;
+      if (c.id === topNegativeId && maxNegative > 0) bonus.influencer -= 0.50;
+    }
+  }
+
+  // Merge bonuses into contribution rows
+  const contributions = contribRows.results.map(row => {
+    const commentId = row['comment_id'] as number;
+    const bonus = commentBonuses.get(commentId) ?? { early_mover: 0, early_bird: 0, influencer: 0 };
+    return {
+      ...row,
+      early_mover_bonus: Math.round(bonus.early_mover * 1000) / 1000,
+      early_bird_bonus:  Math.round(bonus.early_bird  * 1000) / 1000,
+      influencer_bonus:  Math.round(bonus.influencer  * 1000) / 1000,
+    };
+  });
+
+  return lbResponse({ contributor, allTimeRank, contributions }, req);
 }
 
 export async function handleMaintainers(env: Env, req: Request, url: URL): Promise<Response> {

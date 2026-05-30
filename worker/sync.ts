@@ -1,18 +1,29 @@
 /**
  * GitHub sync engine: full cron sync, chunked manual sync, shared PR processor.
+ *
+ * Data collection per PR:
+ *   1. Fetch all comments → identify OASIS-template comments via parseDecision()
+ *   2. For each OASIS comment: store pr_comments row, fetch reactions, store comment_reactions rows
+ *   3. Track reactions_given per reactor (counts reactions they gave on OTHERS' comments)
+ *   4. Detect upstream merges for closed PRs using the parent repo's commit API
+ *
+ * Reputation computation runs in rebuildContributors() after all PRs are processed.
  */
 
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
   getSyncState, setSyncState, rebuildContributors,
-  upsertRepo, upsertPR, upsertParticipants, updateRepoPRCount, getExistingMergedUpstream,
+  upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
+  updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
 import {
   ORG, META_REPOS,
   ghFetch, ghFetchAll,
-  parseDecision, parseDetectionTool, isAutomatedAccount,
+  parseDecision, parseDetectionTool, isAutomatedAccount, reactionPolarity,
+  isHeadMergedUpstream, parseGitHubUrl,
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
+import type { CommentData, ReactionData } from './types.js';
 
 /* ─── CHUNKED SYNC CONFIG ────────────────────────────────────── */
 // Each /leaderboard-refresh call processes up to CHUNK_SIZE PRs.
@@ -25,6 +36,7 @@ const CHUNK_SIZE = 10;
 async function processPR(
   pr: GitHubPR,
   repoName: string,
+  upstreamUrl: string | null,
   db: D1Database,
   token: string,
   syncStart: string,
@@ -33,7 +45,13 @@ async function processPR(
   const participantMap = new Map<string, ParticipantData>();
   const ensure = (login: string): ParticipantData => {
     if (!participantMap.has(login)) {
-      participantMap.set(login, { interactions: 0, non_oasis_interactions: 0, decision: null, reactions_received: 0 });
+      participantMap.set(login, {
+        interactions: 0,
+        non_oasis_interactions: 0,
+        decision: null,
+        reactions_received: 0,
+        reactions_given: 0,
+      });
     }
     return participantMap.get(login)!;
   };
@@ -44,6 +62,10 @@ async function processPR(
 
   let consensusAccept = 0, consensusModify = 0, consensusReject = 0;
   let oasisCommentCount = 0, nonOasisCommentCount = 0;
+
+  // Collect granular comment/reaction data for insertion into pr_comments / comment_reactions
+  const commentRows: CommentData[] = [];
+  const reactionRows: ReactionData[] = [];
 
   for (const comment of comments) {
     const login = comment.user?.login;
@@ -60,42 +82,80 @@ async function processPR(
       if (decision === 'accept') consensusAccept++;
       if (decision === 'modify') consensusModify++;
       if (decision === 'reject') consensusReject++;
+
+      // Store per-comment record for bonus computation and contribution history
+      commentRows.push({
+        id: comment.id,
+        prId: pr.id,
+        repoName,
+        prNumber: pr.number,
+        login,
+        decision,
+        createdAt: comment.created_at,
+        prCreatedAt: pr.created_at,
+      });
+
+      // Reactions are only fetched for OASIS-template comments.
+      // Skipped on manual sync to stay within the 50-subrequest limit;
+      // the cron (1000-subrequest limit) always fetches them.
+      if (!opts.skipReactions) {
+        try {
+          const reactions = await ghFetchAll<GitHubReaction>(
+            `/repos/${ORG}/${repoName}/issues/comments/${comment.id}/reactions`, token,
+          );
+          for (const rxn of reactions) {
+            const rLogin = rxn.user?.login;
+            // Skip self-reactions, bots, and automated accounts
+            if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
+
+            p.reactions_received++;
+
+            // Consensus weighting: +1 reactions on OASIS comments count toward consensus
+            if (rxn.content === '+1' && decision) {
+              if (decision === 'accept') consensusAccept++;
+              if (decision === 'modify') consensusModify++;
+              if (decision === 'reject') consensusReject++;
+            }
+
+            // Track how many reactions this reactor has GIVEN (for reaction_score)
+            ensure(rLogin).reactions_given++;
+
+            // Store per-reaction record for peer_score computation
+            const polarity = reactionPolarity(rxn.content);
+            reactionRows.push({
+              commentId: comment.id,
+              reactor: rLogin,
+              content: rxn.content,
+              isPositive: polarity === 'positive',
+            });
+          }
+        } catch { /* skip — non-fatal */ }
+      }
     } else {
       // Non-OASIS comment — tracked separately, does NOT affect reputation,
       // consensus, trust status, or contributor counts
       p.non_oasis_interactions++;
       nonOasisCommentCount++;
-      continue; // skip reactions fetch — non-OASIS engagement is not credited
-    }
-
-    // Reactions are only fetched for OASIS-template comments.
-    // Skipped on manual sync to stay within the 50-subrequest limit;
-    // the cron (1000-subrequest limit) always fetches them.
-    if (!opts.skipReactions) {
-      try {
-        const reactions = await ghFetchAll<GitHubReaction>(
-          `/repos/${ORG}/${repoName}/issues/comments/${comment.id}/reactions`, token,
-        );
-        for (const rxn of reactions) {
-          const rLogin = rxn.user?.login;
-          // Skip self-reactions, bots, and automated accounts
-          if (!rLogin || rLogin === login || isAutomatedAccount(rLogin)) continue;
-          p.reactions_received++;
-          if (rxn.content === '+1' && decision) {
-            if (decision === 'accept') consensusAccept++;
-            if (decision === 'modify') consensusModify++;
-            if (decision === 'reject') consensusReject++;
-          }
-          ensure(rLogin).interactions++;
-        }
-      } catch { /* skip — non-fatal */ }
+      // skip reactions fetch — non-OASIS engagement is not credited
     }
   }
 
   // participants = only those who left at least one OASIS-template comment
   const oasisParticipantCount = [...participantMap.values()].filter(p => p.decision !== null).length;
-  const detectionTool  = parseDetectionTool(pr.body);
-  const mergedUpstream = await getExistingMergedUpstream(db, repoName, pr.number);
+  const detectionTool = parseDetectionTool(pr.body);
+
+  // ── Upstream merge detection ─────────────────────────────────
+  // If the PR is closed/merged and we don't already have merged_upstream=1,
+  // check whether the head commit exists in the upstream (parent) repo.
+  // This powers trust_score: contributors who voted 'accept' on an upstream-merged PR earn +10.
+  let mergedUpstream = await getExistingMergedUpstream(db, repoName, pr.number);
+  if (mergedUpstream === 0 && pr.merged_at && pr.head?.sha && upstreamUrl) {
+    const parsed = parseGitHubUrl(upstreamUrl);
+    if (parsed) {
+      const isMerged = await isHeadMergedUpstream(parsed.owner, parsed.repo, pr.head.sha, token);
+      if (isMerged) mergedUpstream = 1;
+    }
+  }
 
   await upsertPR(
     db, pr, repoName, comments.length,
@@ -105,6 +165,14 @@ async function processPR(
   );
 
   await upsertParticipants(db, pr.id, repoName, pr.number, participantMap);
+
+  // Write granular comment/reaction rows (used by rebuildContributors for bonus computation)
+  if (commentRows.length > 0) {
+    await upsertComments(db, commentRows);
+  }
+  if (reactionRows.length > 0) {
+    await upsertReactions(db, reactionRows);
+  }
 
   return { comments: comments.length };
 }
@@ -135,7 +203,7 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
 
       for (const pr of prs) {
         stats.prs++;
-        const result = await processPR(pr, repo.name, db, token, syncStart, { skipReactions });
+        const result = await processPR(pr, repo.name, upstreamUrl, db, token, syncStart, { skipReactions });
         stats.comments += result.comments;
       }
 
@@ -194,13 +262,19 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     }
 
     const repo = repos[repoIdx];
+    let upstreamUrl: string | null = null;
 
     // First chunk for this repo: upsert repo row + fetch PR list
     if (prStart === 0) {
-      const detail      = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
-      const upstreamUrl = detail.parent?.html_url ?? null;
+      const detail = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
+      upstreamUrl  = detail.parent?.html_url ?? null;
       await upsertRepo(db, repo, upstreamUrl, syncStart);
       stats.repos++;
+    } else {
+      // Subsequent chunks: read upstream_url from DB (already stored on first chunk)
+      const repoRow = await db.prepare('SELECT upstream_url FROM repos WHERE name = ?')
+        .bind(repo.name).first<{ upstream_url: string | null }>();
+      upstreamUrl = repoRow?.upstream_url ?? null;
     }
 
     // Fetch all PRs for this repo (1-2 subrequests, paginated)
@@ -216,7 +290,7 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     for (const pr of chunk) {
       stats.prs++;
       // Reactions always skipped on manual chunked sync — cron handles them
-      const result = await processPR(pr, repo.name, db, token, syncStart, { skipReactions: true });
+      const result = await processPR(pr, repo.name, upstreamUrl, db, token, syncStart, { skipReactions: true });
       stats.comments += result.comments;
     }
 

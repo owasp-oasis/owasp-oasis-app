@@ -13,6 +13,29 @@ export const BOT_TO_TOOL: Record<string, string> = {
   'dryrun-security':   'DryRun Security',
 };
 
+/* ─── REACTION POLARITY ──────────────────────────────────────── */
+/**
+ * Positive reactions: indicate agreement, praise, or enthusiasm.
+ * peer_agreement = base_modifier(0.25) + positive_modifier(0.10)
+ */
+export const POSITIVE_REACTIONS = new Set(['+1', 'heart', 'hooray', 'rocket', 'laugh']);
+
+/**
+ * Negative reactions: indicate disagreement or confusion.
+ * peer_agreement = base_modifier(0.25) + negative_modifier(-0.50) = -0.25
+ */
+export const NEGATIVE_REACTIONS = new Set(['-1', 'confused']);
+
+/**
+ * Returns the polarity of a GitHub reaction content string.
+ * Neutral reactions (e.g. 'eyes') are tracked but contribute only the base_modifier(0.25).
+ */
+export function reactionPolarity(content: string): 'positive' | 'negative' | 'neutral' {
+  if (POSITIVE_REACTIONS.has(content)) return 'positive';
+  if (NEGATIVE_REACTIONS.has(content)) return 'negative';
+  return 'neutral';
+}
+
 /* ─── GITHUB API TYPES ───────────────────────────────────────── */
 export interface GitHubRepo {
   id: number;
@@ -43,6 +66,7 @@ export interface GitHubComment {
   id: number;
   body: string | null;
   user?: { login?: string };
+  created_at: string;  // ISO-8601 timestamp when the comment was posted
 }
 
 export interface GitHubReaction {
@@ -116,6 +140,57 @@ export function normaliseToolName(raw: string): string {
   if (l.includes('opengrep')) return 'OpenGrep';
   if (l.includes('semgrep')) return 'Semgrep OSS';
   return raw.trim().slice(0, 60) || 'SAST (unknown)';
+}
+
+/* ─── UPSTREAM MERGE DETECTION ──────────────────────────────── */
+/**
+ * Checks whether a given commit SHA exists in an upstream (parent) repository.
+ * Used to determine whether an OASIS-tracked PR's head commit was eventually
+ * merged into the upstream, which awards trust_score bonuses to contributors
+ * who voted 'accept' on that PR.
+ *
+ * Returns true  → commit found in upstream (merged_upstream = 1)
+ * Returns false → 404 or any error (keep existing merged_upstream value)
+ */
+export async function isHeadMergedUpstream(
+  upstreamOwner: string,
+  upstreamRepo: string,
+  headSha: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${upstreamOwner}/${upstreamRepo}/commits/${headSha}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'oasis-worker-sync/1.0',
+        },
+      },
+    );
+    return res.status === 200;
+  } catch {
+    return false; // network error — treat as not found, preserve existing value
+  }
+}
+
+/**
+ * Parses "owner" and "repo" from a GitHub HTML URL.
+ * e.g. "https://github.com/nicowillis/owasp-top10" → { owner: 'nicowillis', repo: 'owasp-top10' }
+ * Returns null if the URL cannot be parsed.
+ */
+export function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== 'github.com') return null;
+    const parts = u.pathname.replace(/^\//, '').split('/');
+    if (parts.length < 2) return null;
+    return { owner: parts[0], repo: parts[1] };
+  } catch {
+    return null;
+  }
 }
 
 /* ─── BOT DETECTION ──────────────────────────────────────────── */

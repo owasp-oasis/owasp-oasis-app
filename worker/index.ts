@@ -20,6 +20,7 @@ import {
   handleRepos,
   handlePRs,
   handleContributors,
+  handleContributorDetail,
   handleMaintainers,
   handleTools,
 } from './handlers/leaderboard.js';
@@ -141,6 +142,14 @@ export default {
         return await handlePRs(env, request, url);
       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
         return await handleContributors(env, request, url);
+
+      /* ── Contributor detail (for ContributorPanel slide-out) ───── */
+      const contributorDetailMatch = url.pathname.match(/^\/api\/contributors\/([^/]+)$/);
+      if (method === 'GET' && contributorDetailMatch) {
+        const login = decodeURIComponent(contributorDetailMatch[1]);
+        return await handleContributorDetail(env, request, login);
+      }
+
       if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
         return await handleMaintainers(env, request, url);
       if (method === 'GET' && url.pathname === '/api/leaderboard/tools')

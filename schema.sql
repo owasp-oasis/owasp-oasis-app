@@ -78,11 +78,69 @@ CREATE TABLE IF NOT EXISTS contributors (
   total_interactions     INTEGER DEFAULT 0,
   non_oasis_interactions INTEGER DEFAULT 0,  -- non-OASIS comments (tracked, not used in reputation)
   reactions_received     INTEGER DEFAULT 0,
+  reactions_given        INTEGER DEFAULT 0,  -- reactions contributor GAVE on other people's OASIS comments
   accepts                INTEGER DEFAULT 0,
   modifies               INTEGER DEFAULT 0,
   rejects                INTEGER DEFAULT 0,
+  -- Reputation score components (pre-computed at sync time by rebuildContributors)
+  comment_score          REAL    DEFAULT 0,  -- count of OASIS comments posted
+  peer_score             REAL    DEFAULT 0,  -- peer agreement score from reactions received
+  reaction_score         REAL    DEFAULT 0,  -- score for giving reactions (capped at 5 × 0.25)
+  trust_score            REAL    DEFAULT 0,  -- 10× PRs accepted that merged upstream
+  base_reputation        REAL    DEFAULT 0,  -- comment_score + peer_score + reaction_score + trust_score
+  modified_reputation    REAL    DEFAULT 0,  -- base_reputation × (1 + bonus factors)
+  -- 90-day leaderboard (updated each cron sync)
+  rank_90d               INTEGER,            -- position in 90-day reputation leaderboard (NULL = no 90d activity)
+  rank_90d_oldest_activity TEXT,             -- ISO-8601: oldest activity in current 90-day window
   synced_at              TEXT
 );
+
+-- ── Per-comment and per-reaction granular data ───────────────────────────────────────────────
+-- pr_comments: one row per OASIS-template comment posted on any tracked PR
+-- Used for: bonus factor computation (early-mover, early-bird, influencer), contribution history
+CREATE TABLE IF NOT EXISTS pr_comments (
+  id            INTEGER PRIMARY KEY,   -- GitHub comment ID
+  pr_id         INTEGER NOT NULL,
+  repo_name     TEXT    NOT NULL,
+  pr_number     INTEGER NOT NULL,
+  login         TEXT    NOT NULL,
+  decision      TEXT,                  -- 'accept'|'modify'|'reject'|NULL
+  created_at    TEXT    NOT NULL,      -- ISO-8601: when the comment was posted
+  pr_created_at TEXT    NOT NULL,      -- ISO-8601: when the PR was created (denorm, for bonus calc)
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+-- comment_reactions: one row per reaction on an OASIS-template comment
+-- Used for: peer_score (reactions received), reaction_score (reactions given)
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  comment_id  INTEGER NOT NULL,        -- FK → pr_comments.id
+  reactor     TEXT    NOT NULL,        -- GitHub login of person who reacted
+  content     TEXT    NOT NULL,        -- '+1', '-1', 'heart', 'hooray', 'rocket', 'laugh', 'confused', etc.
+  is_positive INTEGER NOT NULL,        -- 1 = positive reaction, 0 = negative reaction
+  FOREIGN KEY (comment_id) REFERENCES pr_comments(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pr_comments_login        ON pr_comments(login);
+CREATE INDEX IF NOT EXISTS idx_pr_comments_created_at   ON pr_comments(created_at);
+CREATE INDEX IF NOT EXISTS idx_pr_comments_pr_id        ON pr_comments(pr_id);
+CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment ON comment_reactions(comment_id);
+CREATE INDEX IF NOT EXISTS idx_comment_reactions_reactor ON comment_reactions(reactor);
+
+-- ── ALTER statements for existing databases ──────────────────────────────────────────────────
+-- Run these on any D1 database created before the pr_comments/comment_reactions tables were added.
+-- Safe to run multiple times (SQLite ignores ADD COLUMN if column already exists... actually it errors,
+-- so run each only once or wrap in a migration script).
+--
+-- ALTER TABLE contributors ADD COLUMN reactions_given           INTEGER DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN comment_score             REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN peer_score                REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN reaction_score            REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN trust_score               REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN base_reputation           REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN modified_reputation       REAL    DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN rank_90d                  INTEGER;
+-- ALTER TABLE contributors ADD COLUMN rank_90d_oldest_activity  TEXT;
 
 CREATE TABLE IF NOT EXISTS pr_participants (
   pr_id                  INTEGER NOT NULL,

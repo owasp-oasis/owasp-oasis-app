@@ -33,6 +33,33 @@ export interface ParticipantData {
   non_oasis_interactions: number;
   decision: 'accept' | 'modify' | 'reject' | null;
   reactions_received: number;
+  reactions_given: number;  // reactions this contributor gave on OTHER people's OASIS comments
+}
+
+/**
+ * One OASIS-template comment posted on a tracked PR.
+ * Written to the pr_comments table during sync.
+ */
+export interface CommentData {
+  id: number;            // GitHub comment ID (primary key)
+  prId: number;
+  repoName: string;
+  prNumber: number;
+  login: string;         // author of the comment
+  decision: 'accept' | 'modify' | 'reject' | null;
+  createdAt: string;     // ISO-8601
+  prCreatedAt: string;   // ISO-8601, denorm from pull_requests.created_at
+}
+
+/**
+ * One reaction on an OASIS-template comment.
+ * Written to the comment_reactions table during sync.
+ */
+export interface ReactionData {
+  commentId: number;   // FK → pr_comments.id
+  reactor: string;     // GitHub login of the reactor
+  content: string;     // '+1', '-1', 'heart', 'hooray', 'rocket', 'laugh', 'confused', etc.
+  isPositive: boolean; // true for +1/heart/hooray/rocket/laugh; false for -1/confused
 }
 
 export interface PRResult {

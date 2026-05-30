@@ -1,0 +1,464 @@
+/* ── Contributor Panel slide-out ─────────────────────────────── */
+.cp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 399;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.cp-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 400;
+  width: min(54vw, 860px);
+  height: 100vh;
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px 0 0 16px;
+  box-shadow: -8px 0 60px rgba(11, 79, 138, 0.28), -2px 0 12px rgba(0, 0, 0, 0.08);
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  overflow: hidden;
+}
+
+.cp-panel--open {
+  transform: translateX(0);
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.cp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  min-height: 48px;
+  flex-wrap: wrap;
+}
+
+.cp-avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cp-login {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+.cp-rank-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.cp-rank-badge--alltime {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.cp-rank-badge--90d {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.cp-header-spacer { flex: 1; }
+
+.cp-gh-link {
+  font-size: 0.78rem;
+  color: var(--blue);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cp-gh-link:hover { text-decoration: underline; }
+
+.cp-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.cp-close:hover { color: var(--ink); background: var(--gray-100); }
+
+/* ── Tab bar ─────────────────────────────────────────────────── */
+.cp-tab-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  background: var(--gray-50);
+  padding: 0 8px;
+  gap: 2px;
+}
+
+.cp-tab {
+  background: none;
+  border: none;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.cp-tab:hover { color: var(--ink); }
+.cp-tab--active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+  font-weight: 600;
+}
+
+/* ── Tab content (scrollable) ────────────────────────────────── */
+.cp-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cp-loading,
+.cp-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 32px;
+}
+.cp-error { color: #dc2626; }
+
+/* ── Score tab ───────────────────────────────────────────────── */
+.cp-score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.cp-score-table thead th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.cp-score-table tbody tr td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.cp-score-label {
+  color: var(--ink);
+}
+
+.cp-score-value {
+  font-weight: 600;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.cp-score-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.cp-score-subtotal td {
+  background: var(--gray-50);
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.cp-score-subtotal-label {
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.cp-score-subtotal-value {
+  float: right;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.cp-score-total td {
+  padding: 10px 10px;
+  background: #eff6ff;
+}
+
+.cp-score-total-label {
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.cp-score-total-value {
+  font-weight: 800;
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  color: #1e40af;
+}
+
+/* ── Rank summary grid ───────────────────────────────────────── */
+.cp-rank-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.cp-rank-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--gray-50);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.cp-rank-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cp-rank-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+.cp-staleness-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── Contributions tab ───────────────────────────────────────── */
+.cp-contributions-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0 !important;
+  align-items: start;
+}
+
+.cp-contributions-col {
+  padding: 14px 16px;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+  border-right: 1px solid var(--line);
+}
+.cp-contributions-col:last-child {
+  border-right: none;
+}
+
+.cp-contributions-col-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cp-count {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.cp-empty {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.cp-contribution-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cp-contribution-item:last-child { border-bottom: none; }
+
+.cp-contribution-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cp-contribution-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--blue);
+  text-decoration: none;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.cp-contribution-title:hover { text-decoration: underline; }
+
+.cp-contribution-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cp-contribution-repo {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.cp-contribution-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cp-contribution-scores {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.cp-contribution-scores strong {
+  color: var(--ink);
+}
+
+/* ── Badges ──────────────────────────────────────────────────── */
+.cp-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.cp-badge--accept  { background: #d1fae5; color: #065f46; }
+.cp-badge--modify  { background: #fef3c7; color: #92400e; }
+.cp-badge--reject  { background: #fee2e2; color: #991b1b; }
+.cp-badge--merged  { background: #ede9fe; color: #4c1d95; }
+.cp-badge--90d     { background: #d1fae5; color: #065f46; }
+
+/* ── Formula tab ─────────────────────────────────────────────── */
+.cp-formula h3 {
+  font-size: 1rem;
+  margin: 0 0 8px 0;
+  color: var(--ink);
+}
+
+.cp-formula h4 {
+  font-size: 0.84rem;
+  margin: 16px 0 6px 0;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cp-formula p {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.cp-formula-block {
+  background: var(--gray-50);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.cp-formula-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  align-items: start;
+}
+
+.cp-formula-dl dt {
+  font-weight: 700;
+  font-size: 0.82rem;
+  font-family: var(--mono);
+  color: var(--ink);
+  padding-top: 2px;
+}
+
+.cp-formula-dl dd {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.cp-formula-dl dd code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: var(--gray-50);
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: block;
+  margin: 2px 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .cp-panel {
+    width: 100vw;
+    border-radius: 0;
+  }
+
+  .cp-contributions-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cp-contributions-col {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    max-height: none;
+  }
+  .cp-contributions-col:last-child { border-bottom: none; }
+}
