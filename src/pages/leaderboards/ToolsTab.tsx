@@ -314,31 +314,24 @@ export default function ToolsTab({ data, loading }: Props) {
   return (
     <>
       <p className="tab-note">
-        The Tools leaderboard is organized by the role each tool plays in the OASIS
-        security pipeline.{' '}
-        <strong>Detect</strong> tools find vulnerabilities (identified by "Detected By"
-        fields in PR bodies).{' '}
-        <strong>Fix</strong> tools generate candidate patches (identified by bot PR
-        author login).{' '}
-        <strong>Validate</strong> tools — both automated and human — review patches
-        and post accept/modify/reject decisions using the OASIS comment template.
+        Tools are organized by the role they play in the OASIS security pipeline.
         A tool that performs more than one role will appear once per role it plays.
       </p>
 
       <ToolsSection
         role="detect"
         tools={detectTools}
-        description="Scan codebases to identify vulnerabilities and generate the tracked PRs."
+        description="Find vulnerabilities and generate the tracked PRs. Identified by &quot;Detected By&quot; fields in PR bodies."
       />
       <ToolsSection
         role="fix"
         tools={fixTools}
-        description="Generate candidate security patches submitted as pull requests."
+        description="Generate candidate security patches submitted as pull requests. Identified by bot PR author login."
       />
       <ToolsSection
         role="validate"
         tools={validateTools}
-        description="Review patches and render accept, modify, or reject verdicts using the OASIS comment template."
+        description="Review patches and post accept, modify, or reject decisions using the OASIS comment template. Includes both automated validator bots and human reviewers."
         emptyMessage="Validation data will populate after the next cron sync."
       />
     </>
