@@ -1,16 +1,52 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import './PreviewBanner.css'
 
 type FeedbackState = 'idle' | 'open' | 'loading' | 'success' | 'error'
 type Severity = 'bug' | 'suggestion' | 'other'
 
+const DISMISS_KEY = 'preview_banner_dismissed'
+const DISMISS_TTL = 60 * 60 * 1000 // 60 minutes
+
+function isBannerDismissed(): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY)
+    if (!raw) return false
+    const { dismissedAt } = JSON.parse(raw) as { dismissedAt: number }
+    return Date.now() - dismissedAt < DISMISS_TTL
+  } catch {
+    return false
+  }
+}
+
 export default function PreviewBanner() {
+  const [dismissed, setDismissed] = useState(() => isBannerDismissed())
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('idle')
   const [description, setDescription] = useState('')
   const [severity, setSeverity] = useState<Severity>('bug')
   const [contact, setContact] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Sync body class and --banner-height with dismissed state
+  useEffect(() => {
+    if (dismissed) {
+      document.body.classList.add('banner-dismissed')
+    } else {
+      document.body.classList.remove('banner-dismissed')
+    }
+    return () => {
+      document.body.classList.remove('banner-dismissed')
+    }
+  }, [dismissed])
+
+  function handleDismiss() {
+    try {
+      localStorage.setItem(DISMISS_KEY, JSON.stringify({ dismissedAt: Date.now() }))
+    } catch { /* non-fatal */ }
+    setDismissed(true)
+  }
+
+  if (dismissed) return null
 
   function openFeedback() {
     setFeedbackState('open')
@@ -70,6 +106,13 @@ export default function PreviewBanner() {
             aria-expanded={feedbackState !== 'idle'}
           >
             Report a bug &rarr;
+          </button>
+          <button
+            className="preview-dismiss-btn"
+            onClick={handleDismiss}
+            aria-label="Dismiss preview banner"
+          >
+            &times;
           </button>
         </div>
       </div>

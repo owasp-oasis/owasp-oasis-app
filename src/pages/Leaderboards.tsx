@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ProjectsTab from './leaderboards/ProjectsTab'
 import PRsTab from './leaderboards/PRsTab'
 import ContributorsTab from './leaderboards/ContributorsTab'
@@ -35,6 +35,8 @@ function timeAgo(iso: string | null): string {
 export default function Leaderboards() {
   const [activeTab, setActiveTab] = useState<Tab>('projects')
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
+  const [tabsSticky, setTabsSticky] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const [repos, setRepos]               = useState([])
   const [prs, setPRs]                   = useState([])
@@ -49,6 +51,31 @@ export default function Leaderboards() {
       .then(r => r.json())
       .then(d => setMeta(d as Meta))
       .catch(() => {})
+  }, [])
+
+  // Sticky tabs: observe sentinel just above the tab bar
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const docked = !entry.isIntersecting
+        setTabsSticky(docked)
+        if (docked) {
+          document.body.classList.add('lb-tabs-docked')
+        } else {
+          document.body.classList.remove('lb-tabs-docked')
+        }
+      },
+      { threshold: 0, rootMargin: '0px' }
+    )
+    observer.observe(sentinel)
+
+    return () => {
+      observer.disconnect()
+      document.body.classList.remove('lb-tabs-docked')
+    }
   }, [])
 
   const fetchTab = useCallback(async (tab: Tab) => {
@@ -105,8 +132,12 @@ export default function Leaderboards() {
             </span>
           </div>
 
+          {/* Sentinel — zero-height, triggers tab docking when scrolled past */}
+          <div ref={sentinelRef} style={{ height: 0 }} aria-hidden="true" />
+
           {/* Tab nav */}
-          <div className="lb-tabs" role="tablist">
+          {tabsSticky && <div className="lb-tabs-placeholder" aria-hidden="true" />}
+          <div className={`lb-tabs${tabsSticky ? ' lb-tabs--sticky' : ''}`} role="tablist">
             {TABS.map(tab => (
               <button
                 key={tab.id}

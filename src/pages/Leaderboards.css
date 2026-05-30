@@ -83,3 +83,25 @@
 .lb-panel {
   min-height: 300px;
 }
+
+/* Sticky tab bar — docks at top when user scrolls past the tab nav */
+.lb-tabs--sticky {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  background: var(--white);
+  border-bottom: 2px solid var(--gray-200);
+  box-shadow: 0 2px 10px rgba(11, 79, 138, 0.08);
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0;
+  padding: 0 max(24px, calc((100vw - 1200px) / 2 + 24px));
+}
+
+/* Placeholder keeps layout stable while tabs are fixed */
+.lb-tabs-placeholder {
+  height: 52px;
+  margin-bottom: 28px;
+}

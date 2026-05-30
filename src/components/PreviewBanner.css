@@ -1,3 +1,8 @@
+/* When banner is dismissed, collapse --banner-height so nav docks to the top */
+body.banner-dismissed {
+  --banner-height: 0px;
+}
+
 /* ── Preview Banner ── */
 .preview-banner {
   position: sticky;
@@ -57,6 +62,26 @@
 .preview-report-btn:hover {
   background: rgba(255,255,255,0.12);
   border-color: rgba(255,255,255,0.7);
+}
+
+.preview-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+  font-family: var(--font);
+}
+
+.preview-dismiss-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.15);
 }
 
 /* ── Feedback overlay + panel ── */
