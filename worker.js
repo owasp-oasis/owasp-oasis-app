@@ -656,7 +656,13 @@ async function runSync(env, { skipReactions = false } = {}) {
   }
 }
 
-/* ─── CHUNKED MANUAL SYNC (one repo per call) ───────────────── */
+/* ─── CHUNKED MANUAL SYNC (10 PRs per call) ─────────────────── */
+// Cursor stored in sync_state as "repoIndex:prStart", e.g. "0:10"
+// Each call processes up to 10 PRs from the current repo, then advances.
+// When all PRs in a repo are done, moves to next repo.
+// When all repos done, runs rebuildContributors and marks sync complete.
+const CHUNK_SIZE = 10;
+
 async function runSyncOneRepo(env) {
   const token = env.GITHUB_TOKEN;
   const db    = env.DB;
@@ -666,7 +672,7 @@ async function runSyncOneRepo(env) {
     const since     = await getSyncState(db, 'last_synced_at');
     const syncStart = new Date().toISOString();
 
-    // Fetch the full list of fork repos in the org (1 subrequest)
+    // Fetch repo list (1 subrequest)
     const allRepos = await ghFetchAll(`/orgs/${ORG}/repos?type=public`, token);
     const repos    = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
 
@@ -674,13 +680,17 @@ async function runSyncOneRepo(env) {
       return { ok: true, message: 'No repos to sync', stats, done: true };
     }
 
-    // Read cursor — which repo index to process this call
+    // Parse cursor "repoIndex:prStart"
     const cursorRow = await db.prepare("SELECT value FROM sync_state WHERE key = 'sync_cursor'").first();
-    let cursor = cursorRow?.value ? parseInt(cursorRow.value, 10) : 0;
-    if (isNaN(cursor) || cursor < 0) cursor = 0;
+    let repoIdx = 0, prStart = 0;
+    if (cursorRow?.value) {
+      const parts = cursorRow.value.split(':');
+      repoIdx  = parseInt(parts[0], 10) || 0;
+      prStart  = parseInt(parts[1], 10) || 0;
+    }
 
-    // If cursor is past the end, all repos have been processed — rebuild and finish
-    if (cursor >= repos.length) {
+    // All repos processed — rebuild contributors and finish
+    if (repoIdx >= repos.length) {
       await rebuildContributors(db, syncStart);
       await setSyncState(db, 'last_synced_at', syncStart);
       await setSyncState(db, 'sync_running', '0');
@@ -688,24 +698,31 @@ async function runSyncOneRepo(env) {
       return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
     }
 
-    const repo = repos[cursor];
+    const repo = repos[repoIdx];
 
-    // Process this one repo
-    const detail      = await ghFetch(`/repos/${ORG}/${repo.name}`, token);
-    const upstreamUrl = detail.parent?.html_url ?? null;
+    // First chunk for this repo: upsert repo row + fetch PR list
+    if (prStart === 0) {
+      const detail      = await ghFetch(`/repos/${ORG}/${repo.name}`, token);
+      const upstreamUrl = detail.parent?.html_url ?? null;
+      await db.prepare(`
+        INSERT OR REPLACE INTO repos (id, name, full_name, description, language, open_prs, stars, upstream_url, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(repo.id, repo.name, repo.full_name, repo.description ?? null,
+        repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart).run();
+      stats.repos++;
+    }
 
-    await db.prepare(`
-      INSERT OR REPLACE INTO repos (id, name, full_name, description, language, open_prs, stars, upstream_url, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(repo.id, repo.name, repo.full_name, repo.description ?? null,
-      repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart).run();
-    stats.repos++;
-
+    // Fetch all PRs for this repo (1-2 subrequests, paginated)
     const openPRs   = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
     const closedPRs = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-    const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
+    const allPRs    = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
 
-    for (const pr of prs) {
+    // Slice this chunk
+    const chunk   = allPRs.slice(prStart, prStart + CHUNK_SIZE);
+    const prEnd   = prStart + chunk.length;
+    const hasMore = prEnd < allPRs.length;
+
+    for (const pr of chunk) {
       stats.prs++;
       const participantMap = new Map();
       const ensure = l => {
@@ -769,22 +786,26 @@ async function runSyncOneRepo(env) {
       }
     }
 
-    const openCount = await db.prepare("SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'").bind(repo.name).first();
-    await db.prepare('UPDATE repos SET open_prs = ?, synced_at = ? WHERE name = ?').bind(openCount?.c ?? 0, syncStart, repo.name).run();
+    // After last chunk for this repo: update open_prs count
+    if (!hasMore) {
+      const openCount = await db.prepare("SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'").bind(repo.name).first();
+      await db.prepare('UPDATE repos SET open_prs = ?, synced_at = ? WHERE name = ?').bind(openCount?.c ?? 0, syncStart, repo.name).run();
+    }
 
-    // Advance cursor to next repo
-    const nextCursor = cursor + 1;
-    await setSyncState(db, 'sync_cursor', String(nextCursor));
+    // Advance cursor
+    let nextRepoIdx = repoIdx, nextPrStart = prEnd;
+    if (!hasMore) { nextRepoIdx = repoIdx + 1; nextPrStart = 0; }
+    await setSyncState(db, 'sync_cursor', `${nextRepoIdx}:${nextPrStart}`);
 
-    const remaining = repos.length - nextCursor;
-    return {
-      ok: true,
-      message: `Synced repo ${cursor + 1}/${repos.length}: ${repo.name}. ${remaining > 0 ? `${remaining} repo(s) remaining — call /leaderboard-refresh again.` : 'All repos done — call once more to rebuild contributors.'}`,
-      stats,
-      done: false,
-      cursor: nextCursor,
-      total_repos: repos.length,
-    };
+    const reposLeft = repos.length - nextRepoIdx;
+    const prsLeft   = hasMore ? allPRs.length - prEnd : 0;
+    const msg = hasMore
+      ? `Repo ${repoIdx + 1}/${repos.length} (${repo.name}): PRs ${prStart + 1}–${prEnd}/${allPRs.length}. ${prsLeft} PRs remaining in this repo.`
+      : nextRepoIdx < repos.length
+        ? `Repo ${repoIdx + 1}/${repos.length} (${repo.name}) done. ${reposLeft} repo(s) remaining.`
+        : `All repos done. Call once more to rebuild contributors and finish.`;
+
+    return { ok: true, message: msg, stats, done: false, cursor: `${nextRepoIdx}:${nextPrStart}`, total_repos: repos.length };
   } catch (err) {
     await setSyncState(db, 'sync_running', '0');
     return { ok: false, message: err?.message ?? String(err), stats };
