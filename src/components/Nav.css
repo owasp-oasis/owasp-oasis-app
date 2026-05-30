@@ -69,6 +69,69 @@
   text-decoration: none;
 }
 
+/* ── Auth widget ── */
+.nav-auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.nav-auth-avatar {
+  border-radius: 50%;
+  border: 2px solid var(--blue-soft);
+  flex-shrink: 0;
+  background: var(--gray-200);
+}
+
+.nav-auth-login {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blue-dark);
+  white-space: nowrap;
+}
+
+.nav-auth-signout {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.nav-auth-signout:hover {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+
+.nav-auth-signin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blue-dark);
+  text-decoration: none;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.nav-auth-signin:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-soft);
+  text-decoration: none;
+}
+
 /* ── Hamburger button — hidden on desktop ── */
 .nav-hamburger {
   display: none;
@@ -111,6 +174,13 @@
 }
 .nav-hamburger--open span:nth-child(3) {
   transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ── Tablet: hide auth login text ── */
+@media (max-width: 900px) {
+  .nav-auth-login {
+    display: none;
+  }
 }
 
 /* ── Mobile ── */

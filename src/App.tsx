@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
@@ -11,6 +12,7 @@ import Sponsors from './pages/Sponsors'
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
       <PreviewBanner />
       <Nav />
@@ -28,5 +30,6 @@ export default function App() {
       </main>
       <Footer />
     </BrowserRouter>
+    </AuthProvider>
   )
 }

@@ -1,7 +1,9 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import SortableTable from '../../components/SortableTable'
 import type { Column } from '../../components/SortableTable'
 import ColHeader from '../../components/ColHeader'
+import VoteModal from '../../components/VoteModal'
+import { useAuth } from '../../context/AuthContext'
 
 interface PR {
   id: number
@@ -131,11 +133,88 @@ const FILTER_MODES: { id: FilterMode; label: string }[] = [
 
 type AugmentedPR = PR & { oasis_status: OASISStatus }
 
+// Map of pr_id → decision for the current user's votes
+type VoteMap = Map<number, 'accept' | 'modify' | 'reject'>
+
 interface Props { data: PR[]; loading: boolean }
 
 export default function PRsTab({ data, loading }: Props) {
   const [filter, setFilter] = useState<FilterMode>('all')
   const [showStamp, setShowStamp] = useState(false)
+  const { user } = useAuth()
+
+  // My votes state
+  const [myVotes, setMyVotes] = useState<VoteMap>(new Map())
+  const [votesLoaded, setVotesLoaded] = useState(false)
+
+  // Active modal state
+  const [modalPR, setModalPR] = useState<PR | null>(null)
+
+  // Local PR overrides for optimistic updates (consensus counts)
+  const [localOverrides, setLocalOverrides] = useState<Map<number, Partial<PR>>>(new Map())
+
+  const fetchMyVotes = useCallback(async () => {
+    if (!user) { setMyVotes(new Map()); setVotesLoaded(true); return }
+    try {
+      const res = await fetch('/api/votes/mine', { credentials: 'include' })
+      if (!res.ok) { setVotesLoaded(true); return }
+      const d = await res.json() as { ok: boolean; votes: { pr_id: number; decision: string }[] }
+      const map: VoteMap = new Map()
+      for (const v of d.votes ?? []) {
+        map.set(v.pr_id, v.decision as 'accept' | 'modify' | 'reject')
+      }
+      setMyVotes(map)
+    } catch { /* non-fatal */ }
+    setVotesLoaded(true)
+  }, [user])
+
+  useEffect(() => { fetchMyVotes() }, [fetchMyVotes])
+
+  function handleVoteSuccess(pr: PR, decision: 'accept' | 'modify' | 'reject') {
+    // Optimistic: record vote + increment consensus count locally
+    setMyVotes(prev => new Map(prev).set(pr.id, decision))
+    setLocalOverrides(prev => {
+      const next = new Map(prev)
+      const existing = next.get(pr.id) ?? {}
+      next.set(pr.id, {
+        ...existing,
+        consensus_accept: (pr.consensus_accept + (decision === 'accept' ? 1 : 0)),
+        consensus_modify: (pr.consensus_modify + (decision === 'modify' ? 1 : 0)),
+        consensus_reject: (pr.consensus_reject + (decision === 'reject' ? 1 : 0)),
+        oasis_comment_count: pr.oasis_comment_count + 1,
+        participants: pr.participants + 1,
+      })
+      return next
+    })
+    setModalPR(null)
+  }
+
+  // Decide vote column content for a given PR
+  function voteCell(pr: AugmentedPR) {
+    if (pr.state !== 'open') return null
+    const voted = myVotes.get(pr.id)
+    if (voted) {
+      const cls = { accept: 'state-badge state-trusted', modify: 'state-badge state-needs-review', reject: 'state-badge state-closed' }[voted]
+      const label = { accept: 'Accepted', modify: 'Modified', reject: 'Rejected' }[voted]
+      return <span className={cls}>{label}</span>
+    }
+    if (!user) {
+      return (
+        <a href="/api/auth/login" className="vote-signin-link">
+          Sign in to vote
+        </a>
+      )
+    }
+    return (
+      <button
+        className="vote-btn"
+        onClick={() => setModalPR(pr)}
+        title="Cast your OASIS vote on this PR"
+      >
+        Vote
+      </button>
+    )
+  }
 
   const columns: Column<AugmentedPR>[] = [
     {
@@ -222,11 +301,23 @@ export default function PRsTab({ data, loading }: Props) {
       render: (v) => v ? new Date(String(v)).toLocaleDateString() : '—',
       align: 'right',
     },
+    {
+      key: 'id' as keyof AugmentedPR,
+      label: 'Vote',
+      sortable: false,
+      searchable: false,
+      align: 'center',
+      render: (_v, row) => votesLoaded ? voteCell(row) : null,
+    },
   ]
 
   const augmented = useMemo<AugmentedPR[]>(() =>
-    data.map(pr => ({ ...pr, oasis_status: getOASISStatus(pr) })),
-    [data]
+    data.map(pr => {
+      const overrides = localOverrides.get(pr.id) ?? {}
+      const merged = { ...pr, ...overrides }
+      return { ...merged, oasis_status: getOASISStatus(merged) }
+    }),
+    [data, localOverrides]
   )
 
   const filtered = useMemo(() =>
@@ -304,6 +395,14 @@ export default function PRsTab({ data, loading }: Props) {
         searchPlaceholder="Filter by repo or title…"
         emptyMessage="No PRs match this filter."
       />
+
+      {modalPR && (
+        <VoteModal
+          pr={modalPR}
+          onClose={() => setModalPR(null)}
+          onSuccess={(decision) => handleVoteSuccess(modalPR, decision)}
+        />
+      )}
     </>
   )
 }

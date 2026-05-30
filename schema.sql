@@ -104,3 +104,27 @@ CREATE TABLE IF NOT EXISTS sync_state (
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_synced_at',   '2020-01-01T00:00:00Z');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
+
+-- ── Auth tables (OAuth sessions + per-user vote records) ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS user_sessions (
+  session_id   TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
+  github_login TEXT NOT NULL,
+  avatar_url   TEXT,
+  github_token TEXT NOT NULL,      -- user OAuth token, never returned to browser
+  created_at   TEXT NOT NULL,
+  expires_at   TEXT NOT NULL       -- ISO-8601, 30 days from login
+);
+
+CREATE TABLE IF NOT EXISTS user_votes (
+  github_login TEXT    NOT NULL,
+  pr_id        INTEGER NOT NULL,
+  repo_name    TEXT    NOT NULL,
+  pr_number    INTEGER NOT NULL,
+  decision     TEXT    NOT NULL,   -- 'accept' | 'modify' | 'reject'
+  comment_id   INTEGER,            -- GitHub comment ID (null if GitHub post failed)
+  voted_at     TEXT    NOT NULL,
+  PRIMARY KEY (github_login, pr_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);

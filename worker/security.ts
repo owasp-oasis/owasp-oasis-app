@@ -7,8 +7,10 @@ import type { Env } from './types.js';
 /* ─── CONFIG ─────────────────────────────────────────────────── */
 const RATE_LIMIT_WINDOW_SEC = 60;
 const RATE_LIMIT_MAX        = 5;
-export const CSRF_COOKIE    = '__csrf';
-export const CSRF_HEADER    = 'x-csrf-token';
+export const CSRF_COOKIE        = '__csrf';
+export const CSRF_HEADER        = 'x-csrf-token';
+export const SESSION_COOKIE     = '__session';
+export const OAUTH_STATE_COOKIE = '__oauth_state';
 
 /* ─── SECURITY HEADERS ───────────────────────────────────────── */
 const SEC_HEADERS: Record<string, string> = {

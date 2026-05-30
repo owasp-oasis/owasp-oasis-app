@@ -1,0 +1,326 @@
+/* ── Vote Modal ─────────────────────────────────────────────────── */
+
+.vm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.vm-card {
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.vm-header {
+  padding: 24px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--gray-200);
+  padding-bottom: 16px;
+}
+
+.vm-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vm-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--blue-dark);
+  margin: 0;
+}
+
+.vm-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--gray-400);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.vm-close:hover {
+  color: var(--blue-dark);
+}
+
+.vm-pr-label {
+  font-size: 0.85rem;
+  color: var(--gray-600);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.vm-repo {
+  font-weight: 700;
+  color: var(--blue-dark);
+}
+
+.vm-pr-link {
+  color: var(--blue);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.vm-pr-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Form ── */
+.vm-form {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vm-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vm-required {
+  color: #e53e3e;
+  margin-left: 2px;
+}
+
+/* ── Decision toggle ── */
+.vm-decision-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vm-decision-btn {
+  flex: 1;
+  min-width: 90px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font);
+  cursor: pointer;
+  border: 2px solid var(--gray-200);
+  background: var(--white);
+  color: var(--gray-600);
+  transition: all 0.15s;
+}
+
+.vm-decision-btn:hover {
+  border-color: currentColor;
+}
+
+/* Accept */
+.vm-decision-btn--accept         { color: #1a7a2e; }
+.vm-decision-btn--accept:hover   { background: #f0fdf4; border-color: #1a7a2e; }
+.vm-decision-btn--accept.vm-decision-btn--active {
+  background: #dcfce7;
+  border-color: #1a7a2e;
+  color: #14532d;
+}
+
+/* Modify */
+.vm-decision-btn--modify         { color: #b8860b; }
+.vm-decision-btn--modify:hover   { background: #fefce8; border-color: #b8860b; }
+.vm-decision-btn--modify.vm-decision-btn--active {
+  background: #fef9c3;
+  border-color: #b8860b;
+  color: #713f12;
+}
+
+/* Reject */
+.vm-decision-btn--reject         { color: #b91c1c; }
+.vm-decision-btn--reject:hover   { background: #fef2f2; border-color: #b91c1c; }
+.vm-decision-btn--reject.vm-decision-btn--active {
+  background: #fee2e2;
+  border-color: #b91c1c;
+  color: #7f1d1d;
+}
+
+/* ── Radio group ── */
+.vm-radio-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.vm-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--gray-700, var(--blue-dark));
+  cursor: pointer;
+}
+
+/* ── Inputs ── */
+.vm-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: 7px;
+  font-size: 0.9rem;
+  font-family: var(--font);
+  color: var(--blue-dark);
+  background: var(--white);
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.vm-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(11, 79, 138, 0.1);
+}
+
+.vm-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: 7px;
+  font-size: 0.9rem;
+  font-family: var(--font);
+  color: var(--blue-dark);
+  background: var(--white);
+  resize: vertical;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.vm-textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(11, 79, 138, 0.1);
+}
+
+/* ── Error ── */
+.vm-error {
+  font-size: 0.88rem;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  padding: 10px 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Footer ── */
+.vm-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.vm-btn-cancel {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font);
+  background: var(--white);
+  border: 1.5px solid var(--gray-200);
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.vm-btn-cancel:hover:not(:disabled) {
+  border-color: var(--gray-400);
+  color: var(--blue-dark);
+}
+
+.vm-btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vm-btn-submit {
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font);
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  color: var(--white);
+}
+
+.vm-btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vm-btn-submit--accept { background: #16a34a; }
+.vm-btn-submit--accept:hover:not(:disabled) { background: #15803d; }
+.vm-btn-submit--modify { background: #d97706; }
+.vm-btn-submit--modify:hover:not(:disabled) { background: #b45309; }
+.vm-btn-submit--reject { background: #dc2626; }
+.vm-btn-submit--reject:hover:not(:disabled) { background: #b91c1c; }
+
+/* ── Disclaimer ── */
+.vm-disclaimer {
+  font-size: 0.78rem;
+  color: var(--gray-400);
+  text-align: center;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Mobile ── */
+@media (max-width: 560px) {
+  .vm-card {
+    border-radius: 10px;
+  }
+
+  .vm-footer {
+    flex-direction: column-reverse;
+  }
+
+  .vm-btn-cancel,
+  .vm-btn-submit {
+    width: 100%;
+    text-align: center;
+  }
+
+  .vm-decision-group {
+    flex-direction: column;
+  }
+
+  .vm-decision-btn {
+    flex: none;
+    width: 100%;
+  }
+}

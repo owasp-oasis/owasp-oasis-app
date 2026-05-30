@@ -7,6 +7,8 @@ export interface Env {
   RATE_KV: KVNamespace;
   ASSETS: Fetcher;
   GITHUB_TOKEN: string;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
   ADMIN_SECRET: string;
   ENVIRONMENT: string;
 }

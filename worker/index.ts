@@ -25,6 +25,8 @@ import {
 } from './handlers/leaderboard.js';
 import { handleRegister } from './handlers/register.js';
 import { handleFeedback } from './handlers/feedback.js';
+import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
+import { handleVote, handleMyVotes } from './handlers/vote.js';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -90,6 +92,16 @@ export default {
       if (method === 'POST' && url.pathname === '/api/feedback') {
         return await handleFeedback(request, env);
       }
+
+      /* ── Auth (GitHub OAuth) ────────────────────────────────────── */
+      if (method === 'GET'  && url.pathname === '/api/auth/login')    return await handleLogin(request, env);
+      if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env);
+      if (method === 'GET'  && url.pathname === '/api/auth/me')       return await handleMe(request, env);
+      if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
+
+      /* ── Voting ─────────────────────────────────────────────────── */
+      if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
+      if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
