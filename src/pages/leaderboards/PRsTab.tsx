@@ -28,6 +28,31 @@ interface PR {
 const TRUST_MIN_CONTRIBUTORS = 10
 const TRUST_MIN_ACCEPT_RATE  = 0.75
 
+const VOTE_LABEL: Record<Decision, string> = {
+  accept: '✓ Accept',
+  modify: '⚠ Modify',
+  reject: '✗ Reject',
+}
+
+/** Returns a CSS class for the row based on whether the user's vote
+ *  agrees with or contradicts the crowd plurality.
+ *  Returns '' when the user hasn't voted, has the only vote, or there's a tie. */
+function getAgreementClass(pr: AugmentedPR, myVote: Decision | undefined): string {
+  if (!myVote) return ''
+  const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
+  if (total <= 1) return '' // only the user's vote — no crowd yet
+  const counts: Record<Decision, number> = {
+    accept: pr.consensus_accept,
+    modify: pr.consensus_modify,
+    reject: pr.consensus_reject,
+  }
+  const max = Math.max(...Object.values(counts))
+  const leaders = (Object.entries(counts) as [Decision, number][]).filter(([, v]) => v === max)
+  if (leaders.length > 1) return '' // tie — ambiguous
+  const crowdLeader = leaders[0][0]
+  return myVote === crowdLeader ? 'pr-row-agree' : 'pr-row-disagree'
+}
+
 type OASISStatus = 'Needs Review' | 'Trusted' | 'Rejected' | 'Accepted'
 
 function getOASISStatus(pr: PR): OASISStatus {
@@ -288,6 +313,22 @@ export default function PRsTab({ data, loading }: Props) {
       render: (v) => v ? new Date(String(v)).toLocaleDateString() : '—',
       align: 'right',
     },
+    ...(user ? [{
+      key: 'id' as keyof AugmentedPR,
+      label: 'My Vote',
+      sortable: false,
+      searchable: false,
+      align: 'center' as const,
+      render: (_v: unknown, row: AugmentedPR) => {
+        const vote = myVotes.get(row.id)
+        if (!vote) return <span style={{ color: 'var(--gray-400)' }}>—</span>
+        return (
+          <span className={`my-vote-badge my-vote-badge--${vote}`}>
+            {VOTE_LABEL[vote]}
+          </span>
+        )
+      },
+    }] : []),
   ]
 
   const augmented = useMemo<AugmentedPR[]>(() =>
@@ -375,6 +416,7 @@ export default function PRsTab({ data, loading }: Props) {
         emptyMessage="No PRs match this filter."
         onRowClick={handleRowClick}
         activeRowKey={panelPR?.id}
+        rowClassName={(pr) => getAgreementClass(pr, myVotes.get(pr.id))}
       />
 
       {/* Side panel */}

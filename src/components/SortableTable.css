@@ -157,3 +157,24 @@
   font-size: inherit;
   color: inherit;
 }
+
+/* Per-row agreement highlight (user voted, compared to crowd plurality) */
+.pr-row-agree td {
+  background: #f0fdf4;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+
+.pr-row-agree:hover td,
+.pr-row-agree.sortable-table-row--active td {
+  background: #dcfce7;
+}
+
+.pr-row-disagree td {
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #d97706;
+}
+
+.pr-row-disagree:hover td,
+.pr-row-disagree.sortable-table-row--active td {
+  background: #fef3c7;
+}

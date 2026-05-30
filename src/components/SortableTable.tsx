@@ -22,6 +22,7 @@ interface Props<T extends Record<string, any>> {
   rowKey: keyof T
   onRowClick?: (row: T) => void
   activeRowKey?: unknown   // value of rowKey for the currently-active (highlighted) row
+  rowClassName?: (row: T) => string  // optional extra CSS class per row
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,6 +36,7 @@ export default function SortableTable<T extends Record<string, any>>({
   rowKey,
   onRowClick,
   activeRowKey,
+  rowClassName,
 }: Props<T>) {
   const [sortKey, setSortKey] = useState<keyof T | null>(defaultSort ?? null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultDir)
@@ -130,8 +132,9 @@ export default function SortableTable<T extends Record<string, any>>({
                     key={String(row[rowKey])}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                     className={[
-                      onRowClick ? 'sortable-table-row--clickable' : '',
-                      isActive   ? 'sortable-table-row--active'    : '',
+                      onRowClick   ? 'sortable-table-row--clickable' : '',
+                      isActive     ? 'sortable-table-row--active'    : '',
+                      rowClassName ? rowClassName(row)               : '',
                     ].filter(Boolean).join(' ') || undefined}
                   >
                     {columns.map(col => (
