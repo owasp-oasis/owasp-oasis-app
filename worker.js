@@ -806,12 +806,12 @@ export default {
 
       /* POST /api/register */
       if (method === 'POST' && url.pathname === '/api/register') {
-        return handleRegister(request, env);
+        return await handleRegister(request, env);
       }
 
       /* POST /api/feedback — create GitHub issue for preview site feedback */
       if (method === 'POST' && url.pathname === '/api/feedback') {
-        return handleFeedback(request, env);
+        return await handleFeedback(request, env);
       }
 
       /* GET /api/admin/registrations */
@@ -831,12 +831,12 @@ export default {
       }
 
       /* Leaderboard API */
-      if (method === 'GET' && url.pathname === '/api/leaderboard/meta')         return handleMeta(env);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/repos')        return handleRepos(env, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/prs')          return handlePRs(env, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/contributors') return handleContributors(env, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')  return handleMaintainers(env, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')        return handleTools(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/meta')         return await handleMeta(env);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/repos')        return await handleRepos(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/prs')          return await handlePRs(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/contributors') return await handleContributors(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')  return await handleMaintainers(env, url);
+      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')        return await handleTools(env, url);
 
       /* Manual sync trigger */
       if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
