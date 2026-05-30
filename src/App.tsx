@@ -12,8 +12,8 @@ import Sponsors from './pages/Sponsors'
 export default function App() {
   return (
     <BrowserRouter>
-      <Nav />
       <PreviewBanner />
+      <Nav />
       <main>
         <Routes>
           <Route path="/" element={<Home />} />

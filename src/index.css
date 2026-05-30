@@ -36,6 +36,7 @@
   --font: var(--sans);
 
   --nav-height: 72px;
+  --banner-height: 40px;
 }
 
 html {

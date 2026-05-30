@@ -1,6 +1,6 @@
 .nav {
   position: sticky;
-  top: 0;
+  top: var(--banner-height);
   z-index: 100;
   background: rgba(247, 251, 255, .95);
   backdrop-filter: blur(16px);
@@ -13,6 +13,7 @@
   align-items: center;
   gap: 32px;
   height: 100%;
+  position: relative;
 }
 
 .nav-logo {
@@ -68,12 +69,85 @@
   text-decoration: none;
 }
 
+/* ── Hamburger button — hidden on desktop ── */
+.nav-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.nav-hamburger:hover {
+  background: var(--blue-soft);
+}
+
+.nav-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--blue-dark);
+  border-radius: 2px;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+  transform-origin: center;
+}
+
+/* Animate to X when open */
+.nav-hamburger--open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav-hamburger--open span:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+.nav-hamburger--open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ── Mobile ── */
 @media (max-width: 768px) {
-  .nav-links {
-    display: none;
+  .nav-hamburger {
+    display: flex;
   }
 
   .nav-inner {
     justify-content: space-between;
+    gap: 12px;
+  }
+
+  /* Nav links hidden by default on mobile; become a dropdown when open */
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: -24px;
+    right: -24px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: rgba(247, 251, 255, 0.98);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 8px 24px rgba(11, 79, 138, .12);
+    padding: 8px 0 16px;
+  }
+
+  .nav-links--open {
+    display: flex;
+  }
+
+  .nav-link {
+    padding: 13px 24px;
+    border-radius: 0;
+    font-size: 1rem;
   }
 }

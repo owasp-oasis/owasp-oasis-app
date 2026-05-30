@@ -1,11 +1,14 @@
 /* ── Preview Banner ── */
 .preview-banner {
+  position: sticky;
+  top: 0;
   width: 100%;
   background: #1e3a5f;
   color: #fff;
   font-size: 0.875rem;
-  z-index: 90;
+  z-index: 110;
   border-bottom: 1px solid rgba(255,255,255,0.12);
+  min-height: var(--banner-height);
 }
 
 .preview-banner-inner {
