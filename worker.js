@@ -656,6 +656,141 @@ async function runSync(env, { skipReactions = false } = {}) {
   }
 }
 
+/* ─── CHUNKED MANUAL SYNC (one repo per call) ───────────────── */
+async function runSyncOneRepo(env) {
+  const token = env.GITHUB_TOKEN;
+  const db    = env.DB;
+  const stats = { repos: 0, prs: 0, comments: 0 };
+
+  try {
+    const since     = await getSyncState(db, 'last_synced_at');
+    const syncStart = new Date().toISOString();
+
+    // Fetch the full list of fork repos in the org (1 subrequest)
+    const allRepos = await ghFetchAll(`/orgs/${ORG}/repos?type=public`, token);
+    const repos    = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
+
+    if (repos.length === 0) {
+      return { ok: true, message: 'No repos to sync', stats, done: true };
+    }
+
+    // Read cursor — which repo index to process this call
+    const cursorRow = await db.prepare("SELECT value FROM sync_state WHERE key = 'sync_cursor'").first();
+    let cursor = cursorRow?.value ? parseInt(cursorRow.value, 10) : 0;
+    if (isNaN(cursor) || cursor < 0) cursor = 0;
+
+    // If cursor is past the end, all repos have been processed — rebuild and finish
+    if (cursor >= repos.length) {
+      await rebuildContributors(db, syncStart);
+      await setSyncState(db, 'last_synced_at', syncStart);
+      await setSyncState(db, 'sync_running', '0');
+      await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
+      return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
+    }
+
+    const repo = repos[cursor];
+
+    // Process this one repo
+    const detail      = await ghFetch(`/repos/${ORG}/${repo.name}`, token);
+    const upstreamUrl = detail.parent?.html_url ?? null;
+
+    await db.prepare(`
+      INSERT OR REPLACE INTO repos (id, name, full_name, description, language, open_prs, stars, upstream_url, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(repo.id, repo.name, repo.full_name, repo.description ?? null,
+      repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart).run();
+    stats.repos++;
+
+    const openPRs   = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
+    const closedPRs = await ghFetchAll(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
+    const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
+
+    for (const pr of prs) {
+      stats.prs++;
+      const participantMap = new Map();
+      const ensure = l => {
+        if (!participantMap.has(l)) participantMap.set(l, { interactions: 0, non_oasis_interactions: 0, decision: null, reactions_received: 0 });
+        return participantMap.get(l);
+      };
+
+      const comments = await ghFetchAll(`/repos/${ORG}/${repo.name}/issues/${pr.number}/comments`, token);
+      stats.comments += comments.length;
+
+      let consensusAccept = 0, consensusModify = 0, consensusReject = 0;
+      let oasisCommentCount = 0, nonOasisCommentCount = 0;
+
+      for (const comment of comments) {
+        const login = comment.user?.login;
+        if (!login || isAutomatedAccount(login)) continue;
+        const p = ensure(login);
+        const decision = parseDecision(comment.body);
+        if (decision) {
+          p.interactions++;
+          p.decision = decision;
+          oasisCommentCount++;
+          if (decision === 'accept') consensusAccept++;
+          if (decision === 'modify') consensusModify++;
+          if (decision === 'reject') consensusReject++;
+        } else {
+          p.non_oasis_interactions++;
+          nonOasisCommentCount++;
+        }
+        // Reactions skipped on manual chunked sync — cron handles them
+      }
+
+      const oasisParticipantCount = [...participantMap.values()].filter(p => p.decision !== null).length;
+      const detectionTool  = parseDetectionTool(pr.body);
+      const existingRow    = await db.prepare('SELECT merged_upstream FROM pull_requests WHERE repo_name = ? AND number = ?').bind(repo.name, pr.number).first();
+      const mergedUpstream = existingRow?.merged_upstream ?? 0;
+      const state          = pr.state === 'open' ? 'open' : 'closed';
+
+      await db.prepare(`
+        INSERT OR REPLACE INTO pull_requests
+          (id, repo_name, number, title, state, author, html_url, comment_count,
+           oasis_comment_count, non_oasis_comment_count,
+           participants, consensus_accept, consensus_modify, consensus_reject,
+           merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        pr.id, repo.name, pr.number, pr.title, state,
+        pr.user?.login ?? null, pr.html_url, comments.length,
+        oasisCommentCount, nonOasisCommentCount,
+        oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
+        mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
+        pr.created_at, pr.updated_at, detectionTool ?? null, syncStart
+      ).run();
+
+      for (const [login, data] of participantMap.entries()) {
+        await db.prepare(`
+          INSERT OR REPLACE INTO pr_participants
+            (pr_id, repo_name, pr_number, login, interactions, non_oasis_interactions, decision, reactions_received)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(pr.id, repo.name, pr.number, login, data.interactions, data.non_oasis_interactions, data.decision ?? null, data.reactions_received).run();
+      }
+    }
+
+    const openCount = await db.prepare("SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'").bind(repo.name).first();
+    await db.prepare('UPDATE repos SET open_prs = ?, synced_at = ? WHERE name = ?').bind(openCount?.c ?? 0, syncStart, repo.name).run();
+
+    // Advance cursor to next repo
+    const nextCursor = cursor + 1;
+    await setSyncState(db, 'sync_cursor', String(nextCursor));
+
+    const remaining = repos.length - nextCursor;
+    return {
+      ok: true,
+      message: `Synced repo ${cursor + 1}/${repos.length}: ${repo.name}. ${remaining > 0 ? `${remaining} repo(s) remaining — call /leaderboard-refresh again.` : 'All repos done — call once more to rebuild contributors.'}`,
+      stats,
+      done: false,
+      cursor: nextCursor,
+      total_repos: repos.length,
+    };
+  } catch (err) {
+    await setSyncState(db, 'sync_running', '0');
+    return { ok: false, message: err?.message ?? String(err), stats };
+  }
+}
+
 /* ─── REGISTER HANDLER ───────────────────────────────────────── */
 async function handleRegister(request, env) {
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
@@ -842,20 +977,12 @@ export default {
       if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')  return await handleMaintainers(env, url);
       if (method === 'GET' && url.pathname === '/api/leaderboard/tools')        return await handleTools(env, url);
 
-      /* Manual sync trigger */
+      /* Manual sync trigger — chunked one repo per call */
       if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
         if (!env.DB) return jsonErr('DB not available', 503, request);
-        const lastManual = await env.DB.prepare("SELECT value FROM sync_state WHERE key = 'last_manual_sync'").first();
-        if (lastManual?.value) {
-          const elapsed = Date.now() - new Date(lastManual.value).getTime();
-          if (elapsed < 10 * 60 * 1000) {
-            const waitSec = Math.ceil((10 * 60 * 1000 - elapsed) / 1000);
-            return jsonErr(`Rate-limited. Try again in ${waitSec}s.`, 429, request);
-          }
-        }
         await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')").run();
         await env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)").bind(new Date().toISOString()).run();
-        const result = await runSync(env, { skipReactions: true });
+        const result = await runSyncOneRepo(env);
         return Response.json(result);
       }
 
