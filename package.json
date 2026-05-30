@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --var ENVIRONMENT:development",
-    "build": "tsc -b && vite build",
+    "build:worker": "tsc -p tsconfig.worker.json",
+    "build:frontend": "vite build",
+    "build": "tsc -b && npm run build:worker && npm run build:frontend",
     "preview": "vite preview",
-    "deploy:preview": "npm run build && wrangler deploy --env preview",
+    "deploy:preview": "npm run build && wrangler deploy",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

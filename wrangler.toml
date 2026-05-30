@@ -1,5 +1,5 @@
 name               = "owasp-oasis-app-preview"
-main               = "worker.js"
+main               = "dist-worker/index.js"
 compatibility_date = "2024-01-01"
 workers_dev        = false
 
