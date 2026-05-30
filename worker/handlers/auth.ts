@@ -47,7 +47,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
   const params = new URLSearchParams({
     client_id:    env.GITHUB_CLIENT_ID,
     redirect_uri: CALLBACK_URL,
-    scope:        'public_repo',
+    scope:        'public_repo write:discussion',
     state,
   });
   const githubUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;

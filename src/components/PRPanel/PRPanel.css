@@ -1,0 +1,640 @@
+/* ── PR Panel slide-out ──────────────────────────────────────── */
+.prp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 399;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.prp-panel {
+  position: fixed;
+  right: 0;
+  top: calc(var(--banner-height) + var(--nav-height));
+  z-index: 400;
+  width: min(58vw, 900px);
+  height: calc(100vh - var(--banner-height) - var(--nav-height));
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 40px rgba(11, 79, 138, 0.2);
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  overflow: hidden;
+}
+
+.prp-panel--open {
+  transform: translateX(0);
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.prp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  min-height: 48px;
+  flex-wrap: wrap;
+}
+
+.prp-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.prp-close:hover { color: var(--ink); background: var(--gray-100); }
+
+.prp-identity {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.prp-header-spacer { flex: 1; }
+
+.prp-gh-link {
+  font-size: 0.8rem;
+  color: var(--blue);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.prp-gh-link:hover { text-decoration: underline; }
+
+/* ── Vote bar ────────────────────────────────────────────────── */
+.prp-vote-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  background: var(--gray-100);
+}
+
+.prp-vote-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.prp-vote-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.prp-vote-btn:active { transform: scale(0.97); }
+
+.prp-vote-btn--accept {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #16a34a;
+}
+.prp-vote-btn--accept.prp-vote-btn--active,
+.prp-vote-btn--accept.prp-vote-btn--voted {
+  background: #16a34a;
+  color: #fff;
+}
+
+.prp-vote-btn--modify {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #ca8a04;
+}
+.prp-vote-btn--modify.prp-vote-btn--active,
+.prp-vote-btn--modify.prp-vote-btn--voted {
+  background: #ca8a04;
+  color: #fff;
+}
+
+.prp-vote-btn--reject {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #dc2626;
+}
+.prp-vote-btn--reject.prp-vote-btn--active,
+.prp-vote-btn--reject.prp-vote-btn--voted {
+  background: #dc2626;
+  color: #fff;
+}
+
+.prp-vote-btn--voted {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────── */
+.prp-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.prp-tab {
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.prp-tab:hover { color: var(--ink); }
+.prp-tab--active {
+  border-bottom-color: var(--blue);
+  color: var(--blue);
+  font-weight: 600;
+}
+
+/* ── Scrollable body ─────────────────────────────────────────── */
+.prp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px;
+}
+
+/* ── Vote form drawer ────────────────────────────────────────── */
+.prp-vote-form {
+  border-top: 2px solid var(--blue);
+  padding: 16px 20px;
+  flex-shrink: 0;
+  background: var(--paper);
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.prp-vote-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.prp-vote-form-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.prp-vote-form-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.prp-vote-form-close:hover { color: var(--ink); background: var(--gray-200); }
+
+/* ── Sign-in modal (unauthenticated row click) ───────────────── */
+.prp-signin-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prp-signin-card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 32px 28px;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(11, 79, 138, 0.22);
+}
+
+.prp-signin-icon {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+}
+
+.prp-signin-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.prp-signin-body {
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.prp-signin-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.prp-signin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+}
+
+.prp-signin-btn--primary {
+  background: var(--ink);
+  color: var(--white);
+}
+.prp-signin-btn--primary:hover { background: var(--blue-dark); }
+
+.prp-signin-btn--secondary {
+  background: var(--gray-100);
+  color: var(--ink-soft);
+}
+.prp-signin-btn--secondary:hover { background: var(--gray-200); }
+
+/* ── PR Tab ──────────────────────────────────────────────────── */
+.prp-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.prp-meta-avatar {
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+}
+
+.prp-meta-login { color: var(--ink-soft); font-weight: 500; }
+.prp-meta-sep { color: var(--line-strong); }
+
+.prp-file-stats {
+  display: inline-flex;
+  gap: 12px;
+  font-size: 0.82rem;
+  font-family: var(--mono);
+  background: var(--gray-100);
+  border-radius: 6px;
+  padding: 4px 12px;
+  margin-bottom: 20px;
+}
+.prp-stat-add { color: #166534; }
+.prp-stat-del { color: #991b1b; }
+
+.prp-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+/* ── Body Tab ────────────────────────────────────────────────── */
+.prp-body-text {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.prp-section-header {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+
+.prp-loading {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.prp-error {
+  padding: 20px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 0.88rem;
+}
+
+/* ── Changes Tab ─────────────────────────────────────────────── */
+.prp-changes-summary {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 14px;
+  font-family: var(--mono);
+}
+
+.prp-file-entry {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.prp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--gray-100);
+  cursor: pointer;
+  user-select: none;
+}
+
+.prp-file-header:hover { background: var(--gray-200); }
+
+.prp-file-toggle {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.prp-file-name {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  flex: 1;
+  word-break: break-all;
+}
+
+.prp-file-status {
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 100px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.prp-file-status--added    { background: #dcfce7; color: #166534; }
+.prp-file-status--modified { background: #fef9c3; color: #854d0e; }
+.prp-file-status--removed  { background: #fee2e2; color: #991b1b; }
+.prp-file-status--renamed  { background: #ede9fe; color: #5b21b6; }
+
+.prp-file-churn {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.prp-diff {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.prp-diff-line {
+  display: block;
+  padding: 0 12px;
+  white-space: pre;
+}
+.prp-diff-add  { background: #ecfdf5; color: #065f46; }
+.prp-diff-del  { background: #fef2f2; color: #7f1d1d; }
+.prp-diff-hunk { background: #ede9fe; color: #5b21b6; font-size: 0.69rem; }
+.prp-diff-ctx  { color: var(--ink-soft); }
+
+.prp-no-patch {
+  padding: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── Comments Tab ────────────────────────────────────────────── */
+.prp-comment {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.prp-comment:last-child { border-bottom: none; }
+
+.prp-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.prp-comment-avatar {
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.prp-comment-login {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.prp-comment-date {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.prp-oasis-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.prp-oasis-badge--accept { background: #dcfce7; color: #166534; }
+.prp-oasis-badge--modify { background: #fef9c3; color: #854d0e; }
+.prp-oasis-badge--reject { background: #fee2e2; color: #991b1b; }
+
+.prp-comment-body {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0 0 10px 36px;
+}
+
+.prp-oasis-comment {
+  background: var(--gray-100);
+  border-left: 3px solid var(--blue);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  margin-left: 36px;
+}
+.prp-oasis-comment .prp-comment-body {
+  margin-left: 0;
+  margin-bottom: 0;
+}
+
+.prp-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 36px;
+}
+
+.prp-reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  background: var(--gray-100);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.prp-reaction-btn:hover { background: var(--blue-soft); border-color: var(--blue); }
+.prp-reaction-btn--active { background: var(--blue-soft); border-color: var(--blue); }
+.prp-reaction-count { color: var(--muted); }
+
+.prp-reaction-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-left: 36px;
+  margin-top: 6px;
+}
+
+/* ── Summary Tab ─────────────────────────────────────────────── */
+.prp-vuln-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.prp-vuln-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.prp-severity-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.prp-severity-badge--critical { background: #7f1d1d; color: #fff; }
+.prp-severity-badge--high     { background: #dc2626; color: #fff; }
+.prp-severity-badge--medium   { background: #fef9c3; color: #854d0e; border: 1px solid #ca8a04; }
+.prp-severity-badge--low      { background: var(--gray-100); color: var(--gray-600); }
+
+.prp-vuln-id {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.prp-vuln-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  font-size: 0.82rem;
+  margin-bottom: 14px;
+}
+
+.prp-vuln-key { color: var(--muted); font-weight: 500; }
+.prp-vuln-val { color: var(--ink-soft); font-family: var(--mono); }
+
+.prp-tldr {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  line-height: 1.65;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  white-space: pre-wrap;
+}
+
+.prp-consensus-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.prp-consensus-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+.prp-consensus-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--gray-200);
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 10px;
+}
+.prp-consensus-seg-accept { background: #16a34a; }
+.prp-consensus-seg-modify { background: #ca8a04; }
+.prp-consensus-seg-reject { background: #dc2626; }
+
+.prp-consensus-counts {
+  display: flex;
+  gap: 16px;
+  font-size: 0.8rem;
+}
+
+.prp-no-data {
+  font-size: 0.88rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .prp-panel {
+    width: 100%;
+    top: var(--banner-height);
+    height: calc(100vh - var(--banner-height));
+  }
+}

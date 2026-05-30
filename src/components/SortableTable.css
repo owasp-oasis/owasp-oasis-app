@@ -137,3 +137,23 @@
 .sortable-table a:hover {
   text-decoration: underline;
 }
+
+/* Clickable rows */
+.sortable-table-row--clickable {
+  cursor: pointer;
+}
+
+.sortable-table-row--clickable:hover td {
+  background: var(--blue-soft);
+}
+
+.sortable-table-row--active td {
+  background: var(--blue-soft);
+  border-left: 3px solid var(--blue);
+}
+
+/* Title cell in PR table — no underline, inherits row style */
+.pr-row-title {
+  font-size: inherit;
+  color: inherit;
+}

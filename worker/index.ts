@@ -27,6 +27,7 @@ import { handleRegister } from './handlers/register.js';
 import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
+import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -102,6 +103,18 @@ export default {
       /* ── Voting ─────────────────────────────────────────────────── */
       if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
       if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
+
+      /* ── PR Panel (proxy to GitHub API) ─────────────────────────── */
+      const prPanelMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/(details|files|comments|react)$/);
+      if (prPanelMatch) {
+        const prId   = parseInt(prPanelMatch[1], 10);
+        const action = prPanelMatch[2];
+        if (method === 'GET'  && action === 'details')  return await handlePRDetails(request, env, prId);
+        if (method === 'GET'  && action === 'files')    return await handlePRFiles(request, env, prId);
+        if (method === 'GET'  && action === 'comments') return await handlePRComments(request, env, prId);
+        if (method === 'POST' && action === 'react')    return await handlePRReact(request, env, prId);
+        return jsonErr('Method not allowed for this PR panel action', 405, request);
+      }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {

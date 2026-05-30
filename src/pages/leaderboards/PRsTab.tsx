@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import SortableTable from '../../components/SortableTable'
 import type { Column } from '../../components/SortableTable'
 import ColHeader from '../../components/ColHeader'
-import VoteModal from '../../components/VoteModal'
+import PRPanel, { SignInModal, type PanelPR } from '../../components/PRPanel/PRPanel'
+import type { Decision } from '../../components/VoteForm'
 import { useAuth } from '../../context/AuthContext'
 
 interface PR {
@@ -30,11 +31,8 @@ const TRUST_MIN_ACCEPT_RATE  = 0.75
 type OASISStatus = 'Needs Review' | 'Trusted' | 'Rejected' | 'Accepted'
 
 function getOASISStatus(pr: PR): OASISStatus {
-  // Accepted: merged into upstream AND the fork PR is closed
   if (pr.merged_upstream && pr.state === 'closed') return 'Accepted'
-  // Rejected: fork PR is closed without being merged upstream
   if (pr.state === 'closed' && !pr.merged_upstream) return 'Rejected'
-  // Open PR checks — evaluate trust criteria
   const totalVotes = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
   const acceptRate = totalVotes > 0 ? pr.consensus_accept / totalVotes : 0
   if (pr.participants >= TRUST_MIN_CONTRIBUTORS && acceptRate >= TRUST_MIN_ACCEPT_RATE) return 'Trusted'
@@ -79,7 +77,6 @@ function StatusKey() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return
     function handle(e: MouseEvent) {
@@ -133,8 +130,7 @@ const FILTER_MODES: { id: FilterMode; label: string }[] = [
 
 type AugmentedPR = PR & { oasis_status: OASISStatus }
 
-// Map of pr_id → decision for the current user's votes
-type VoteMap = Map<number, 'accept' | 'modify' | 'reject'>
+type VoteMap = Map<number, Decision>
 
 interface Props { data: PR[]; loading: boolean }
 
@@ -145,75 +141,61 @@ export default function PRsTab({ data, loading }: Props) {
 
   // My votes state
   const [myVotes, setMyVotes] = useState<VoteMap>(new Map())
-  const [votesLoaded, setVotesLoaded] = useState(false)
 
-  // Active modal state
-  const [modalPR, setModalPR] = useState<PR | null>(null)
+  // Panel state — which PR is open in the side panel
+  const [panelPR, setPanelPR] = useState<AugmentedPR | null>(null)
+
+  // Sign-in modal (shown when unauthenticated user clicks a row)
+  const [showSignIn, setShowSignIn] = useState(false)
 
   // Local PR overrides for optimistic updates (consensus counts)
   const [localOverrides, setLocalOverrides] = useState<Map<number, Partial<PR>>>(new Map())
 
   const fetchMyVotes = useCallback(async () => {
-    if (!user) { setMyVotes(new Map()); setVotesLoaded(true); return }
+    if (!user) { setMyVotes(new Map()); return }
     try {
       const res = await fetch('/api/votes/mine', { credentials: 'include' })
-      if (!res.ok) { setVotesLoaded(true); return }
+      if (!res.ok) return
       const d = await res.json() as { ok: boolean; votes: { pr_id: number; decision: string }[] }
       const map: VoteMap = new Map()
       for (const v of d.votes ?? []) {
-        map.set(v.pr_id, v.decision as 'accept' | 'modify' | 'reject')
+        map.set(v.pr_id, v.decision as Decision)
       }
       setMyVotes(map)
     } catch { /* non-fatal */ }
-    setVotesLoaded(true)
   }, [user])
 
   useEffect(() => { fetchMyVotes() }, [fetchMyVotes])
 
-  function handleVoteSuccess(pr: PR, decision: 'accept' | 'modify' | 'reject') {
-    // Optimistic: record vote + increment consensus count locally
+  function handleVoteSuccess(pr: PanelPR, decision: Decision) {
     setMyVotes(prev => new Map(prev).set(pr.id, decision))
     setLocalOverrides(prev => {
       const next = new Map(prev)
+      const base = data.find(p => p.id === pr.id)
       const existing = next.get(pr.id) ?? {}
       next.set(pr.id, {
         ...existing,
-        consensus_accept: (pr.consensus_accept + (decision === 'accept' ? 1 : 0)),
-        consensus_modify: (pr.consensus_modify + (decision === 'modify' ? 1 : 0)),
-        consensus_reject: (pr.consensus_reject + (decision === 'reject' ? 1 : 0)),
-        oasis_comment_count: pr.oasis_comment_count + 1,
-        participants: pr.participants + 1,
+        consensus_accept: ((base?.consensus_accept ?? 0) + (decision === 'accept' ? 1 : 0)),
+        consensus_modify: ((base?.consensus_modify ?? 0) + (decision === 'modify' ? 1 : 0)),
+        consensus_reject: ((base?.consensus_reject ?? 0) + (decision === 'reject' ? 1 : 0)),
+        oasis_comment_count: (base?.oasis_comment_count ?? 0) + 1,
+        participants: (base?.participants ?? 0) + 1,
       })
       return next
     })
-    setModalPR(null)
   }
 
-  // Decide vote column content for a given PR
-  function voteCell(pr: AugmentedPR) {
-    if (pr.state !== 'open') return null
-    const voted = myVotes.get(pr.id)
-    if (voted) {
-      const cls = { accept: 'state-badge state-trusted', modify: 'state-badge state-needs-review', reject: 'state-badge state-closed' }[voted]
-      const label = { accept: 'Accepted', modify: 'Modified', reject: 'Rejected' }[voted]
-      return <span className={cls}>{label}</span>
-    }
+  function handleRowClick(pr: AugmentedPR) {
     if (!user) {
-      return (
-        <a href="/api/auth/login" className="vote-signin-link">
-          Sign in to vote
-        </a>
-      )
+      setShowSignIn(true)
+      return
     }
-    return (
-      <button
-        className="vote-btn"
-        onClick={() => setModalPR(pr)}
-        title="Cast your OASIS vote on this PR"
-      >
-        Vote
-      </button>
-    )
+    // If clicking the same PR that's open, close it; otherwise switch
+    if (panelPR?.id === pr.id) {
+      setPanelPR(null)
+    } else {
+      setPanelPR(pr)
+    }
   }
 
   const columns: Column<AugmentedPR>[] = [
@@ -221,7 +203,12 @@ export default function PRsTab({ data, loading }: Props) {
       key: 'repo_name',
       label: 'Repository',
       render: (v) => (
-        <a href={`https://github.com/owasp-oasis/${v}`} target="_blank" rel="noopener noreferrer">
+        <a
+          href={`https://github.com/owasp-oasis/${v}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+        >
           {String(v)}
         </a>
       ),
@@ -230,9 +217,9 @@ export default function PRsTab({ data, loading }: Props) {
       key: 'title',
       label: 'Pull Request',
       render: (v, row) => (
-        <a href={String(row.html_url)} target="_blank" rel="noopener noreferrer" title={String(v)}>
+        <span className="pr-row-title" title={String(v)}>
           #{row.number} {String(v).length > 55 ? String(v).slice(0, 55) + '…' : String(v)}
-        </a>
+        </span>
       ),
     },
     {
@@ -300,14 +287,6 @@ export default function PRsTab({ data, loading }: Props) {
       searchable: false,
       render: (v) => v ? new Date(String(v)).toLocaleDateString() : '—',
       align: 'right',
-    },
-    {
-      key: 'id' as keyof AugmentedPR,
-      label: 'Vote',
-      sortable: false,
-      searchable: false,
-      align: 'center',
-      render: (_v, row) => votesLoaded ? voteCell(row) : null,
     },
   ]
 
@@ -394,15 +373,20 @@ export default function PRsTab({ data, loading }: Props) {
         rowKey="id"
         searchPlaceholder="Filter by repo or title…"
         emptyMessage="No PRs match this filter."
+        onRowClick={handleRowClick}
+        activeRowKey={panelPR?.id}
       />
 
-      {modalPR && (
-        <VoteModal
-          pr={modalPR}
-          onClose={() => setModalPR(null)}
-          onSuccess={(decision) => handleVoteSuccess(modalPR, decision)}
-        />
-      )}
+      {/* Side panel */}
+      <PRPanel
+        pr={panelPR}
+        myVotes={myVotes}
+        onClose={() => setPanelPR(null)}
+        onVoteSuccess={handleVoteSuccess}
+      />
+
+      {/* Sign-in modal for unauthenticated row clicks */}
+      {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
     </>
   )
 }

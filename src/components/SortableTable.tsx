@@ -20,6 +20,8 @@ interface Props<T extends Record<string, any>> {
   searchPlaceholder?: string
   emptyMessage?: string
   rowKey: keyof T
+  onRowClick?: (row: T) => void
+  activeRowKey?: unknown   // value of rowKey for the currently-active (highlighted) row
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,6 +33,8 @@ export default function SortableTable<T extends Record<string, any>>({
   searchPlaceholder = 'Search…',
   emptyMessage = 'No data yet.',
   rowKey,
+  onRowClick,
+  activeRowKey,
 }: Props<T>) {
   const [sortKey, setSortKey] = useState<keyof T | null>(defaultSort ?? null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultDir)
@@ -119,20 +123,30 @@ export default function SortableTable<T extends Record<string, any>>({
               </tr>
             </thead>
             <tbody>
-              {sorted.map(row => (
-                <tr key={String(row[rowKey])}>
-                  {columns.map(col => (
-                    <td
-                      key={String(col.key)}
-                      style={{ textAlign: col.align ?? 'left' }}
-                    >
-                      {col.render
-                        ? col.render(row[col.key], row)
-                        : row[col.key] != null ? String(row[col.key]) : '—'}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {sorted.map(row => {
+                const isActive = activeRowKey !== undefined && row[rowKey] === activeRowKey
+                return (
+                  <tr
+                    key={String(row[rowKey])}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={[
+                      onRowClick ? 'sortable-table-row--clickable' : '',
+                      isActive   ? 'sortable-table-row--active'    : '',
+                    ].filter(Boolean).join(' ') || undefined}
+                  >
+                    {columns.map(col => (
+                      <td
+                        key={String(col.key)}
+                        style={{ textAlign: col.align ?? 'left' }}
+                      >
+                        {col.render
+                          ? col.render(row[col.key], row)
+                          : row[col.key] != null ? String(row[col.key]) : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
