@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { renderMarkdown } from './renderMarkdown'
 
 interface Reactions {
   total_count: number
@@ -171,10 +172,10 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded }: Pro
 
             {isOasis ? (
               <div className="prp-oasis-comment">
-                <pre className="prp-comment-body">{c.body}</pre>
+                <div className="prp-comment-body prp-md">{renderMarkdown(c.body)}</div>
               </div>
             ) : (
-              <pre className="prp-comment-body">{c.body}</pre>
+              <div className="prp-comment-body prp-md">{renderMarkdown(c.body)}</div>
             )}
 
             <div className="prp-reactions">

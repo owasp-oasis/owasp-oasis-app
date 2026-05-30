@@ -144,8 +144,8 @@ function StatusKey() {
   )
 }
 
-type FilterMode = 'all' | OASISStatus
-const FILTER_MODES: { id: FilterMode; label: string }[] = [
+type FilterMode = 'all' | OASISStatus | 'needs-my-vote'
+const BASE_FILTER_MODES: { id: FilterMode; label: string }[] = [
   { id: 'all',          label: 'All PRs' },
   { id: 'Needs Review', label: 'Needs Review' },
   { id: 'Trusted',      label: 'Trusted' },
@@ -160,7 +160,7 @@ type VoteMap = Map<number, Decision>
 interface Props { data: PR[]; loading: boolean }
 
 export default function PRsTab({ data, loading }: Props) {
-  const [filter, setFilter] = useState<FilterMode>('all')
+  const [filter, setFilter] = useState<FilterMode>('needs-my-vote')
   const [showStamp, setShowStamp] = useState(false)
   const { user } = useAuth()
 
@@ -191,6 +191,11 @@ export default function PRsTab({ data, loading }: Props) {
   }, [user])
 
   useEffect(() => { fetchMyVotes() }, [fetchMyVotes])
+
+  // If user signs out while on the needs-my-vote filter, fall back to 'all'
+  useEffect(() => {
+    if (!user && filter === 'needs-my-vote') setFilter('all')
+  }, [user, filter])
 
   function handleVoteSuccess(pr: PanelPR, decision: Decision) {
     setMyVotes(prev => new Map(prev).set(pr.id, decision))
@@ -340,10 +345,33 @@ export default function PRsTab({ data, loading }: Props) {
     [data, localOverrides]
   )
 
-  const filtered = useMemo(() =>
-    filter === 'all' ? augmented : augmented.filter(pr => pr.oasis_status === filter),
-    [augmented, filter]
+  const needsMyVoteCount = useMemo(() =>
+    user
+      ? augmented.filter(pr =>
+          (pr.oasis_status === 'Needs Review' || pr.oasis_status === 'Trusted') &&
+          !myVotes.has(pr.id)
+        ).length
+      : 0,
+    [augmented, myVotes, user]
   )
+
+  const visibleFilters = useMemo(() => {
+    if (!user) return BASE_FILTER_MODES
+    return [
+      { id: 'needs-my-vote' as FilterMode, label: `Needs My Vote (${needsMyVoteCount})` },
+      ...BASE_FILTER_MODES,
+    ]
+  }, [user, needsMyVoteCount])
+
+  const filtered = useMemo(() => {
+    if (filter === 'needs-my-vote') {
+      return augmented.filter(pr =>
+        (pr.oasis_status === 'Needs Review' || pr.oasis_status === 'Trusted') &&
+        !myVotes.has(pr.id)
+      )
+    }
+    return filter === 'all' ? augmented : augmented.filter(pr => pr.oasis_status === filter)
+  }, [augmented, filter, myVotes])
 
   if (loading) return <div className="tab-loading">Loading PRs…</div>
 
@@ -395,10 +423,10 @@ export default function PRsTab({ data, loading }: Props) {
 
       <div className="pr-filter-bar">
         <span className="pr-filter-label">Show:</span>
-        {FILTER_MODES.map(({ id, label }) => (
+        {visibleFilters.map(({ id, label }) => (
           <button
             key={id}
-            className={`pr-filter-btn${filter === id ? ' pr-filter-btn--active' : ''}`}
+            className={`pr-filter-btn${filter === id ? ' pr-filter-btn--active' : ''}${id === 'needs-my-vote' ? ' pr-filter-btn--mine' : ''}`}
             onClick={() => setFilter(id)}
           >
             {label}

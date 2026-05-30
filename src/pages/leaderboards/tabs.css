@@ -243,6 +243,16 @@
   color: var(--white);
 }
 
+/* "Needs My Vote" button — slightly more prominent when not active */
+.pr-filter-btn--mine {
+  border-color: var(--blue);
+  color: var(--blue-dark);
+}
+.pr-filter-btn--mine.pr-filter-btn--active {
+  background: var(--blue);
+  color: var(--white);
+}
+
 .pr-trust-note {
   margin-bottom: 12px;
 }

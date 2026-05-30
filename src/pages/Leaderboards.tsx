@@ -33,7 +33,7 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function Leaderboards() {
-  const [activeTab, setActiveTab] = useState<Tab>('projects')
+  const [activeTab, setActiveTab] = useState<Tab>('prs')
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)

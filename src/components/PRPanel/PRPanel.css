@@ -601,13 +601,22 @@
 .prp-oasis-badge--reject { background: #fee2e2; color: #991b1b; }
 
 .prp-comment-body {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  white-space: pre-wrap;
+  font-size: 0.85rem;
   word-break: break-word;
   color: var(--ink-soft);
   line-height: 1.55;
   margin: 0 0 10px 36px;
+}
+
+/* Tighten markdown spacing inside comment bodies */
+.prp-comment-body .prp-md-p,
+.prp-comment-body .prp-md-h2,
+.prp-comment-body .prp-md-h3,
+.prp-comment-body .prp-md-h4 {
+  margin-bottom: 6px;
+}
+.prp-comment-body .prp-md-table {
+  margin-bottom: 6px;
 }
 
 .prp-oasis-comment {
@@ -748,6 +757,70 @@
   font-size: 0.88rem;
   color: var(--muted);
   font-style: italic;
+}
+
+/* ── Mermaid diagram container ──────────────────────────────── */
+.prp-mermaid {
+  background: var(--gray-100);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0 0 12px;
+  overflow-x: auto;
+  text-align: center;
+  /* Show raw DSL in mono while mermaid hasn't rendered yet */
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  white-space: pre;
+  color: var(--muted);
+}
+/* Once mermaid has rendered, the div contains an <svg> — hide raw text */
+.prp-mermaid svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.prp-mermaid:has(svg) {
+  font-size: 0;       /* hide raw text when SVG is present */
+  white-space: normal;
+}
+
+/* ── HTML <details>/<summary> disclosure blocks ─────────────── */
+.prp-md-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0 0 12px;
+  overflow: hidden;
+}
+
+.prp-md-summary {
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--blue-dark);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  background: var(--gray-100);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prp-md-summary::-webkit-details-marker { display: none; }
+.prp-md-summary::before {
+  content: '▶';
+  font-size: 0.65em;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+details[open] > .prp-md-summary::before {
+  transform: rotate(90deg);
+}
+
+.prp-md-details-body {
+  padding: 12px 14px 4px;
 }
 
 /* ── Mobile ──────────────────────────────────────────────────── */
