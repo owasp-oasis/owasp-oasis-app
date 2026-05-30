@@ -48,8 +48,12 @@ The `.dev.vars` file holds local copies of secrets (never committed). You need a
 ```
 GITHUB_TOKEN=ghp_...
 ADMIN_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
 ENVIRONMENT=development
 ```
+
+`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are needed to test the GitHub OAuth sign-in flow locally. Create a GitHub OAuth App at https://github.com/settings/developers and set the callback URL to `http://localhost:8787/api/auth/callback`.
 
 ### Run the dev server
 
@@ -83,11 +87,45 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   handlers/
     leaderboard.ts         ← /api/leaderboard/* endpoint handlers
     register.ts            ← POST /api/register
-    feedback.ts            ← POST /api/feedback
+    feedback.ts            ← POST /api/feedback — creates GitHub issue from preview banner form
+    auth.ts                ← GitHub OAuth: login, callback, me, logout; session management
+    vote.ts                ← POST /api/vote, GET /api/votes/mine
+    prPanel.ts             ← /api/pr-panel/:id/* — GitHub API proxy for the PR side panel
 
 src/                       ← React SPA (frontend)
-  pages/                   ← Page-level components (Home, Leaderboards, About, etc.)
-  components/              ← Shared UI components (Nav, Footer, RegisterForm, etc.)
+  context/
+    AuthContext.tsx         ← React context — GitHub auth state (user, loading, logout, refetch)
+  pages/
+    Home.tsx               ← Landing page
+    Leaderboards.tsx       ← Tabbed leaderboard (PRs, Contributors, Maintainers, Projects, Tools)
+    About.tsx              ← Team and project background
+    Overview.tsx           ← How OASIS works
+    Support.tsx            ← How to help: share, recruit, validate, sponsor
+    Sponsors.tsx           ← Sponsors page
+    leaderboards/          ← One file per leaderboard tab
+      PRsTab.tsx           ← PR table with My Vote column, Needs My Vote filter
+      ContributorsTab.tsx
+      MaintainersTab.tsx
+      ProjectsTab.tsx
+      ToolsTab.tsx
+  components/
+    Nav.tsx                ← Navigation bar (shows GitHub avatar when signed in)
+    Footer.tsx
+    PreviewBanner.tsx      ← Dismissible staging banner with feedback link
+    RegisterForm.tsx       ← Validator/sponsor registration form
+    SortableTable.tsx      ← Generic sortable table
+    ColHeader.tsx          ← Sortable column header
+    QuotesCarousel.tsx     ← Auto-advancing testimonial carousel (Home page)
+    PRPanel/               ← Slide-out PR side panel
+      PRPanel.tsx          ← Panel shell, tab bar, open/close logic
+      SummaryTab.tsx       ← CWE, CVE, CVSS, TL;DR, consensus, detection tool
+      BodyTab.tsx          ← PR description rendered as GFM markdown (Mermaid, details/summary)
+      ChangesTab.tsx       ← Per-file diff (side-by-side and unified modes)
+      CommentsTab.tsx      ← GitHub comments with reactions and OASIS decision badges
+      PRTab.tsx            ← Link to open PR on GitHub
+      renderMarkdown.tsx   ← Markdown renderer (remark + rehype + remark-gfm + mermaid)
+    VoteForm.tsx           ← Accept/Modify/Reject vote form (posts to /api/vote)
+    VoteModal.tsx          ← Sign-in prompt modal for unauthenticated users
 
 schema.sql                 ← D1 database schema (apply once on fresh DB)
 wrangler.toml              ← Cloudflare Worker config (routes, bindings, cron)
@@ -125,6 +163,183 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
 | `handlers/register.ts` | `POST /api/register` — CSRF validation, rate limiting, input validation, duplicate check, D1 insert |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
+| `handlers/auth.ts` | GitHub OAuth flow: `GET /api/auth/login`, `GET /api/auth/callback`, `GET /api/auth/me`, `POST /api/auth/logout` — session management via D1 `user_sessions` table |
+| `handlers/vote.ts` | `POST /api/vote` — submit an OASIS validation vote (accept/modify/reject) as a GitHub comment; `GET /api/votes/mine` — return all votes cast by the current user |
+| `handlers/prPanel.ts` | PR Panel proxy: `GET /api/pr-panel/:id/details`, `/files`, `/comments`; `POST /api/pr-panel/:id/react` — proxies GitHub API using the server-side token; reactions use the user's own OAuth token |
+
+---
+
+## Frontend pages
+
+| Page | Route | Description |
+|---|---|---|
+| Home | `/` | Landing page with hero, feature overview, registration form, and quotes carousel |
+| Leaderboards | `/leaderboards` | Tabbed leaderboard with PRs (default), Contributors, Maintainers, Projects, and Tools tabs; includes sticky tab bar on scroll |
+| About | `/about` | Team, project background, and OWASP affiliation |
+| Overview | `/overview` | How OASIS works — full process walkthrough |
+| Support | `/support` | How to help: share social messages, targeted conversations, become a validator, sponsor the project |
+| Sponsors | `/sponsors` | Current sponsors and sponsor interest form |
+
+---
+
+## Frontend components
+
+| Component | Description |
+|---|---|
+| `Nav` | Top navigation bar with links to all pages; shows logged-in GitHub avatar and logout when authenticated |
+| `Footer` | Site-wide footer |
+| `PreviewBanner` | Dismissible banner shown on the preview environment indicating the site is in staging; includes a link to submit feedback |
+| `RegisterForm` | Validator/sponsor registration form — posts to `POST /api/register` |
+| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs |
+| `QuotesCarousel` | Auto-advancing animated carousel for testimonial/quote content on the Home page |
+| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Changes** (side-by-side or unified diff per file), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
+| `VoteForm` | Form inside the PR Panel for submitting an accept/modify/reject vote; builds the OASIS validation comment template and posts to `POST /api/vote` |
+| `VoteModal` | Modal wrapper that prompts unauthenticated users to sign in with GitHub before voting |
+
+---
+
+## Authentication
+
+GitHub OAuth is used for features that write to GitHub (voting, reactions). No account is required to browse the site or leaderboards.
+
+### Flow
+
+```
+User clicks "Sign in with GitHub"
+  → GET /api/auth/login
+      sets __oauth_state cookie
+      redirects to github.com/login/oauth/authorize
+  → GitHub redirects to GET /api/auth/callback?code=...&state=...
+      validates state (timing-safe)
+      exchanges code for access token
+      fetches GitHub user info (login, avatar_url)
+      creates session row in D1 user_sessions (30-day TTL)
+      sets HttpOnly session cookie
+      redirects to /leaderboards
+  → GET /api/auth/me  (called on every page load)
+      returns { user: { login, avatar_url } } or { user: null }
+  → POST /api/auth/logout  (requires CSRF token)
+      deletes D1 session row
+      clears session cookie
+```
+
+### Required secrets for auth
+
+| Secret | Purpose |
+|---|---|
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
+
+The OAuth callback URL registered in the GitHub app must be `https://preview.owasp-oasis.org/api/auth/callback`.
+
+### D1 tables
+
+- **`user_sessions`** — one row per active session; stores `session_id` (64-char hex, used as cookie value), `github_login`, `avatar_url`, `github_token` (user's OAuth token, never sent to browser), `expires_at` (30 days)
+- **`user_votes`** — one row per `(github_login, pr_id)` pair; records the user's decision and the resulting GitHub comment ID
+
+---
+
+## Voting system
+
+Validators can submit their OASIS validation decision directly from the leaderboard PR panel.
+
+### How it works
+
+1. User clicks a PR row in the leaderboards → PR Panel slides open
+2. User clicks the "Vote" tab (sign-in modal shown if not authenticated)
+3. User selects **Accept**, **Modify**, or **Reject** and fills in the structured form
+4. `POST /api/vote` validates CSRF, session, rate limit, and body; then:
+   - Posts a formatted OASIS comment to GitHub using the user's OAuth token (comment appears as them)
+   - Upserts `pr_participants` for the PR
+   - Increments `consensus_accept/modify/reject` and `participants` on `pull_requests`
+   - Upserts the `contributors` row for the user
+   - Inserts a `user_votes` record
+5. The PR table shows a **My Vote** column reflecting the decision, with row highlight (green = agree with majority, red = disagree)
+
+### Vote constraints
+
+- One vote per user per PR (enforced in both D1 and the UI)
+- Voting only permitted on open PRs
+- Reject votes require a `summary` (reason); Accept/Modify require `confidence` (Low/Medium/High) and a `summary`
+- All text fields capped at 2000 characters
+
+### Comment format
+
+Accept/Modify votes post:
+```
+Validation summary:
+
+|  |  |
+| :-- | :-- |
+| Decision | Accept |
+| Confidence | High |
+| Summary | ... |
+| Next step | ... |
+```
+
+Reject votes post:
+```
+Rejection summary:
+
+|  |  |
+| :-- | :-- |
+| Decision | Reject |
+| Reason | ... |
+| Blocking issues | ... |
+| To reconsider | ... |
+```
+
+---
+
+## PR Panel
+
+The PR Panel is a slide-out side panel that loads live GitHub data for any PR in the leaderboard.
+
+### API endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/pr-panel/:id/details` | GET | PR metadata: title, state, author, CWE/CVE/CVSS parsed from title and body, TL;DR, detection tool, additions/deletions |
+| `/api/pr-panel/:id/files` | GET | Changed files list with unified patch hunks |
+| `/api/pr-panel/:id/comments` | GET | All GitHub issue comments with reactions and OASIS decision parsing |
+| `/api/pr-panel/:id/react` | POST | Add a GitHub reaction to a comment using the user's OAuth token (requires auth) |
+
+All endpoints look up `repo_name` and PR `number` from D1 by the internal `id`, then proxy the relevant GitHub REST API endpoint using the server-side `GITHUB_TOKEN`. The `react` endpoint uses the user's session token so reactions appear as the authenticated user.
+
+### Frontend tabs
+
+| Tab | Content |
+|---|---|
+| Summary | CWE ID and description, CVE/CAPEC/CVSS, severity, TL;DR, detection tool, consensus vote counts, participant count |
+| Body | Full PR description rendered as GitHub-flavoured markdown, including Mermaid diagrams and `<details>`/`<summary>` HTML |
+| Changes | Per-file diff with syntax-aware side-by-side or unified view; additions highlighted green, deletions red |
+| Comments | GitHub issue comments with author avatar, OASIS decision badge (Accept/Modify/Reject), emoji reactions |
+| PR | Direct link to open the PR on GitHub |
+
+---
+
+## Feedback
+
+`POST /api/feedback` creates a GitHub issue in the `owasp-oasis/owasp-oasis-app` repository tagged `preview-feedback`. The form is accessible from the PreviewBanner.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `description` | string | Yes | 10–5000 characters |
+| `severity` | string | No | `bug`, `suggestion`, or `other` (default) |
+| `contact` | string | No | Max 200 characters; included in the issue body |
+
+---
+
+## Admin endpoint
+
+`GET /api/admin/registrations` returns all registration rows (id, name, email, github, role, created_at). Protected by the `ADMIN_SECRET` environment variable — pass it in the `X-Admin-Secret` header.
+
+```bash
+curl https://preview.owasp-oasis.org/api/admin/registrations \
+  -H "X-Admin-Secret: <your-secret>"
+```
 
 ---
 
@@ -163,13 +378,24 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 Secrets are set per-worker. The preview and production workers each need their own copy.
 
 ```bash
-# Set a secret on the preview worker
-wrangler secret put GITHUB_TOKEN --name owasp-oasis-app-preview
-wrangler secret put ADMIN_SECRET  --name owasp-oasis-app-preview
+# Set secrets on the preview worker
+wrangler secret put GITHUB_TOKEN        --name owasp-oasis-app-preview
+wrangler secret put ADMIN_SECRET        --name owasp-oasis-app-preview
+wrangler secret put GITHUB_CLIENT_ID    --name owasp-oasis-app-preview
+wrangler secret put GITHUB_CLIENT_SECRET --name owasp-oasis-app-preview
 
 # List secrets on the preview worker
 wrangler secret list --name owasp-oasis-app-preview
 ```
+
+### Required secrets
+
+| Secret | Purpose |
+|---|---|
+| `GITHUB_TOKEN` | Service account PAT — used by sync engine and PR panel proxy. Needs `public_repo` scope. Must belong to a member of the `owasp-oasis` GitHub org. |
+| `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Send via `X-Admin-Secret` header. |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
 
 The `GITHUB_TOKEN` must have `public_repo` scope and belong to a member of the `owasp-oasis` GitHub org.
 

@@ -149,8 +149,17 @@ wrangler secret list --name owasp-oasis-app-preview
 
 | Secret | Purpose |
 |---|---|
-| `GITHUB_TOKEN` | GitHub PAT used by the sync engine to read `owasp-oasis` org repos, PRs, and comments. Needs `public_repo` scope. |
+| `GITHUB_TOKEN` | GitHub PAT used by the sync engine and PR panel proxy to read `owasp-oasis` org repos, PRs, comments, and files. Needs `public_repo` scope. |
 | `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Sent via `X-Admin-Secret` header. |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in (vote, react). |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
+
+The OAuth App must be configured separately per environment:
+
+- **Preview**: callback URL `https://preview.owasp-oasis.org/api/auth/callback`
+- **Production**: callback URL `https://www.owasp-oasis.org/api/auth/callback`
+
+Create OAuth Apps at https://github.com/organizations/owasp-oasis/settings/applications (org-level) or https://github.com/settings/developers (personal).
 
 ---
 
@@ -175,12 +184,34 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="SELECT login, prs_worked, total_interactions, reputation FROM contributors ORDER BY reputation DESC"
 
+# View active user sessions
+wrangler d1 execute oasis-db --remote \
+  --command="SELECT session_id, github_login, created_at, expires_at FROM user_sessions ORDER BY created_at DESC"
+
+# View votes cast
+wrangler d1 execute oasis-db --remote \
+  --command="SELECT github_login, pr_id, decision, voted_at FROM user_votes ORDER BY voted_at DESC"
+
 # Apply schema (fresh DB or adding new tables)
 wrangler d1 execute oasis-db --remote --file=schema.sql
 
 # Export registrations to CSV
 node export-db.js
 ```
+
+### Schema tables reference
+
+| Table | Description |
+|---|---|
+| `registrations` | Email sign-ups from the registration form |
+| `applications` | Extended sign-up form data (org, why, role) |
+| `repos` | GitHub repos in the `owasp-oasis` org, synced by cron |
+| `pull_requests` | All PRs from synced repos, with consensus vote counts |
+| `contributors` | Aggregated per-user validation stats (prs_worked, accepts, modifies, rejects, reactions_received) |
+| `pr_participants` | Per-PR per-user interaction records |
+| `sync_state` | Key/value store for sync cursor, last sync times, running flag |
+| `user_sessions` | Active GitHub OAuth sessions (30-day TTL; HttpOnly cookie maps to `session_id`) |
+| `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
 
 ---
 

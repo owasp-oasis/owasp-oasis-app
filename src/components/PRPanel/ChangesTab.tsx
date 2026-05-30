@@ -1,9 +1,17 @@
 /**
- * ChangesTab — side-by-side diff viewer for PR file changes.
+ * ChangesTab — diff viewer for PR file changes.
+ * Supports four view modes controlled by the parent panel:
+ *   split          — side-by-side, line-level highlighting
+ *   split+char     — side-by-side, intra-line character highlights on modified lines
+ *   unified        — single-column git-diff style
+ *   unified+char   — unified with intra-line character highlights
+ *
  * Fetches /api/pr-panel/:id/files on first activation.
- * Parses unified diff patches into paired left/right rows for display.
  */
 import { useState, useEffect } from 'react'
+import { diffChars } from 'diff'
+
+export type DiffView = 'split' | 'unified'
 
 interface FileEntry {
   filename: string
@@ -16,14 +24,16 @@ interface FileEntry {
 
 interface Props {
   prId: number
+  diffView: DiffView
+  charDiff: boolean
 }
 
 /* ── Diff row types ─────────────────────────────────────────── */
 type DiffRow =
   | { type: 'hunk';    text: string }
   | { type: 'context'; leftNum: number; rightNum: number; text: string }
-  | { type: 'del';     leftNum: number; text: string }
-  | { type: 'add';     rightNum: number; text: string }
+  | { type: 'del';     leftNum: number; text: string; pairId?: number }
+  | { type: 'add';     rightNum: number; text: string; pairId?: number }
 
 /** Parse a unified diff patch string into structured rows. */
 function parseDiff(patch: string): DiffRow[] {
@@ -31,7 +41,6 @@ function parseDiff(patch: string): DiffRow[] {
   let leftLine  = 0
   let rightLine = 0
 
-  // Buffer del lines to pair with following add lines
   const delBuf: { leftNum: number; text: string }[] = []
 
   function flushDels() {
@@ -40,11 +49,9 @@ function parseDiff(patch: string): DiffRow[] {
   }
 
   for (const raw of patch.split('\n')) {
-    // Hunk header: @@ -l,s +l,s @@
     const hunkMatch = raw.match(/^@@[^@]*@@(.*)/)
     if (hunkMatch) {
       flushDels()
-      // Extract start line numbers
       const nums = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
       if (nums) {
         leftLine  = parseInt(nums[1], 10)
@@ -55,7 +62,7 @@ function parseDiff(patch: string): DiffRow[] {
     }
 
     if (raw.startsWith('-') && !raw.startsWith('---')) {
-      flushDels() // flush previous dels before this new del
+      flushDels()
       delBuf.push({ leftNum: leftLine, text: raw.slice(1) })
       leftLine++
       continue
@@ -63,7 +70,6 @@ function parseDiff(patch: string): DiffRow[] {
 
     if (raw.startsWith('+') && !raw.startsWith('+++')) {
       if (delBuf.length > 0) {
-        // Pair add with a del if available
         const paired = delBuf.shift()!
         rows.push({ type: 'del', leftNum: paired.leftNum, text: paired.text })
         rows.push({ type: 'add', rightNum: rightLine, text: raw.slice(1) })
@@ -74,7 +80,6 @@ function parseDiff(patch: string): DiffRow[] {
       continue
     }
 
-    // Context line (or +++ / --- header)
     flushDels()
     if (!raw.startsWith('+++') && !raw.startsWith('---')) {
       rows.push({ type: 'context', leftNum: leftLine, rightNum: rightLine, text: raw.slice(1) })
@@ -87,9 +92,72 @@ function parseDiff(patch: string): DiffRow[] {
   return rows
 }
 
-/* ── Side-by-side table ─────────────────────────────────────── */
-function DiffTable({ patch }: { patch: string }) {
-  const rows = parseDiff(patch)
+/**
+ * Tag adjacent del→add pairs with a shared pairId so we know which rows
+ * to apply character-level diffs to. Mutates a copy of the rows array.
+ */
+function pairRows(rows: DiffRow[]): DiffRow[] {
+  const result = rows.map(r => ({ ...r })) as DiffRow[]
+  let pairCounter = 0
+  for (let i = 0; i < result.length - 1; i++) {
+    const curr = result[i]
+    const next = result[i + 1]
+    if (curr.type === 'del' && next.type === 'add') {
+      pairCounter++
+      ;(curr as Extract<DiffRow, { type: 'del' }>).pairId = pairCounter
+      ;(next as Extract<DiffRow, { type: 'add' }>).pairId = pairCounter
+      i++ // skip the add — it's already tagged
+    }
+  }
+  return result
+}
+
+/* ── Character-diff span renderer ───────────────────────────── */
+function CharSpans({
+  oldText,
+  newText,
+  side,
+}: {
+  oldText: string
+  newText: string
+  side: 'del' | 'add'
+}) {
+  const parts = diffChars(oldText, newText)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (side === 'del') {
+          if (part.added)   return null // not shown on del side
+          if (part.removed) return <span key={i} className="prp-char-del">{part.value}</span>
+          return <span key={i}>{part.value}</span>
+        } else {
+          if (part.removed) return null // not shown on add side
+          if (part.added)   return <span key={i} className="prp-char-add">{part.value}</span>
+          return <span key={i}>{part.value}</span>
+        }
+      })}
+    </>
+  )
+}
+
+/* ── Split (side-by-side) table ─────────────────────────────── */
+function SplitDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean }) {
+  const rows = pairRows(parseDiff(patch))
+
+  // Build a map from pairId → { delText, addText } for character diffing
+  const pairs = new Map<number, { delText: string; addText: string }>()
+  if (charDiff) {
+    for (const row of rows) {
+      if (row.type === 'del' && row.pairId !== undefined) {
+        const existing = pairs.get(row.pairId)
+        pairs.set(row.pairId, { delText: row.text, addText: existing?.addText ?? '' })
+      }
+      if (row.type === 'add' && row.pairId !== undefined) {
+        const existing = pairs.get(row.pairId)
+        pairs.set(row.pairId, { delText: existing?.delText ?? '', addText: row.text })
+      }
+    }
+  }
 
   return (
     <div className="prp-diff-wrap">
@@ -117,10 +185,16 @@ function DiffTable({ patch }: { patch: string }) {
             }
 
             if (row.type === 'del') {
+              const pair = charDiff && row.pairId !== undefined ? pairs.get(row.pairId) : null
               return (
                 <tr key={i}>
                   <td className="prp-diff-num">{row.leftNum}</td>
-                  <td className="prp-diff-cell prp-diff-cell--del">{'− ' + row.text}</td>
+                  <td className="prp-diff-cell prp-diff-cell--del">
+                    {'− '}
+                    {pair
+                      ? <CharSpans oldText={pair.delText} newText={pair.addText} side="del" />
+                      : row.text}
+                  </td>
                   <td className="prp-diff-sep" />
                   <td className="prp-diff-num" />
                   <td className="prp-diff-cell prp-diff-cell--empty" />
@@ -129,13 +203,98 @@ function DiffTable({ patch }: { patch: string }) {
             }
 
             // add
+            const pair = charDiff && row.pairId !== undefined ? pairs.get(row.pairId) : null
             return (
               <tr key={i}>
                 <td className="prp-diff-num" />
                 <td className="prp-diff-cell prp-diff-cell--empty" />
                 <td className="prp-diff-sep" />
                 <td className="prp-diff-num">{row.rightNum}</td>
-                <td className="prp-diff-cell prp-diff-cell--add">{'+ ' + row.text}</td>
+                <td className="prp-diff-cell prp-diff-cell--add">
+                  {'+ '}
+                  {pair
+                    ? <CharSpans oldText={pair.delText} newText={pair.addText} side="add" />
+                    : row.text}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── Unified diff table ──────────────────────────────────────── */
+function UnifiedDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean }) {
+  const rows = pairRows(parseDiff(patch))
+
+  const pairs = new Map<number, { delText: string; addText: string }>()
+  if (charDiff) {
+    for (const row of rows) {
+      if (row.type === 'del' && row.pairId !== undefined) {
+        const existing = pairs.get(row.pairId)
+        pairs.set(row.pairId, { delText: row.text, addText: existing?.addText ?? '' })
+      }
+      if (row.type === 'add' && row.pairId !== undefined) {
+        const existing = pairs.get(row.pairId)
+        pairs.set(row.pairId, { delText: existing?.delText ?? '', addText: row.text })
+      }
+    }
+  }
+
+  return (
+    <div className="prp-diff-wrap">
+      <table className="prp-diff-table prp-diff-table--unified">
+        <tbody>
+          {rows.map((row, i) => {
+            if (row.type === 'hunk') {
+              return (
+                <tr key={i} className="prp-diff-hunk-row">
+                  <td colSpan={4}>{row.text}</td>
+                </tr>
+              )
+            }
+
+            if (row.type === 'context') {
+              return (
+                <tr key={i}>
+                  <td className="prp-diff-num">{row.leftNum}</td>
+                  <td className="prp-diff-num">{row.rightNum}</td>
+                  <td className="prp-diff-gutter"> </td>
+                  <td className="prp-diff-cell prp-diff-cell--ctx prp-diff-cell--full">{row.text}</td>
+                </tr>
+              )
+            }
+
+            if (row.type === 'del') {
+              const pair = charDiff && row.pairId !== undefined ? pairs.get(row.pairId) : null
+              return (
+                <tr key={i}>
+                  <td className="prp-diff-num">{row.leftNum}</td>
+                  <td className="prp-diff-num" />
+                  <td className="prp-diff-gutter prp-diff-gutter--del">−</td>
+                  <td className="prp-diff-cell prp-diff-cell--del prp-diff-cell--full">
+                    {pair
+                      ? <CharSpans oldText={pair.delText} newText={pair.addText} side="del" />
+                      : row.text}
+                  </td>
+                </tr>
+              )
+            }
+
+            // add
+            const pair = charDiff && row.pairId !== undefined ? pairs.get(row.pairId) : null
+            return (
+              <tr key={i}>
+                <td className="prp-diff-num" />
+                <td className="prp-diff-num">{row.rightNum}</td>
+                <td className="prp-diff-gutter prp-diff-gutter--add">+</td>
+                <td className="prp-diff-cell prp-diff-cell--add prp-diff-cell--full">
+                  {pair
+                    ? <CharSpans oldText={pair.delText} newText={pair.addText} side="add" />
+                    : row.text}
+                </td>
               </tr>
             )
           })}
@@ -156,7 +315,7 @@ function statusClass(status: string): string {
 }
 
 /* ── Main component ─────────────────────────────────────────── */
-export default function ChangesTab({ prId }: Props) {
+export default function ChangesTab({ prId, diffView, charDiff }: Props) {
   const [files, setFiles]       = useState<FileEntry[] | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -172,7 +331,6 @@ export default function ChangesTab({ prId }: Props) {
         if (!d.ok) { setError(d.error ?? 'Failed to load files'); return }
         const f = d.files ?? []
         setFiles(f)
-        // Auto-expand all if ≤5 files
         if (f.length <= 5) setExpanded(new Set(f.map(x => x.filename)))
       })
       .catch(err => { if (!cancelled) setError((err as Error).message) })
@@ -221,7 +379,9 @@ export default function ChangesTab({ prId }: Props) {
 
             {isOpen && (
               file.patch
-                ? <DiffTable patch={file.patch} />
+                ? diffView === 'unified'
+                  ? <UnifiedDiffTable patch={file.patch} charDiff={charDiff} />
+                  : <SplitDiffTable   patch={file.patch} charDiff={charDiff} />
                 : <p className="prp-no-patch">No patch available (binary or large file).</p>
             )}
           </div>

@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import VoteForm, { type Decision } from '../VoteForm'
 import PRTab from './PRTab'
 import BodyTab from './BodyTab'
-import ChangesTab from './ChangesTab'
+import ChangesTab, { type DiffView } from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
 import './PRPanel.css'
@@ -106,6 +106,10 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
+
+  // Diff view controls — persisted across tab switches
+  const [diffView, setDiffView] = useState<DiffView>('split')
+  const [charDiff, setCharDiff] = useState(false)
 
   // Details fetch (shared by PR tab, Body tab, Summary tab)
   const [details, setDetails]     = useState<PRDetails | null>(null)
@@ -270,6 +274,26 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               {t.label}
             </button>
           ))}
+
+          {activeTab === 'changes' && (
+            <div className="prp-diff-controls">
+              <select
+                className="prp-diff-select"
+                aria-label="Diff view mode"
+                value={`${diffView}${charDiff ? '+char' : ''}`}
+                onChange={e => {
+                  const v = e.target.value
+                  setDiffView(v.startsWith('unified') ? 'unified' : 'split')
+                  setCharDiff(v.endsWith('+char'))
+                }}
+              >
+                <option value="split">Split</option>
+                <option value="split+char">Split + char diff</option>
+                <option value="unified">Unified</option>
+                <option value="unified+char">Unified + char diff</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Scrollable body */}
@@ -289,7 +313,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
             />
           )}
           {activeTab === 'changes' && (
-            <ChangesTab prId={activePR.id} />
+            <ChangesTab prId={activePR.id} diffView={diffView} charDiff={charDiff} />
           )}
           {activeTab === 'comments' && (
             <CommentsTab
