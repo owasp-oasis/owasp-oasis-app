@@ -29,11 +29,21 @@ const DECISION_LABELS: Record<Decision, string> = {
 
 const CONFIDENCE_OPTIONS = ['Low', 'Medium', 'High'] as const
 
+type NextStepSelection = 'Merge' | 'Revise' | 'Re-review' | 'other' | ''
+
+const NEXT_STEP_OPTIONS: { value: NextStepSelection; label: string }[] = [
+  { value: 'Merge',     label: 'Merge' },
+  { value: 'Revise',    label: 'Revise' },
+  { value: 'Re-review', label: 'Re-review' },
+  { value: 'other',     label: 'Other' },
+]
+
 export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Props) {
   const [decision, setDecision] = useState<Decision>(initialDecision)
   const [confidence, setConfidence] = useState<string>('Medium')
   const [summary, setSummary] = useState('')
-  const [nextStep, setNextStep] = useState('')
+  const [nextStepSelection, setNextStepSelection] = useState<NextStepSelection>('')
+  const [nextStepOther, setNextStepOther] = useState('')
   const [blockingIssues, setBlockingIssues] = useState('')
   const [toReconsider, setToReconsider] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
@@ -45,7 +55,8 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
     setDecision(initialDecision)
     // Reset fields on decision change so form is clean
     setSummary('')
-    setNextStep('')
+    setNextStepSelection('')
+    setNextStepOther('')
     setBlockingIssues('')
     setToReconsider('')
   }, [initialDecision])
@@ -61,6 +72,12 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!csrfToken) { setError('Missing security token — please refresh.'); return }
+    if (decision !== 'reject') {
+      if (!nextStepSelection) { setError('Please select a next step.'); return }
+      if (nextStepSelection === 'other' && !nextStepOther.trim()) {
+        setError('Please describe the next step.'); return
+      }
+    }
     setSubmitting(true)
     setError(null)
 
@@ -73,7 +90,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
       } else {
         body.confidence = confidence
         body.summary    = summary
-        body.next_step  = nextStep
+        body.next_step  = nextStepSelection === 'other' ? nextStepOther : nextStepSelection
       }
 
       const res = await fetch('/api/vote', {
@@ -152,16 +169,35 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
             />
           </div>
           <div className="vm-field">
-            <label className="vm-label" htmlFor="vf-next-step">Next step</label>
-            <input
-              id="vf-next-step"
-              className="vm-input"
-              type="text"
-              placeholder="e.g. Ready for upstream PR submission"
-              value={nextStep}
-              onChange={e => setNextStep(e.target.value)}
-              maxLength={500}
-            />
+            <label className="vm-label">
+              Next step <span className="vm-required">*</span>
+            </label>
+            <div className="vm-radio-group">
+              {NEXT_STEP_OPTIONS.map(opt => (
+                <label key={opt.value} className="vm-radio-label">
+                  <input
+                    type="radio"
+                    name="next-step"
+                    value={opt.value}
+                    checked={nextStepSelection === opt.value}
+                    onChange={() => setNextStepSelection(opt.value as NextStepSelection)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+            {nextStepSelection === 'other' && (
+              <input
+                className="vm-input"
+                type="text"
+                placeholder="Describe the next step…"
+                value={nextStepOther}
+                onChange={e => setNextStepOther(e.target.value)}
+                maxLength={500}
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+              />
+            )}
           </div>
         </>
       )}
@@ -220,7 +256,13 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
         <button
           type="submit"
           className={`vm-btn-submit vm-btn-submit--${decision}`}
-          disabled={submitting || !csrfToken}
+          disabled={
+            submitting || !csrfToken ||
+            (decision !== 'reject' && (
+              !nextStepSelection ||
+              (nextStepSelection === 'other' && !nextStepOther.trim())
+            ))
+          }
         >
           {submitting ? 'Posting…' : `Post ${DECISION_LABELS[decision]} vote`}
         </button>
