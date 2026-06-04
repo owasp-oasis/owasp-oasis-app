@@ -22,6 +22,7 @@ export default function Footer() {
           <NavLink to="/overview">Overview</NavLink>
           <NavLink to="/leaderboards">Leaderboards</NavLink>
           <NavLink to="/sponsors">Sponsors</NavLink>
+          <NavLink to="/brand">Brand Guide</NavLink>
         </nav>
 
         <div className="footer-external">

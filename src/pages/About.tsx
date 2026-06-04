@@ -29,6 +29,7 @@ export default function About() {
       <div className="page-hero">
         <div className="container">
           <h1>About OASIS</h1>
+          <p className="page-hero-longform">Open Automated Security Initiative for Software</p>
           <p>Where the idea came from, and the people making it happen.</p>
         </div>
       </div>

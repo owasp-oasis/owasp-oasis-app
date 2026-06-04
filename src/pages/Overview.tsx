@@ -121,6 +121,7 @@ export default function Overview() {
       <div className="page-hero">
         <div className="container">
           <h1>How OASIS Works</h1>
+          <p className="page-hero-longform">Open Automated Security Initiative for Software</p>
           <p>
             A practical, community-driven operating model that turns automated
             findings into human-validated upstream security improvements.

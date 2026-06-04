@@ -216,6 +216,19 @@ button {
   margin-bottom: 16px;
 }
 
+.page-hero-longform {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  margin-bottom: 10px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .page-hero p {
   font-size: 1.15rem;
   opacity: 0.85;

@@ -9,6 +9,7 @@ import Overview from './pages/Overview'
 import Leaderboards from './pages/Leaderboards'
 import Support from './pages/Support'
 import Sponsors from './pages/Sponsors'
+import BrandGuide from './pages/BrandGuide'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/leaderboards" element={<Leaderboards />} />
           <Route path="/support" element={<Support />} />
           <Route path="/sponsors" element={<Sponsors />} />
+          <Route path="/brand" element={<BrandGuide />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
