@@ -16,9 +16,11 @@ export const OAUTH_STATE_COOKIE = '__oauth_state';
 const SEC_HEADERS: Record<string, string> = {
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com",
-    "font-src https://fonts.gstatic.com",
+    // TODO(F9): Replace 'unsafe-inline' in script-src with a nonce/hash approach (e.g. vite-plugin-csp).
+    //           Fonts are now self-hosted so googleapis.com has been removed.
+    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com https://avatars.githubusercontent.com",
     "connect-src 'self'",
     "frame-ancestors 'none'",
@@ -33,7 +35,9 @@ const SEC_HEADERS: Record<string, string> = {
   'Strict-Transport-Security':    'max-age=63072000; includeSubDomains; preload',
   'Cross-Origin-Opener-Policy':   'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
+  // Changed from require-corp → credentialless (F10): require-corp blocked self-hosted fonts
+  // from being loaded when cross-origin resources lacked CORP headers.
+  'Cross-Origin-Embedder-Policy': 'credentialless',
 };
 
 export const ALLOWED_ORIGINS = [
@@ -116,6 +120,55 @@ export function validateCSRF(request: Request): boolean {
     diff |= cookieToken.charCodeAt(i) ^ headerToken.charCodeAt(i);
   }
   return diff === 0;
+}
+
+/* ─── GITHUB TOKEN ENCRYPTION ───────────────────────────────── */
+// AES-GCM using a 256-bit key derived from TOKEN_ENCRYPTION_KEY (env secret).
+// The cookie value is base64url(iv [12 bytes] || ciphertext).
+
+export const GH_TOKEN_COOKIE = '__gh_token';
+
+async function deriveKey(secret: string): Promise<CryptoKey> {
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+function b64urlEncode(buf: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+export async function encryptToken(secret: string, token: string): Promise<string> {
+  const key = await deriveKey(secret);
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const ct  = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(token),
+  );
+  // Concatenate iv + ciphertext then base64url-encode
+  const combined = new Uint8Array(iv.byteLength + ct.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ct), iv.byteLength);
+  return b64urlEncode(combined.buffer);
+}
+
+export async function decryptToken(secret: string, encoded: string): Promise<string | null> {
+  try {
+    const key  = await deriveKey(secret);
+    const data = b64urlDecode(encoded);
+    const iv   = data.slice(0, 12);
+    const ct   = data.slice(12);
+    const pt   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(pt);
+  } catch {
+    return null; // decryption failure → treat as missing token
+  }
 }
 
 /* ─── RATE LIMITING ──────────────────────────────────────────── */

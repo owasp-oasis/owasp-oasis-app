@@ -253,8 +253,9 @@ async function computeBonuses(
   };
 
   // Load all OASIS comments with their reaction summary
-  // If `since` is set, restrict to comments in the 90-day window
-  const sinceFilter = since ? `AND pc.created_at >= '${since}'` : '';
+  // If `since` is set, restrict to comments in the 90-day window.
+  // Use a bound parameter (never string-interpolated) — fallback to epoch when since is null.
+  const sinceDate = since ?? '1970-01-01T00:00:00.000Z';
   const commentRes = await db.prepare(`
     SELECT
       pc.id,
@@ -267,10 +268,10 @@ async function computeBonuses(
       SUM(CASE WHEN cr.is_positive = 0 THEN 1 ELSE 0 END)         AS negative_reactions
     FROM pr_comments pc
     LEFT JOIN comment_reactions cr ON cr.comment_id = pc.id
-    ${sinceFilter}
+    WHERE pc.created_at >= ?
     GROUP BY pc.id
     ORDER BY pc.pr_id, pc.created_at ASC
-  `).all<CommentRow>();
+  `).bind(sinceDate).all<CommentRow>();
 
   const comments = commentRes.results;
 
@@ -351,17 +352,17 @@ async function computeBaseScores(
   db: D1Database,
   since: string | null,
 ): Promise<Map<string, ScoreRow>> {
-  const sinceFilter     = since ? `AND pc.created_at >= '${since}'` : '';
-  const sinceFilterRxn  = since ? `AND pc2.created_at >= '${since}'` : '';
-  const sinceFilterPart = since ? `AND pc3.created_at >= '${since}'` : '';
+  // Use bound parameters for all date filters — never string-interpolated.
+  // Fallback to epoch when since is null (effectively no date restriction).
+  const sinceDate = since ?? '1970-01-01T00:00:00.000Z';
 
   // Step 1: comment_score — one point per OASIS comment posted
   const commentScoreRes = await db.prepare(`
     SELECT login, COUNT(*) AS comment_score
     FROM pr_comments pc
-    WHERE 1=1 ${sinceFilter}
+    WHERE pc.created_at >= ?
     GROUP BY login
-  `).all<{ login: string; comment_score: number }>();
+  `).bind(sinceDate).all<{ login: string; comment_score: number }>();
 
   // Step 2: peer_score — sum of peer_agreement values from reactions received
   // peer_agreement = 0.25 (base) + 0.10 (positive) or -0.50 (negative)
@@ -376,9 +377,9 @@ async function computeBaseScores(
       ) AS peer_score
     FROM comment_reactions cr
     JOIN pr_comments pc ON cr.comment_id = pc.id
-    WHERE 1=1 ${sinceFilterRxn}
+    WHERE pc.created_at >= ?
     GROUP BY pc.login
-  `).all<{ login: string; peer_score: number }>();
+  `).bind(sinceDate).all<{ login: string; peer_score: number }>();
 
   // Step 3: reaction_score — reactions GIVEN, capped at 5
   // Joins to pr_comments to enforce the since filter on the comment's date
@@ -387,9 +388,9 @@ async function computeBaseScores(
       MIN(COUNT(*), 5) * 0.25 AS reaction_score
     FROM comment_reactions cr
     JOIN pr_comments pc2 ON cr.comment_id = pc2.id
-    WHERE cr.reactor != pc2.login ${sinceFilterRxn}
+    WHERE cr.reactor != pc2.login AND pc2.created_at >= ?
     GROUP BY cr.reactor
-  `).all<{ login: string; reaction_score: number }>();
+  `).bind(sinceDate).all<{ login: string; reaction_score: number }>();
 
   // Step 4: trust_score — 10 × PRs accepted that were merged upstream
   const trustScoreRes = await db.prepare(`
@@ -398,9 +399,9 @@ async function computeBaseScores(
     FROM pr_participants ppart
     JOIN pull_requests pr ON ppart.pr_id = pr.id
     JOIN pr_comments pc3 ON pc3.pr_id = pr.id AND pc3.login = ppart.login
-    WHERE ppart.decision = 'accept' AND pr.merged_upstream = 1 ${sinceFilterPart}
+    WHERE ppart.decision = 'accept' AND pr.merged_upstream = 1 AND pc3.created_at >= ?
     GROUP BY ppart.login
-  `).all<{ login: string; trust_score: number }>();
+  `).bind(sinceDate).all<{ login: string; trust_score: number }>();
 
   // Merge all four score maps keyed by login
   const scores = new Map<string, ScoreRow>();

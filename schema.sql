@@ -164,13 +164,15 @@ INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
 
 -- ── Auth tables (OAuth sessions + per-user vote records) ─────────────────────────────────────
+-- Migration note for existing deployments: run the following once via Wrangler console:
+--   ALTER TABLE user_sessions DROP COLUMN github_token;
+-- The token is now stored only in an AES-GCM encrypted HttpOnly cookie (__gh_token).
 CREATE TABLE IF NOT EXISTS user_sessions (
   session_id   TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
   github_login TEXT NOT NULL,
   avatar_url   TEXT,
-  github_token TEXT NOT NULL,      -- user OAuth token, never returned to browser
   created_at   TEXT NOT NULL,
-  expires_at   TEXT NOT NULL       -- ISO-8601, 30 days from login
+  expires_at   TEXT NOT NULL       -- ISO-8601, 7 days from login
 );
 
 CREATE TABLE IF NOT EXISTS user_votes (

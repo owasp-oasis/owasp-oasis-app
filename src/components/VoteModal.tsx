@@ -1,6 +1,8 @@
 /**
  * VoteModal — overlay wrapper around VoteForm.
  * Kept for any future standalone use; PRPanel uses VoteForm directly.
+ *
+ * TODO: currently unused — VoteForm is embedded directly in PRPanel's vote drawer.
  */
 import { useEffect, useRef } from 'react'
 import VoteForm, { type Decision, type VoteFormPR } from './VoteForm'

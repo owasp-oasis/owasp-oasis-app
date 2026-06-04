@@ -3,10 +3,16 @@
  */
 
 import type { Env } from '../types.js';
-import { jsonOk, jsonErr } from '../security.js';
+import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
 import { parseBody } from '../validation.js';
 
 export async function handleFeedback(request: Request, env: Env): Promise<Response> {
+  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
+
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const rl = await checkRateLimit(env, ip);
+  if (!rl.allowed) return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
+
   const parsed = await parseBody(request);
   if (!parsed.ok) return jsonErr(parsed.error, 400, request);
   const body = parsed.val;

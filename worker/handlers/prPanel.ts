@@ -14,7 +14,7 @@
 
 import type { Env } from '../types.js';
 import { ghFetch, ghFetchAll, parseDecision, parseDetectionTool, ORG } from '../github.js';
-import { jsonOk, jsonErr } from '../security.js';
+import { jsonOk, jsonErr, validateCSRF } from '../security.js';
 import { getSession } from './auth.js';
 
 /* ─── REACTION TYPES ──────────────────────────────────────────── */
@@ -215,6 +215,8 @@ export async function handlePRComments(request: Request, env: Env, id: number): 
 
 /* ─── POST /api/pr-panel/:id/react ───────────────────────────── */
 export async function handlePRReact(request: Request, env: Env, id: number): Promise<Response> {
+  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
+
   // Require authentication — user's own token is used so reactions appear as them
   const session = await getSession(request, env);
   if (!session) return jsonErr('Sign in to react', 401, request);
@@ -256,7 +258,7 @@ export async function handlePRReact(request: Request, env: Env, id: number): Pro
   );
 
   if (ghRes.status === 403) {
-    return jsonErr('Re-authenticate to enable reactions (missing write:discussion scope)', 403, request);
+    return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
   }
   if (!ghRes.ok) {
     const text = await ghRes.text().catch(() => 'unknown error');

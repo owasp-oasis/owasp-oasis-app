@@ -106,6 +106,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
+  const [showSignIn, setShowSignIn]     = useState(false)
 
   // Details fetch (shared by PR tab, Body tab, Summary tab)
   const [details, setDetails]     = useState<PRDetails | null>(null)
@@ -156,10 +157,9 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
 
   if (!pr) return null
 
-  const activePR  = pr  // narrowed to PanelPR (non-null)
-  const isOpen    = activePR.state === 'open'
-  const myVote    = myVotes.get(activePR.id) ?? null
-  const panelOpen = true
+  const activePR = pr  // narrowed to PanelPR (non-null)
+  const isOpen   = activePR.state === 'open'
+  const myVote   = myVotes.get(activePR.id) ?? null
 
   function handleVoteSuccess(decision: Decision) {
     setVoteDecision(null)
@@ -198,9 +198,10 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
 
   return (
     <>
+      {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
       <div className="prp-backdrop" onClick={onClose} aria-hidden="true" />
 
-      <aside className={`prp-panel${panelOpen ? ' prp-panel--open' : ''}`}
+      <aside className="prp-panel prp-panel--open"
              role="complementary"
              aria-label={`PR #${activePR.number} details`}>
 
@@ -262,20 +263,20 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
           {tabs.map(t => (
             <button
               key={t.id}
+              id={`prp-tab-${t.id}`}
               role="tab"
               aria-selected={activeTab === t.id}
+              aria-controls="prp-tabpanel"
               className={`prp-tab${activeTab === t.id ? ' prp-tab--active' : ''}`}
               onClick={() => setActiveTab(t.id)}
             >
               {t.label}
             </button>
           ))}
-
-
         </div>
 
         {/* Scrollable body */}
-        <div className="prp-body" ref={bodyRef} role="tabpanel">
+        <div id="prp-tabpanel" className="prp-body" ref={bodyRef} role="tabpanel" aria-labelledby={`prp-tab-${activeTab}`}>
           {activeTab === 'pr' && (
             <PRTab
               details={details}
@@ -298,6 +299,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               prId={activePR.id}
               refetchTrigger={refetchComments}
               onCountLoaded={setCommentCount}
+              onSignInRequired={() => setShowSignIn(true)}
             />
           )}
           {activeTab === 'summary' && (

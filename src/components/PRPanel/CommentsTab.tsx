@@ -31,16 +31,18 @@ interface Props {
   prId: number
   refetchTrigger: number
   onCountLoaded: (n: number) => void
+  onSignInRequired?: () => void
 }
 
 const REACTION_EMOJIS: { key: keyof Omit<Reactions, 'total_count'>; emoji: string; label: string }[] = [
-  { key: '+1',     emoji: '👍', label: 'thumbs up' },
-  { key: '-1',     emoji: '👎', label: 'thumbs down' },
-  { key: 'heart',  emoji: '❤️', label: 'heart' },
-  { key: 'hooray', emoji: '🎉', label: 'hooray' },
-  { key: 'confused', emoji: '😕', label: 'confused' },
-  { key: 'rocket', emoji: '🚀', label: 'rocket' },
-  { key: 'eyes',   emoji: '👀', label: 'eyes' },
+  { key: '+1',      emoji: '👍', label: 'thumbs up' },
+  { key: '-1',      emoji: '👎', label: 'thumbs down' },
+  { key: 'laugh',   emoji: '😄', label: 'laugh' },
+  { key: 'hooray',  emoji: '🎉', label: 'hooray' },
+  { key: 'confused',emoji: '😕', label: 'confused' },
+  { key: 'heart',   emoji: '❤️', label: 'heart' },
+  { key: 'rocket',  emoji: '🚀', label: 'rocket' },
+  { key: 'eyes',    emoji: '👀', label: 'eyes' },
 ]
 
 function formatRelative(dateStr: string): string {
@@ -55,13 +57,23 @@ function formatRelative(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
-export default function CommentsTab({ prId, refetchTrigger, onCountLoaded }: Props) {
+export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSignInRequired }: Props) {
   const { user } = useAuth()
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [csrfToken, setCsrfToken] = useState<string | null>(null)
   // Map of commentId → reaction → pendingCount delta (for optimistic updates)
   const [reactionErrors, setReactionErrors] = useState<Map<number, string>>(new Map())
+
+  // Fetch CSRF token once the user is authenticated
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/csrf', { credentials: 'include' })
+      .then(r => r.json() as Promise<{ token: string }>)
+      .then(d => setCsrfToken(d.token))
+      .catch(() => {/* non-fatal — reactions simply won't be available */})
+  }, [user])
 
   const fetchComments = useCallback(() => {
     setLoading(true)
@@ -81,7 +93,11 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded }: Pro
 
   async function handleReact(commentId: number, reaction: string) {
     if (!user) {
-      window.location.href = '/api/auth/login'
+      if (onSignInRequired) {
+        onSignInRequired()
+      } else {
+        window.location.href = '/api/auth/login'
+      }
       return
     }
 
@@ -99,7 +115,10 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded }: Pro
       const res = await fetch(`/api/pr-panel/${prId}/react`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        },
         body: JSON.stringify({ comment_id: commentId, reaction }),
       })
 

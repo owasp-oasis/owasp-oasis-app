@@ -76,9 +76,16 @@ function syncRegistrations() {
 }
 
 // ─── SET SECRET (run once manually after pasting) ─────────────
+// SECURITY(F1): NEVER commit a real ADMIN_SECRET value here.
+// This file is version-controlled. The placeholder below must remain a placeholder.
+// To set the secret:
+//   1. Generate a strong random value (e.g. openssl rand -base64 32)
+//   2. Paste ONLY into this function locally, run setSecrets() once from the Apps Script editor
+//   3. Immediately revert this file to the placeholder before committing
+//   4. The production value must also be set via: wrangler secret put ADMIN_SECRET
 function setSecrets() {
   PropertiesService.getScriptProperties().setProperties({
-    'ADMIN_SECRET': 'oasis-admin-2026-xK9mP3q7*',  // change this then run once
+    'ADMIN_SECRET': 'REPLACE_WITH_STRONG_SECRET_NEVER_COMMIT',  // see instructions above
   });
   Logger.log('Secret saved to Script Properties.');
 }

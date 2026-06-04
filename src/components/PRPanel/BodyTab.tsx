@@ -23,7 +23,7 @@ export default function BodyTab({ body, loading, error }: Props) {
     import('mermaid').then(mod => {
       if (cancelled) return
       const mermaid = mod.default
-      mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
+      mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict' })
       mermaid.run({ querySelector: '.prp-mermaid' }).catch(() => {/* non-fatal */})
     }).catch(() => {/* non-fatal — mermaid load failure just leaves raw DSL visible */})
 

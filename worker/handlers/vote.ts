@@ -186,18 +186,16 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
         ? 'consensus_modify'
         : 'consensus_reject';
 
-    // Count distinct OASIS participants (those with decision != null) after our insert
-    const participantCount = await env.DB.prepare(
-      "SELECT COUNT(*) as c FROM pr_participants WHERE pr_id = ? AND decision IS NOT NULL",
-    ).bind(pr.id).first<{ c: number }>();
-
+    // Atomically increment consensus + participant count via subquery (avoids TOCTOU race)
     await env.DB.prepare(
       `UPDATE pull_requests
        SET ${consensusCol} = ${consensusCol} + 1,
            oasis_comment_count = oasis_comment_count + 1,
-           participants = ?
+           participants = (
+             SELECT COUNT(*) FROM pr_participants WHERE pr_id = ? AND decision IS NOT NULL
+           )
        WHERE id = ?`,
-    ).bind(participantCount?.c ?? 1, pr.id).run();
+    ).bind(pr.id, pr.id).run();
   } catch (err) {
     console.error('pull_requests update error:', (err as Error)?.message);
   }

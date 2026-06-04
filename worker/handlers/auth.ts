@@ -13,15 +13,20 @@ import {
   generateCSRF,
   getCookieValue,
   validateCSRF,
+  encryptToken,
+  decryptToken,
   jsonOk,
   jsonErr,
   SESSION_COOKIE,
   OAUTH_STATE_COOKIE,
+  GH_TOKEN_COOKIE,
 } from '../security.js';
 
 /* ─── CALLBACK URL ────────────────────────────────────────────── */
+// TODO(security): Externalize CALLBACK_URL to an env var (OAUTH_CALLBACK_URL) so it works
+// correctly across preview, staging, and production environments without code changes.
 const CALLBACK_URL = 'https://preview.owasp-oasis.org/api/auth/callback';
-const SESSION_TTL_DAYS = 30;
+const SESSION_TTL_DAYS = 7;
 
 /* ─── SHARED: look up a valid session ────────────────────────── */
 export interface SessionUser {
@@ -35,10 +40,20 @@ export async function getSession(_request: Request, env: Env, sessionId?: string
   const sid = sessionId ?? getCookieValue(_request, SESSION_COOKIE);
   if (!sid || !/^[0-9a-f]{64}$/.test(sid)) return null;
   const now = new Date().toISOString();
+
+  // Fetch session metadata from D1 (no token stored there)
   const row = await env.DB.prepare(
-    'SELECT session_id, github_login, avatar_url, github_token FROM user_sessions WHERE session_id = ? AND expires_at > ?',
-  ).bind(sid, now).first<SessionUser>();
-  return row ?? null;
+    'SELECT session_id, github_login, avatar_url FROM user_sessions WHERE session_id = ? AND expires_at > ?',
+  ).bind(sid, now).first<Omit<SessionUser, 'github_token'>>();
+  if (!row) return null;
+
+  // Decrypt GitHub token from the encrypted HttpOnly cookie
+  const encryptedToken = getCookieValue(_request, GH_TOKEN_COOKIE);
+  const github_token = encryptedToken
+    ? await decryptToken(env.TOKEN_ENCRYPTION_KEY, encryptedToken)
+    : null;
+
+  return { ...row, github_token: github_token ?? '' };
 }
 
 /* ─── GET /api/auth/login ─────────────────────────────────────── */
@@ -47,7 +62,10 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
   const params = new URLSearchParams({
     client_id:    env.GITHUB_CLIENT_ID,
     redirect_uri: CALLBACK_URL,
-    scope:        'public_repo write:discussion',
+    // TODO(security): public_repo grants write access to all public repos the user can access.
+    // GitHub does not offer a narrower scope for issue comment reactions on public repos.
+    // write:discussion was removed — it is for GitHub Discussions, not PR/issue comment reactions.
+    scope:        'public_repo',
     state,
   });
   const githubUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
@@ -57,7 +75,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
     status:  302,
     headers: {
       Location:   githubUrl,
-      'Set-Cookie': `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+      'Set-Cookie': `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=600`,
     },
   });
   // Add security headers (minus COEP/COOP/CORP which break redirects in some browsers)
@@ -124,29 +142,39 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
     return redirectWithError('/leaderboards', 'GitHub user fetch error');
   }
 
-  // Create session in D1
+  // Create session in D1 (token is NOT stored in the database)
   const sessionId = generateCSRF(); // 64-char hex
   const now = new Date();
-  const expires = new Date(now.getTime() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const ttlSeconds = SESSION_TTL_DAYS * 24 * 60 * 60;
+  const expires = new Date(now.getTime() + ttlSeconds * 1000);
 
   try {
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO user_sessions (session_id, github_login, avatar_url, github_token, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).bind(sessionId, login, avatarUrl, accessToken, now.toISOString(), expires.toISOString()).run();
+      `INSERT OR REPLACE INTO user_sessions (session_id, github_login, avatar_url, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).bind(sessionId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
   } catch {
     return redirectWithError('/leaderboards', 'Session creation failed');
   }
 
-  // Redirect to leaderboards with session cookie set.
+  // Encrypt the OAuth token for storage in a separate HttpOnly cookie.
+  // The token never touches the database.
+  let encryptedToken: string;
+  try {
+    encryptedToken = await encryptToken(env.TOKEN_ENCRYPTION_KEY, accessToken);
+  } catch {
+    return redirectWithError('/leaderboards', 'Token encryption failed');
+  }
+
+  // Redirect to leaderboards with session and token cookies set.
   // IMPORTANT: Set-Cookie must be separate headers — joining with ', ' breaks cookie parsing.
-  // Use Headers.append() to emit two distinct Set-Cookie headers.
   const callbackHeaders = new Headers({
     Location: '/leaderboards',
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   });
-  callbackHeaders.append('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
-  callbackHeaders.append('Set-Cookie', `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL_DAYS * 24 * 60 * 60}`);
+  callbackHeaders.append('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+  callbackHeaders.append('Set-Cookie', `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${ttlSeconds}`);
+  callbackHeaders.append('Set-Cookie', `${GH_TOKEN_COOKIE}=${encryptedToken}; Path=/api; HttpOnly; Secure; SameSite=Strict; Max-Age=${ttlSeconds}`);
   return new Response(null, { status: 302, headers: callbackHeaders });
 }
 
@@ -176,10 +204,8 @@ export async function handleLogout(request: Request, env: Env): Promise<Response
   }
 
   const r = jsonOk({ message: 'Logged out' }, request);
-  r.headers.set(
-    'Set-Cookie',
-    `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
-  );
+  r.headers.set('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+  r.headers.append('Set-Cookie', `${GH_TOKEN_COOKIE}=; Path=/api; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
   return r;
 }
 
@@ -193,8 +219,8 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function redirectWithError(path: string, _error: string): Response {
-  // In production log or pass error via URL param for debugging; for now just redirect
+function redirectWithError(path: string, error: string): Response {
+  console.error('[auth] redirectWithError:', error);
   return new Response(null, {
     status: 302,
     headers: {

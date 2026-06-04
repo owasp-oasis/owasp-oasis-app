@@ -13,6 +13,9 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "@fontsource/dm-serif-display": "^5.2.8",
     "diff": "^9.0.0",
     "mermaid": "^11.15.0",
     "react": "^19.2.5",

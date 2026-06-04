@@ -20,7 +20,12 @@ export function renderInline(text: string, key?: string): ReactNode {
     [/\*(.+?)\*/,                (m) => <em key={`e${i++}`}>{m[1]}</em>],
     [/_(.+?)_/,                  (m) => <em key={`e${i++}`}>{m[1]}</em>],
     [/`([^`]+)`/,                (m) => <code key={`c${i++}`} className="prp-md-inline-code">{m[1]}</code>],
-    [/\[([^\]]+)\]\(([^)]+)\)/,  (m) => <a key={`a${i++}`} href={m[2]} target="_blank" rel="noopener noreferrer" className="prp-md-link">{m[1]}</a>],
+    [/\[([^\]]+)\]\(([^)]+)\)/,  (m) => {
+      // Only allow safe URL schemes; block javascript:, data:, vbscript:, etc.
+      const rawHref = m[2].trim()
+      const safeHref = /^(https?:\/\/|#)/i.test(rawHref) ? rawHref : '#'
+      return <a key={`a${i++}`} href={safeHref} target="_blank" rel="noopener noreferrer" className="prp-md-link">{m[1]}</a>
+    }],
   ]
 
   while (remaining.length > 0) {

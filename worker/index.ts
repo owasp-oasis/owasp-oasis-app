@@ -165,7 +165,7 @@ export default {
           "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)",
         ).bind(new Date().toISOString()).run();
         const result = await runSyncOneRepo(env);
-        return Response.json(result);
+        return secHeaders(Response.json(result), request);
       }
 
       /* ── React SPA fallback via ASSETS ─────────────────────────── */
