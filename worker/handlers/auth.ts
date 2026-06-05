@@ -75,7 +75,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
     status:  302,
     headers: {
       Location:   githubUrl,
-      'Set-Cookie': `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=600`,
+      'Set-Cookie': `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
     },
   });
   // Add security headers (minus COEP/COOP/CORP which break redirects in some browsers)
