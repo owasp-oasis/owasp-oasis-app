@@ -21,7 +21,7 @@ const SEC_HEADERS: Record<string, string> = {
     "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com https://avatars.githubusercontent.com",
+    "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com https://avatars.githubusercontent.com https://github.com",
     "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -45,7 +45,7 @@ export const ALLOWED_ORIGINS = [
   'https://owasp-oasis.com',
   'https://www.owasp-oasis.org',
   'https://owasp-oasis.org',
-  'https://preview.owasp-oasis.bluejar.org',
+  'https://preview.owasp-oasis.org',
 ];
 
 export const ALLOWED_METHODS = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);

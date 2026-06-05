@@ -12,6 +12,7 @@ export interface Env {
   ADMIN_SECRET: string;
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
+  OAUTH_CALLBACK_URL: string;
 }
 
 export interface SyncResult {

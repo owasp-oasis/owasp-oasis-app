@@ -22,10 +22,6 @@ import {
   GH_TOKEN_COOKIE,
 } from '../security.js';
 
-/* ─── CALLBACK URL ────────────────────────────────────────────── */
-// TODO(security): Externalize CALLBACK_URL to an env var (OAUTH_CALLBACK_URL) so it works
-// correctly across preview, staging, and production environments without code changes.
-const CALLBACK_URL = 'https://preview.owasp-oasis.org/api/auth/callback';
 const SESSION_TTL_DAYS = 7;
 
 /* ─── SHARED: look up a valid session ────────────────────────── */
@@ -61,7 +57,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
   const state = generateCSRF(); // 32-byte hex = 64 chars
   const params = new URLSearchParams({
     client_id:    env.GITHUB_CLIENT_ID,
-    redirect_uri: CALLBACK_URL,
+    redirect_uri: env.OAUTH_CALLBACK_URL,
     // TODO(security): public_repo grants write access to all public repos the user can access.
     // GitHub does not offer a narrower scope for issue comment reactions on public repos.
     // write:discussion was removed — it is for GitHub Discussions, not PR/issue comment reactions.
@@ -112,7 +108,7 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
         client_id:     env.GITHUB_CLIENT_ID,
         client_secret: env.GITHUB_CLIENT_SECRET,
         code,
-        redirect_uri:  CALLBACK_URL,
+        redirect_uri:  env.OAUTH_CALLBACK_URL,
       }),
     });
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
