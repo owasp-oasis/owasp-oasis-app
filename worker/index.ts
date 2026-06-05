@@ -133,6 +133,30 @@ export default {
         }
       }
 
+      /* ── GET /api/admin/full-sync ───────────────────────────────
+       * Triggers a full cron-style sync (reactions enabled, all PRs).
+       * Unlike /leaderboard-refresh which uses the chunked manual sync
+       * (skipReactions=true), this calls runSync() directly — the same
+       * path the scheduled cron uses — so all comment_reactions rows
+       * are fetched and written.
+       *
+       * Use this after resetting last_synced_at to epoch to force a
+       * complete re-ingestion of all PR comment and reaction data.
+       *
+       * Protected by X-Admin-Secret header (same as /api/admin/registrations).
+       * ──────────────────────────────────────────────────────────── */
+      if (method === 'GET' && url.pathname === '/api/admin/full-sync') {
+        const secret    = request.headers.get('X-Admin-Secret');
+        const envSecret = env.ADMIN_SECRET ?? '';
+        if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
+        if (!env.DB) return jsonErr('DB not available', 503, request);
+        await env.DB.prepare(
+          "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
+        ).run();
+        const result = await runSync(env);
+        return secHeaders(Response.json(result), request);
+      }
+
       /* ── Leaderboard API ───────────────────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
         return await handleMeta(env, request);

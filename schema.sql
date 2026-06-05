@@ -112,12 +112,15 @@ CREATE TABLE IF NOT EXISTS pr_comments (
 
 -- comment_reactions: one row per reaction on an OASIS-template comment
 -- Used for: peer_score (reactions received), reaction_score (reactions given)
+-- UNIQUE(comment_id, reactor, content) ensures INSERT OR REPLACE correctly deduplicates
+-- reactions across repeated syncs (prevents inflation of peer_score / reaction_score).
 CREATE TABLE IF NOT EXISTS comment_reactions (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   comment_id  INTEGER NOT NULL,        -- FK → pr_comments.id
   reactor     TEXT    NOT NULL,        -- GitHub login of person who reacted
   content     TEXT    NOT NULL,        -- '+1', '-1', 'heart', 'hooray', 'rocket', 'laugh', 'confused', etc.
   is_positive INTEGER NOT NULL,        -- 1 = positive reaction, 0 = negative reaction
+  UNIQUE(comment_id, reactor, content),
   FOREIGN KEY (comment_id) REFERENCES pr_comments(id)
 );
 
