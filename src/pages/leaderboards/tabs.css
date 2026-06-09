@@ -243,6 +243,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  align-self: flex-start;
 }
 
 .pr-row-repo:hover {
