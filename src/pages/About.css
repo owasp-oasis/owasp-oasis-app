@@ -63,6 +63,13 @@
   align-items: flex-start;
 }
 
+.team-avatar-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
 .team-avatar {
   width: 64px;
   height: 64px;
@@ -75,6 +82,19 @@
   font-size: 1.3rem;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.team-avatar--photo {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.team-avatar--fallback {
+  position: absolute;
 }
 
 .team-avatar--advisor {

@@ -6,12 +6,14 @@ const team = [
     role: 'Project Lead & Technical Architect',
     bio: `Chris has run bug bounty programs and community for one of the world's largest bug bounty platforms, where distributed communities of experts proved they could do offensive security work at scale. That model — crowdsourced expertise applied to a hard problem — is exactly what OASIS brings to the defense side. When fix automation made it possible to generate candidate patches at speed, Chris saw the opportunity to build the community mechanism that would make those fixes credible and trustworthy for open source maintainers.`,
     github: 'humor4fun',
+    photoUrl: '/headshots/chris-holt.jpeg',
   },
   {
     name: 'Michael Cartsonis',
     role: 'Co-Founder',
     bio: `Michael brought the frustration of watching application security treated as an afterthought across the industry. AppSec professionals are some of the most capable people in technology — and in most organizations, they're denied the agency to act directly on that expertise. They sit outside the teams writing the code. They can see what's broken. They're rarely given the agency to help. OASIS changes that: a real pipeline of candidate fixes the AppSec community can validate and connect to the maintainers who need them.`,
     github: null,
+    photoUrl: '/headshots/michael-cartsonis.jpeg',
   },
 ]
 
@@ -102,8 +104,26 @@ export default function About() {
           <div className="team-grid">
             {team.map(member => (
               <div key={member.name} className="team-card">
-                <div className="team-avatar" aria-hidden="true">
-                  {member.name.split(' ').map(n => n[0]).join('')}
+                <div className="team-avatar-container">
+                  {member.photoUrl ? (
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="team-avatar team-avatar--photo"
+                      onError={e => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`team-avatar ${member.photoUrl ? 'team-avatar--fallback' : ''}`}
+                    aria-hidden="true"
+                    style={{ display: member.photoUrl ? 'none' : 'flex' }}
+                  >
+                    {member.name.split(' ').map(n => n[0]).join('')}
+                  </div>
                 </div>
                 <div className="team-info">
                   <h3>{member.name}</h3>
