@@ -33,7 +33,7 @@ export interface SyncStats {
 export interface ParticipantData {
   interactions: number;
   non_oasis_interactions: number;
-  decision: 'accept' | 'modify' | 'reject' | null;
+  decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null;
   reactions_received: number;
   reactions_given: number;  // reactions this contributor gave on OTHER people's OASIS comments
 }
@@ -48,7 +48,8 @@ export interface CommentData {
   repoName: string;
   prNumber: number;
   login: string;         // author of the comment
-  decision: 'accept' | 'modify' | 'reject' | null;
+  decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null;
+  duplicateOf?: number;  // cited parent PR id (for duplicate decisions; optional)
   createdAt: string;     // ISO-8601
   prCreatedAt: string;   // ISO-8601, denorm from pull_requests.created_at
 }

@@ -131,18 +131,25 @@ export async function upsertPR(
   syncStart: string,
 ): Promise<void> {
   const state = pr.state === 'open' ? 'open' : 'closed';
+  
+  // Preserve duplicate_of and closed_as_duplicate from existing row (if any)
+  const existing = await db.prepare(
+    'SELECT duplicate_of, closed_as_duplicate FROM pull_requests WHERE id = ?'
+  ).bind(pr.id).first<{ duplicate_of: number | null; closed_as_duplicate: number }>();
+
   await db.prepare(`
     INSERT OR REPLACE INTO pull_requests
       (id, repo_name, number, title, state, author, html_url, comment_count,
        oasis_comment_count, non_oasis_comment_count,
        participants, consensus_accept, consensus_modify, consensus_reject,
-       merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       duplicate_of, closed_as_duplicate, merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     pr.id, repoName, pr.number, pr.title, state,
     pr.user?.login ?? null, pr.html_url, commentCount,
     oasisCommentCount, nonOasisCommentCount,
     oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
+    existing?.duplicate_of ?? null, existing?.closed_as_duplicate ?? 0,
     mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
     pr.created_at, pr.updated_at, detectionTool, syncStart,
   ).run();
@@ -172,9 +179,9 @@ export async function upsertComments(db: D1Database, comments: CommentData[]): P
   for (const c of comments) {
     await db.prepare(`
       INSERT OR REPLACE INTO pr_comments
-        (id, pr_id, repo_name, pr_number, login, decision, created_at, pr_created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(c.id, c.prId, c.repoName, c.prNumber, c.login, c.decision ?? null, c.createdAt, c.prCreatedAt).run();
+        (id, pr_id, repo_name, pr_number, login, decision, duplicate_of, created_at, pr_created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(c.id, c.prId, c.repoName, c.prNumber, c.login, c.decision ?? null, c.duplicateOf ?? null, c.createdAt, c.prCreatedAt).run();
   }
 }
 
@@ -196,8 +203,134 @@ export async function updateRepoPRCount(db: D1Database, repoName: string, syncSt
   const openCount = await db.prepare(
     "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'",
   ).bind(repoName).first<{ c: number }>();
-  await db.prepare('UPDATE repos SET open_prs = ?, synced_at = ? WHERE name = ?')
-    .bind(openCount?.c ?? 0, syncStart, repoName).run();
+  const duplicateCount = await db.prepare(
+    "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND duplicate_of IS NOT NULL",
+  ).bind(repoName).first<{ c: number }>();
+  await db.prepare('UPDATE repos SET open_prs = ?, duplicate_count = ?, synced_at = ? WHERE name = ?')
+    .bind(openCount?.c ?? 0, duplicateCount?.c ?? 0, syncStart, repoName).run();
+}
+
+/**
+ * Rebuilds the duplicate relationship chains for all PRs with duplicate votes.
+ * For each PR with duplicate votes, re-resolves the chain and updates pull_requests.duplicate_of
+ * to point to the canonical root (in case parent's duplicate_of changed since votes were cast).
+ * Also handles auto-closing PRs when consensus + merged parent.
+ */
+export async function rebuildDuplicates(db: D1Database, token: string): Promise<{ closed: number }> {
+  let closedCount = 0;
+
+  // Get all PRs with duplicate votes
+  const prsWithDuplicates = await db.prepare(`
+    SELECT DISTINCT pr_id FROM user_votes WHERE decision = 'duplicate'
+  `).all<{ pr_id: number }>();
+
+  for (const row of prsWithDuplicates.results ?? []) {
+    const pr = await db.prepare(`
+      SELECT id, repo_name, number, state, duplicate_of FROM pull_requests WHERE id = ?
+    `).bind(row.pr_id).first<{
+      id: number; repo_name: string; number: number; state: string; duplicate_of: number | null;
+    }>();
+
+    if (!pr) continue;
+
+    // Get duplicate vote counts
+    const counts = await db.prepare(`
+      SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate
+      FROM pull_requests WHERE id = ?
+    `).bind(pr.id).first<{
+      consensus_accept: number;
+      consensus_modify: number;
+      consensus_reject: number;
+      consensus_duplicate: number;
+    }>();
+
+    // If consensus not reached on duplicate, skip
+    if (!counts || counts.consensus_duplicate <= Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject)) {
+      // Clear duplicate_of if consensus lost
+      await db.prepare('UPDATE pull_requests SET duplicate_of = NULL WHERE id = ?').bind(pr.id).run();
+      continue;
+    }
+
+    // Find the most-cited parent among duplicate votes
+    const parentCounts = await db.prepare(`
+      SELECT parent_pr_id, COUNT(*) as vote_count
+      FROM user_votes WHERE pr_id = ? AND decision = 'duplicate' AND parent_pr_id IS NOT NULL
+      GROUP BY parent_pr_id
+      ORDER BY vote_count DESC, voted_at ASC
+      LIMIT 1
+    `).bind(pr.id).first<{ parent_pr_id: number | null; vote_count: number }>();
+
+    if (!parentCounts?.parent_pr_id) continue;
+
+    // Resolve the chain to the canonical root
+    let current = parentCounts.parent_pr_id;
+    let hops = 0;
+    const maxHops = 10;
+    while (hops < maxHops) {
+      const next = await db.prepare(
+        'SELECT duplicate_of FROM pull_requests WHERE id = ?',
+      ).bind(current).first<{ duplicate_of: number | null }>();
+      if (!next?.duplicate_of) break;
+      current = next.duplicate_of;
+      hops++;
+    }
+
+    // Update duplicate_of to the resolved root
+    await db.prepare('UPDATE pull_requests SET duplicate_of = ? WHERE id = ?').bind(current, pr.id).run();
+
+    // Check if parent is merged/closed — if so, auto-close this PR
+    const parent = await db.prepare(`
+      SELECT id, state, merged_at FROM pull_requests WHERE id = ?
+    `).bind(current).first<{ id: number; state: string; merged_at: string | null }>();
+
+    if (parent && (parent.merged_at || parent.state === 'closed')) {
+      // Only close if PR is still open
+      if (pr.state === 'open') {
+        try {
+          // Post a comment to GitHub
+          const commentBody = `This PR has been classified as a duplicate of #${parent.id} which has been merged upstream. Closing as duplicate.`;
+          await fetch(
+            `https://api.github.com/repos/owasp-oasis/${pr.repo_name}/issues/${pr.number}/comments`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'oasis-worker-sync/1.0',
+              },
+              body: JSON.stringify({ body: commentBody }),
+            },
+          );
+
+          // Close the PR via GitHub API
+          await fetch(
+            `https://api.github.com/repos/owasp-oasis/${pr.repo_name}/pulls/${pr.number}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'oasis-worker-sync/1.0',
+              },
+              body: JSON.stringify({ state: 'closed' }),
+            },
+          );
+
+          // Mark in D1 as closed-as-duplicate
+          await db.prepare(
+            'UPDATE pull_requests SET closed_as_duplicate = 1, state = ? WHERE id = ?',
+          ).bind('closed', pr.id).run();
+          closedCount++;
+        } catch (err) {
+          console.error(`Failed to auto-close PR #${pr.number} in ${pr.repo_name}:`, (err as Error)?.message);
+        }
+      }
+    }
+  }
+
+  return { closed: closedCount };
 }
 
 export async function getExistingMergedUpstream(db: D1Database, repoName: string, prNumber: number): Promise<number> {
@@ -531,7 +664,7 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
 
   // ── Write back to contributors table ─────────────────────────
   for (const entry of entries) {
-    const existing = await db.prepare('SELECT avatar_url, prs_worked, total_interactions, non_oasis_interactions, reactions_received, accepts, modifies, rejects FROM contributors WHERE login = ?')
+    const existing = await db.prepare('SELECT avatar_url, prs_worked, total_interactions, non_oasis_interactions, reactions_received, accepts, modifies, rejects, duplicates FROM contributors WHERE login = ?')
       .bind(entry.login).first<{
         avatar_url: string | null;
         prs_worked: number;
@@ -541,6 +674,7 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
         accepts: number;
         modifies: number;
         rejects: number;
+        duplicates: number;
       }>();
 
     // Aggregate prs_worked, interactions, accepts etc. from pr_participants
@@ -552,7 +686,8 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
         SUM(reactions_received)                                      AS reactions_received,
         SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)        AS accepts,
         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)        AS modifies,
-        SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)        AS rejects
+        SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)        AS rejects,
+        SUM(CASE WHEN decision = 'duplicate' THEN 1 ELSE 0 END)     AS duplicates
       FROM pr_participants WHERE login = ?
     `).bind(entry.login).first<{
       prs_worked: number;
@@ -562,6 +697,7 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
       accepts: number;
       modifies: number;
       rejects: number;
+      duplicates: number;
     }>();
 
     const rank90d = rankMap.get(entry.login) ?? null;
@@ -571,12 +707,12 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
         (login, avatar_url,
          prs_worked, total_interactions, non_oasis_interactions,
          reactions_received, reactions_given,
-         accepts, modifies, rejects,
+         accepts, modifies, rejects, duplicates,
          comment_score, peer_score, reaction_score, trust_score,
          base_reputation, modified_reputation,
          rank_90d, rank_90d_oldest_activity,
          synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       entry.login,
       existing?.avatar_url ?? `https://github.com/${entry.login}.png?size=64`,
@@ -588,6 +724,7 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
       partRow?.accepts ?? 0,
       partRow?.modifies ?? 0,
       partRow?.rejects  ?? 0,
+      partRow?.duplicates ?? 0,
       Math.round(entry.comment_score  * 100) / 100,
       Math.round(entry.peer_score     * 100) / 100,
       Math.round(entry.reaction_score * 100) / 100,

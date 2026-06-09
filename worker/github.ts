@@ -115,10 +115,11 @@ export async function ghFetchAll<T = unknown>(path: string, token: string): Prom
 }
 
 /* ─── PARSERS ────────────────────────────────────────────────── */
-export function parseDecision(body: string | null): 'accept' | 'modify' | 'reject' | null {
+export function parseDecision(body: string | null): 'accept' | 'modify' | 'reject' | 'duplicate' | null {
   if (!body) return null;
   const lower = body.toLowerCase();
-  if (!lower.includes('validation summary:') && !lower.includes('rejection summary:')) return null;
+  if (!lower.includes('validation summary:') && !lower.includes('rejection summary:') && !lower.includes('duplicate report:')) return null;
+  if (lower.includes('duplicate report:') && lower.includes('duplicate')) return 'duplicate';
   if (lower.includes('rejection summary:') && lower.includes('reject')) return 'reject';
   if (lower.includes('validation summary:')) {
     for (const line of body.split('\n')) {
@@ -130,6 +131,44 @@ export function parseDecision(body: string | null): 'accept' | 'modify' | 'rejec
       }
     }
   }
+  return null;
+}
+
+/**
+ * Parses the Parent PR number from a Duplicate report comment.
+ * Looks for the "Parent PR" row in the markdown table and extracts the PR number.
+ * Handles formats: #123, https://github.com/.../pull/123, plain 123
+ * Returns the PR number (integer) or null if not found.
+ */
+export function parseDuplicateParent(body: string | null): number | null {
+  if (!body) return null;
+  const lower = body.toLowerCase();
+  if (!lower.includes('duplicate report:')) return null;
+  
+  // Look for "Parent PR" row in the table
+  const lines = body.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].toLowerCase();
+    if (line.includes('parent pr') || line.includes('parent')) {
+      // This might be the row with the PR reference
+      // Check the next few lines for a PR number in case formatting varies
+      const rowAndNext = (lines[i] + ' ' + (lines[i + 1] ?? '')).toLowerCase();
+      
+      // Try to extract PR number from various formats
+      // Format 1: #123
+      const match1 = rowAndNext.match(/#(\d+)/);
+      if (match1) return parseInt(match1[1], 10);
+      
+      // Format 2: /pull/123 or /pull/123)
+      const match2 = rowAndNext.match(/\/pull\/(\d+)/i);
+      if (match2) return parseInt(match2[1], 10);
+      
+      // Format 3: plain number
+      const match3 = rowAndNext.match(/\|\s*(\d+)\s*\|/);
+      if (match3) return parseInt(match3[1], 10);
+    }
+  }
+  
   return null;
 }
 

@@ -39,16 +39,17 @@ export async function handleMeta(env: Env, req: Request): Promise<Response> {
 
 export async function handleRepos(env: Env, req: Request, url: URL): Promise<Response> {
   const { sort, dir, q } = parseQuery(url);
-  const VALID = new Set(['name', 'language', 'open_prs', 'stars']);
+  const VALID = new Set(['name', 'language', 'open_prs', 'duplicate_count', 'stars']);
   const col   = VALID.has(sort) ? sort : 'open_prs';
   const rows  = await env.DB.prepare(`
     SELECT r.id, r.name, r.full_name, r.description, r.language,
-           r.open_prs, r.stars, r.upstream_url, r.synced_at,
+           r.open_prs, r.duplicate_count, r.stars, r.upstream_url, r.synced_at,
            (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name)                             AS total_prs,
            (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
            (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_accept,
            (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_modify,
-           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject
+           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject,
+           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_duplicate
     FROM repos r
     ORDER BY ${col} ${dir}
   `).all();
@@ -65,7 +66,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
   const { sort, dir, q } = parseQuery(url);
   const VALID = new Set(['repo_name','number','title','state','comment_count',
     'oasis_comment_count','non_oasis_comment_count','participants',
-    'consensus_accept','consensus_modify','consensus_reject','updated_at']);
+    'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const rows = await env.DB.prepare(`
     SELECT id, repo_name, number, title, state, author, html_url,
@@ -73,7 +74,8 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,
            participants,
-           consensus_accept, consensus_modify, consensus_reject,
+           consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
+           duplicate_of, closed_as_duplicate,
            merged_upstream, merged_at, created_at, updated_at
     FROM pull_requests ORDER BY ${col} ${dir} LIMIT 500
   `).all();
@@ -91,7 +93,7 @@ export async function handleContributors(env: Env, req: Request, url: URL): Prom
   const VALID = new Set([
     'login', 'prs_worked', 'total_interactions', 'non_oasis_interactions',
     'reactions_received', 'reactions_given',
-    'accepts', 'modifies', 'rejects',
+    'accepts', 'modifies', 'rejects', 'duplicates',
     'base_reputation', 'modified_reputation', 'rank_90d',
     'avg_per_pr',
   ]);
@@ -102,7 +104,7 @@ export async function handleContributors(env: Env, req: Request, url: URL): Prom
       COALESCE(c.non_oasis_interactions, 0) AS non_oasis_interactions,
       COALESCE(c.reactions_received, 0)     AS reactions_received,
       COALESCE(c.reactions_given, 0)        AS reactions_given,
-      c.accepts, c.modifies, c.rejects,
+      c.accepts, c.modifies, c.rejects, COALESCE(c.duplicates, 0) AS duplicates,
       COALESCE(c.base_reputation, 0)        AS base_reputation,
       COALESCE(c.modified_reputation, 0)    AS modified_reputation,
       c.rank_90d,
@@ -135,7 +137,7 @@ export async function handleContributorDetail(env: Env, req: Request, login: str
       COALESCE(non_oasis_interactions, 0) AS non_oasis_interactions,
       COALESCE(reactions_received, 0)     AS reactions_received,
       COALESCE(reactions_given, 0)        AS reactions_given,
-      accepts, modifies, rejects,
+      accepts, modifies, rejects, COALESCE(duplicates, 0) AS duplicates,
       COALESCE(comment_score, 0)          AS comment_score,
       COALESCE(peer_score, 0)             AS peer_score,
       COALESCE(reaction_score, 0)         AS reaction_score,

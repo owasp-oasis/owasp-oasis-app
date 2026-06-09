@@ -12,14 +12,14 @@
 
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
-  getSyncState, setSyncState, rebuildContributors,
+  getSyncState, setSyncState, rebuildContributors, rebuildDuplicates,
   upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
   updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
 import {
   ORG, META_REPOS,
   ghFetch, ghFetchAll,
-  parseDecision, parseDetectionTool, isAutomatedAccount, isValidatorBot, reactionPolarity,
+  parseDecision, parseDuplicateParent, parseDetectionTool, isAutomatedAccount, isValidatorBot, reactionPolarity,
   isHeadMergedUpstream, parseGitHubUrl,
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
@@ -60,7 +60,7 @@ async function processPR(
     `/repos/${ORG}/${repoName}/issues/${pr.number}/comments`, token,
   );
 
-  let consensusAccept = 0, consensusModify = 0, consensusReject = 0;
+  let consensusAccept = 0, consensusModify = 0, consensusReject = 0, consensusDuplicate = 0;
   let oasisCommentCount = 0, nonOasisCommentCount = 0;
 
   // Collect granular comment/reaction data for insertion into pr_comments / comment_reactions
@@ -82,6 +82,9 @@ async function processPR(
         if (decision === 'accept') consensusAccept++;
         if (decision === 'modify') consensusModify++;
         if (decision === 'reject') consensusReject++;
+        if (decision === 'duplicate') consensusDuplicate++;
+        
+        const duplicateOf = decision === 'duplicate' ? parseDuplicateParent(comment.body) ?? undefined : undefined;
         commentRows.push({
           id: comment.id,
           prId: pr.id,
@@ -89,6 +92,7 @@ async function processPR(
           prNumber: pr.number,
           login,
           decision,
+          duplicateOf,
           createdAt: comment.created_at,
           prCreatedAt: pr.created_at,
         });
@@ -105,6 +109,7 @@ async function processPR(
                 if (decision === 'accept') consensusAccept++;
                 if (decision === 'modify') consensusModify++;
                 if (decision === 'reject') consensusReject++;
+                if (decision === 'duplicate') consensusDuplicate++;
               }
               // Store reaction row for potential future use (peer_score not applied to bots)
               const polarity = reactionPolarity(rxn.content);
@@ -134,6 +139,10 @@ async function processPR(
       if (decision === 'accept') consensusAccept++;
       if (decision === 'modify') consensusModify++;
       if (decision === 'reject') consensusReject++;
+      if (decision === 'duplicate') consensusDuplicate++;
+
+      // For duplicate votes, parse the parent PR ID
+      const duplicateOf = decision === 'duplicate' ? parseDuplicateParent(comment.body) ?? undefined : undefined;
 
       // Store per-comment record for bonus computation and contribution history
       commentRows.push({
@@ -143,6 +152,7 @@ async function processPR(
         prNumber: pr.number,
         login,
         decision,
+        duplicateOf,
         createdAt: comment.created_at,
         prCreatedAt: pr.created_at,
       });
@@ -167,6 +177,7 @@ async function processPR(
               if (decision === 'accept') consensusAccept++;
               if (decision === 'modify') consensusModify++;
               if (decision === 'reject') consensusReject++;
+              if (decision === 'duplicate') consensusDuplicate++;
             }
 
             // Track how many reactions this reactor has GIVEN (for reaction_score)
@@ -209,6 +220,9 @@ async function processPR(
     }
   }
 
+  // Note: upsertPR is called without consensusDuplicate because the duplicate_of field
+  // is managed separately via rebuildDuplicates(), which runs after all PR syncs complete.
+  // This allows consensus to be checked and chain resolution to handle transitive updates.
   await upsertPR(
     db, pr, repoName, comments.length,
     oasisCommentCount, nonOasisCommentCount,
@@ -262,7 +276,12 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
       await updateRepoPRCount(db, repo.name, syncStart);
     }
 
+    // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
+    await rebuildDuplicates(db, token);
+    
+    // Rebuild contributor reputation scores
     await rebuildContributors(db, syncStart);
+    
     await setSyncState(db, 'last_synced_at', syncStart);
     await setSyncState(db, 'sync_running', '0');
     return { ok: true, message: `Sync complete at ${syncStart}`, stats };
@@ -306,7 +325,12 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
     // All repos processed — rebuild contributors and finish
     if (repoIdx >= repos.length) {
+      // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
+      await rebuildDuplicates(db, token);
+      
+      // Rebuild contributor reputation scores
       await rebuildContributors(db, syncStart);
+      
       await setSyncState(db, 'last_synced_at', syncStart);
       await setSyncState(db, 'sync_running', '0');
       await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();

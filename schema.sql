@@ -35,15 +35,16 @@ CREATE INDEX IF NOT EXISTS idx_applications_role   ON applications(role);
 -- Run each CREATE on a fresh DB; use ALTER TABLE for existing DBs.
 
 CREATE TABLE IF NOT EXISTS repos (
-  id           INTEGER PRIMARY KEY,
-  name         TEXT NOT NULL UNIQUE,
-  full_name    TEXT NOT NULL,
-  description  TEXT,
-  language     TEXT,
-  open_prs     INTEGER DEFAULT 0,
-  stars        INTEGER DEFAULT 0,
-  upstream_url TEXT,
-  synced_at    TEXT
+  id              INTEGER PRIMARY KEY,
+  name            TEXT NOT NULL UNIQUE,
+  full_name       TEXT NOT NULL,
+  description     TEXT,
+  language        TEXT,
+  open_prs        INTEGER DEFAULT 0,
+  duplicate_count INTEGER DEFAULT 0,  -- count of PRs marked as duplicates
+  stars           INTEGER DEFAULT 0,
+  upstream_url    TEXT,
+  synced_at       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pull_requests (
@@ -61,6 +62,9 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   consensus_accept        INTEGER DEFAULT 0,
   consensus_modify        INTEGER DEFAULT 0,
   consensus_reject        INTEGER DEFAULT 0,
+  consensus_duplicate     INTEGER DEFAULT 0,
+  duplicate_of            INTEGER DEFAULT NULL,  -- FK → pull_requests.id (canonical root after chain resolution)
+  closed_as_duplicate     INTEGER DEFAULT 0,     -- 1 if auto-closed because consensus + merged parent
   merged_upstream         INTEGER DEFAULT 0,
   head_sha                TEXT,
   merged_at               TEXT,
@@ -82,6 +86,7 @@ CREATE TABLE IF NOT EXISTS contributors (
   accepts                INTEGER DEFAULT 0,
   modifies               INTEGER DEFAULT 0,
   rejects                INTEGER DEFAULT 0,
+  duplicates             INTEGER DEFAULT 0,  -- duplicate decision count
   -- Reputation score components (pre-computed at sync time by rebuildContributors)
   comment_score          REAL    DEFAULT 0,  -- count of OASIS comments posted
   peer_score             REAL    DEFAULT 0,  -- peer agreement score from reactions received
@@ -104,7 +109,8 @@ CREATE TABLE IF NOT EXISTS pr_comments (
   repo_name     TEXT    NOT NULL,
   pr_number     INTEGER NOT NULL,
   login         TEXT    NOT NULL,
-  decision      TEXT,                  -- 'accept'|'modify'|'reject'|NULL
+  decision      TEXT,                  -- 'accept'|'modify'|'reject'|'duplicate'|NULL
+  duplicate_of  INTEGER DEFAULT NULL,  -- cited parent PR id (pre-resolution, for chain walking)
   created_at    TEXT    NOT NULL,      -- ISO-8601: when the comment was posted
   pr_created_at TEXT    NOT NULL,      -- ISO-8601: when the PR was created (denorm, for bonus calc)
   FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
@@ -131,10 +137,11 @@ CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment ON comment_reactions(co
 CREATE INDEX IF NOT EXISTS idx_comment_reactions_reactor ON comment_reactions(reactor);
 
 -- ── ALTER statements for existing databases ──────────────────────────────────────────────────
--- Run these on any D1 database created before the pr_comments/comment_reactions tables were added.
+-- Run these on any D1 database created before new features were added.
 -- Safe to run multiple times (SQLite ignores ADD COLUMN if column already exists... actually it errors,
 -- so run each only once or wrap in a migration script).
 --
+-- Older migrations (reputation engine):
 -- ALTER TABLE contributors ADD COLUMN reactions_given           INTEGER DEFAULT 0;
 -- ALTER TABLE contributors ADD COLUMN comment_score             REAL    DEFAULT 0;
 -- ALTER TABLE contributors ADD COLUMN peer_score                REAL    DEFAULT 0;
@@ -144,6 +151,15 @@ CREATE INDEX IF NOT EXISTS idx_comment_reactions_reactor ON comment_reactions(re
 -- ALTER TABLE contributors ADD COLUMN modified_reputation       REAL    DEFAULT 0;
 -- ALTER TABLE contributors ADD COLUMN rank_90d                  INTEGER;
 -- ALTER TABLE contributors ADD COLUMN rank_90d_oldest_activity  TEXT;
+--
+-- Duplicate feature migrations:
+-- ALTER TABLE pull_requests ADD COLUMN consensus_duplicate     INTEGER DEFAULT 0;
+-- ALTER TABLE pull_requests ADD COLUMN duplicate_of            INTEGER DEFAULT NULL;
+-- ALTER TABLE pull_requests ADD COLUMN closed_as_duplicate     INTEGER DEFAULT 0;
+-- ALTER TABLE repos ADD COLUMN duplicate_count                 INTEGER DEFAULT 0;
+-- ALTER TABLE contributors ADD COLUMN duplicates               INTEGER DEFAULT 0;
+-- ALTER TABLE pr_comments ADD COLUMN duplicate_of              INTEGER DEFAULT NULL;
+-- ALTER TABLE user_votes ADD COLUMN parent_pr_id               INTEGER DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS pr_participants (
   pr_id                  INTEGER NOT NULL,
@@ -183,7 +199,8 @@ CREATE TABLE IF NOT EXISTS user_votes (
   pr_id        INTEGER NOT NULL,
   repo_name    TEXT    NOT NULL,
   pr_number    INTEGER NOT NULL,
-  decision     TEXT    NOT NULL,   -- 'accept' | 'modify' | 'reject'
+  decision     TEXT    NOT NULL,   -- 'accept' | 'modify' | 'reject' | 'duplicate'
+  parent_pr_id INTEGER DEFAULT NULL,  -- cited parent PR id (for duplicate votes; null for others)
   comment_id   INTEGER,            -- GitHub comment ID (null if GitHub post failed)
   voted_at     TEXT    NOT NULL,
   PRIMARY KEY (github_login, pr_id)

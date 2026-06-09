@@ -52,8 +52,8 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   const decision = typeof body['decision'] === 'string' ? body['decision'].toLowerCase() : null;
 
   if (!prId || !Number.isInteger(prId) || prId < 1) return jsonErr('pr_id must be a positive integer', 400, request);
-  if (!decision || !['accept', 'modify', 'reject'].includes(decision)) {
-    return jsonErr('decision must be accept, modify, or reject', 400, request);
+  if (!decision || !['accept', 'modify', 'reject', 'duplicate'].includes(decision)) {
+    return jsonErr('decision must be accept, modify, reject, or duplicate', 400, request);
   }
 
   const confidence     = typeof body['confidence'] === 'string' ? body['confidence'].trim() : '';
@@ -61,8 +61,18 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   const nextStep       = typeof body['next_step'] === 'string' ? body['next_step'].trim() : '';
   const blockingIssues = typeof body['blocking_issues'] === 'string' ? body['blocking_issues'].trim() : '';
   const toReconsider   = typeof body['to_reconsider'] === 'string' ? body['to_reconsider'].trim() : '';
+  const notes          = typeof body['notes'] === 'string' ? body['notes'].trim() : '';
+  let parentPrId: number | null = null;
+  let resolvedParentId: number | null = null;
 
-  if (decision === 'reject') {
+  if (decision === 'duplicate') {
+    // Validate parent_pr_id for duplicate votes
+    parentPrId = typeof body['parent_pr_id'] === 'number' ? body['parent_pr_id'] : null;
+    if (!parentPrId || !Number.isInteger(parentPrId) || parentPrId < 1) {
+      return jsonErr('parent_pr_id must be a positive integer for duplicate votes', 400, request);
+    }
+    if (notes.length > 2000) return jsonErr('notes too long (max 2000 chars)', 400, request);
+  } else if (decision === 'reject') {
     if (!summary)        return jsonErr('summary (reason) is required for Reject', 400, request);
     if (summary.length > 2000) return jsonErr('summary too long (max 2000 chars)', 400, request);
     if (blockingIssues.length > 2000) return jsonErr('blocking_issues too long', 400, request);
@@ -74,6 +84,27 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
     if (!summary)       return jsonErr('summary is required', 400, request);
     if (summary.length > 2000) return jsonErr('summary too long (max 2000 chars)', 400, request);
     if (nextStep.length > 2000)  return jsonErr('next_step too long', 400, request);
+  }
+
+  // For duplicate votes: lookup parent PR and resolve any chain
+  if (decision === 'duplicate' && parentPrId) {
+    const parentPr = await env.DB.prepare(
+      'SELECT id, duplicate_of FROM pull_requests WHERE id = ?',
+    ).bind(parentPrId).first<{ id: number; duplicate_of: number | null }>();
+    if (!parentPr) return jsonErr(`Parent PR #${parentPrId} not found`, 404, request);
+
+    // Walk the duplicate_of chain to find the canonical root
+    let current = parentPr.duplicate_of;
+    let hops = 0;
+    const maxHops = 10;
+    while (current && hops < maxHops) {
+      const next = await env.DB.prepare(
+        'SELECT duplicate_of FROM pull_requests WHERE id = ?',
+      ).bind(current).first<{ duplicate_of: number | null }>();
+      current = next?.duplicate_of ?? null;
+      hops++;
+    }
+    resolvedParentId = current ?? parentPrId;
   }
 
   // 5. Duplicate vote check
@@ -92,9 +123,19 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   if (pr.state !== 'open') return jsonErr('Voting is only allowed on open PRs', 409, request);
 
   // 7. Build OASIS comment body matching comment_templates.md
-  const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : 'Reject';
+  const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : decision === 'reject' ? 'Reject' : 'Duplicate';
   let commentBody: string;
-  if (decision === 'reject') {
+  if (decision === 'duplicate') {
+    commentBody = [
+      'Duplicate report:',
+      '',
+      '| | |',
+      '| :-- | :-- |',
+      `| Decision | ${decisionLabel} |`,
+      `| Parent PR | #${parentPrId} |`,
+      `| Notes | ${notes || '—'} |`,
+    ].join('\n');
+  } else if (decision === 'reject') {
     commentBody = [
       'Rejection summary:',
       '',
@@ -149,7 +190,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 9. Write to D1 — all writes non-fatal individually so partial success is logged
   const now = new Date().toISOString();
-  const decisionKey = decision as 'accept' | 'modify' | 'reject';
+  const decisionKey = decision as 'accept' | 'modify' | 'reject' | 'duplicate';
 
   // Upsert pr_participants
   try {
@@ -184,9 +225,12 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       ? 'consensus_accept'
       : decisionKey === 'modify'
         ? 'consensus_modify'
-        : 'consensus_reject';
+        : decisionKey === 'reject'
+          ? 'consensus_reject'
+          : 'consensus_duplicate';
 
     // Atomically increment consensus + participant count via subquery (avoids TOCTOU race)
+    // For duplicate votes, also check if consensus has been reached and set duplicate_of if needed
     await env.DB.prepare(
       `UPDATE pull_requests
        SET ${consensusCol} = ${consensusCol} + 1,
@@ -196,6 +240,48 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
            )
        WHERE id = ?`,
     ).bind(pr.id, pr.id).run();
+
+    // For duplicate votes: check if consensus has been reached
+    if (decisionKey === 'duplicate') {
+      const counts = await env.DB.prepare(
+        `SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate
+         FROM pull_requests WHERE id = ?`,
+      ).bind(pr.id).first<{
+        consensus_accept: number;
+        consensus_modify: number;
+        consensus_reject: number;
+        consensus_duplicate: number;
+      }>();
+
+      if (counts && counts.consensus_duplicate > Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject)) {
+        // Consensus reached on duplicate — find the most-cited parent PR among duplicate votes
+        const parentCounts = await env.DB.prepare(
+          `SELECT parent_pr_id, COUNT(*) as vote_count
+           FROM user_votes WHERE pr_id = ? AND decision = 'duplicate'
+           GROUP BY parent_pr_id
+           ORDER BY vote_count DESC, voted_at ASC
+           LIMIT 1`,
+        ).bind(pr.id).first<{ parent_pr_id: number | null; vote_count: number }>();
+
+        if (parentCounts?.parent_pr_id) {
+          // Re-resolve the chain (in case parent's duplicate_of changed since votes were cast)
+          let current = parentCounts.parent_pr_id;
+          let hops = 0;
+          const maxHops = 10;
+          while (hops < maxHops) {
+            const next = await env.DB.prepare(
+              'SELECT duplicate_of FROM pull_requests WHERE id = ?',
+            ).bind(current).first<{ duplicate_of: number | null }>();
+            if (!next?.duplicate_of) break;
+            current = next.duplicate_of;
+            hops++;
+          }
+          await env.DB.prepare(
+            `UPDATE pull_requests SET duplicate_of = ? WHERE id = ?`,
+          ).bind(current, pr.id).run();
+        }
+      }
+    }
   } catch (err) {
     console.error('pull_requests update error:', (err as Error)?.message);
   }
@@ -203,10 +289,10 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   // Upsert contributors
   try {
     const contrib = await env.DB.prepare(
-      'SELECT prs_worked, total_interactions, accepts, modifies, rejects FROM contributors WHERE login = ?',
+      'SELECT prs_worked, total_interactions, accepts, modifies, rejects, duplicates FROM contributors WHERE login = ?',
     ).bind(session.github_login).first<{
       prs_worked: number; total_interactions: number;
-      accepts: number; modifies: number; rejects: number;
+      accepts: number; modifies: number; rejects: number; duplicates: number;
     }>();
 
     // Check if this user already had a participant row on another PR
@@ -218,7 +304,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       await env.DB.prepare(
         `UPDATE contributors
          SET prs_worked = ?, total_interactions = total_interactions + 1,
-             accepts = accepts + ?, modifies = modifies + ?, rejects = rejects + ?,
+             accepts = accepts + ?, modifies = modifies + ?, rejects = rejects + ?, duplicates = duplicates + ?,
              synced_at = ?
          WHERE login = ?`,
       ).bind(
@@ -226,6 +312,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
         decisionKey === 'accept' ? 1 : 0,
         decisionKey === 'modify' ? 1 : 0,
         decisionKey === 'reject' ? 1 : 0,
+        decisionKey === 'duplicate' ? 1 : 0,
         now,
         session.github_login,
       ).run();
@@ -233,8 +320,8 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       await env.DB.prepare(
         `INSERT INTO contributors
            (login, avatar_url, prs_worked, total_interactions, non_oasis_interactions,
-            reactions_received, accepts, modifies, rejects, synced_at)
-         VALUES (?, ?, ?, 1, 0, 0, ?, ?, ?, ?)`,
+            reactions_received, accepts, modifies, rejects, duplicates, synced_at)
+         VALUES (?, ?, ?, 1, 0, 0, ?, ?, ?, ?, ?)`,
       ).bind(
         session.github_login,
         session.avatar_url ?? `https://github.com/${session.github_login}.png?size=64`,
@@ -242,6 +329,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
         decisionKey === 'accept' ? 1 : 0,
         decisionKey === 'modify' ? 1 : 0,
         decisionKey === 'reject' ? 1 : 0,
+        decisionKey === 'duplicate' ? 1 : 0,
         now,
       ).run();
     }
@@ -252,14 +340,14 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   // Insert user_votes record
   try {
     await env.DB.prepare(
-      `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, commentId, now).run();
+      `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, commentId, now).run();
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
   }
 
-  return jsonOk({ comment_id: commentId, decision: decisionKey }, request);
+  return jsonOk({ comment_id: commentId, decision: decisionKey, parent_pr_id: resolvedParentId }, request);
 }
 
 /* ─── GET /api/votes/mine ────────────────────────────────────── */
