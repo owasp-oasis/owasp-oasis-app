@@ -104,6 +104,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
 
   const [activeTab, setActiveTab]       = useState<Tab>('summary')
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
+  const [drawerDecision, setDrawerDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
   const [showSignIn, setShowSignIn]     = useState(false)
@@ -123,12 +124,18 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
       prevPrId.current = pr.id
       setActiveTab('summary')
       setVoteDecision(null)
+      setDrawerDecision(null)
       setCommentCount(null)
       setDetails(null)
       setDetailsError(null)
       if (bodyRef.current) bodyRef.current.scrollTop = 0
     }
   }, [pr])
+
+  // Reset drawerDecision when top-level voteDecision button is clicked
+  useEffect(() => {
+    if (voteDecision) setDrawerDecision(voteDecision)
+  }, [voteDecision])
 
   // Fetch details when PR changes
   const fetchDetails = useCallback(() => {
@@ -176,6 +183,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     accept: 'Accept',
     modify: 'Modify',
     reject: 'Reject',
+    duplicate: 'Duplicate',
   }
 
   const stateClass = activePR.state === 'open' ? 'state-badge state-open' : 'state-badge state-closed'
@@ -223,10 +231,10 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
         </div>
 
         {/* Vote bar (open PRs only) */}
-        {isOpen && (
+         {isOpen && (
           <div className="prp-vote-bar">
             <span className="prp-vote-label">Your vote:</span>
-            {(['accept', 'modify', 'reject'] as Decision[]).map(d => {
+            {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
               const isVoted  = myVote === d
               const isOther  = !!myVote && myVote !== d
               const isActive = voteDecision === d && !myVote
@@ -311,29 +319,32 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
           )}
         </div>
 
-        {/* Vote form drawer */}
-        {voteDecision && !myVote && isOpen && (
-          <div className="prp-vote-form">
-            <div className="prp-vote-form-header">
-              <span className="prp-vote-form-title">
-                Cast your vote — {DECISION_LABELS[voteDecision]}
-              </span>
-              <button
-                className="prp-vote-form-close"
-                onClick={() => setVoteDecision(null)}
-                aria-label="Close vote form"
-              >
-                ✕
-              </button>
-            </div>
-            <VoteForm
-              pr={activePR}
-              initialDecision={voteDecision}
-              onClose={() => setVoteDecision(null)}
-              onSuccess={handleVoteSuccess}
-            />
-          </div>
-        )}
+         {/* Vote form drawer */}
+         {voteDecision && !myVote && isOpen && (
+           <div className="prp-vote-form">
+             <div className="prp-vote-form-header">
+               <span className="prp-vote-form-title">
+                 {(drawerDecision ?? voteDecision) === 'duplicate'
+                   ? 'Report Duplicate'
+                   : `Cast your vote — ${DECISION_LABELS[drawerDecision ?? voteDecision]}`}
+               </span>
+               <button
+                 className="prp-vote-form-close"
+                 onClick={() => setVoteDecision(null)}
+                 aria-label="Close vote form"
+               >
+                 ✕
+               </button>
+             </div>
+             <VoteForm
+               pr={activePR}
+               initialDecision={voteDecision}
+               onClose={() => setVoteDecision(null)}
+               onSuccess={handleVoteSuccess}
+               onDecisionChange={setDrawerDecision}
+             />
+           </div>
+         )}
       </aside>
     </>
   )

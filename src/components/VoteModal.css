@@ -166,6 +166,15 @@
   color: #7f1d1d;
 }
 
+/* Duplicate */
+.vm-decision-btn--duplicate         { color: #5b21b6; }
+.vm-decision-btn--duplicate:hover   { background: #f3f0ff; border-color: #5b21b6; }
+.vm-decision-btn--duplicate.vm-decision-btn--active {
+  background: #ede9fe;
+  border-color: #7c3aed;
+  color: #4c1d95;
+}
+
 /* ── Radio group ── */
 .vm-radio-group {
   display: flex;
@@ -289,6 +298,8 @@
 .vm-btn-submit--modify:hover:not(:disabled) { background: #b45309; }
 .vm-btn-submit--reject { background: #dc2626; }
 .vm-btn-submit--reject:hover:not(:disabled) { background: #b91c1c; }
+.vm-btn-submit--duplicate { background: #7c3aed; }
+.vm-btn-submit--duplicate:hover:not(:disabled) { background: #6d28d9; }
 
 /* ── Disclaimer ── */
 .vm-disclaimer {

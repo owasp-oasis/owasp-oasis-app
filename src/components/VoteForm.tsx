@@ -5,7 +5,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import './VoteModal.css'
 
-export type Decision = 'accept' | 'modify' | 'reject'
+export type Decision = 'accept' | 'modify' | 'reject' | 'duplicate'
 
 export interface VoteFormPR {
   id: number
@@ -19,12 +19,14 @@ interface Props {
   initialDecision: Decision
   onClose: () => void
   onSuccess: (decision: Decision) => void
+  onDecisionChange?: (decision: Decision) => void
 }
 
 const DECISION_LABELS: Record<Decision, string> = {
   accept: 'Accept',
   modify: 'Modify',
   reject: 'Reject',
+  duplicate: 'Duplicate',
 }
 
 const CONFIDENCE_OPTIONS = ['Low', 'Medium', 'High'] as const
@@ -38,7 +40,7 @@ const NEXT_STEP_OPTIONS: { value: NextStepSelection; label: string }[] = [
   { value: 'other',     label: 'Other' },
 ]
 
-export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Props) {
+export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDecisionChange }: Props) {
   const [decision, setDecision] = useState<Decision>(initialDecision)
   const [confidence, setConfidence] = useState<string>('Medium')
   const [summary, setSummary] = useState('')
@@ -46,6 +48,8 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
   const [nextStepOther, setNextStepOther] = useState('')
   const [blockingIssues, setBlockingIssues] = useState('')
   const [toReconsider, setToReconsider] = useState('')
+  const [parentPrNumber, setParentPrNumber] = useState('')
+  const [notes, setNotes] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +63,8 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
     setNextStepOther('')
     setBlockingIssues('')
     setToReconsider('')
+    setParentPrNumber('')
+    setNotes('')
   }, [initialDecision])
 
   // Fetch CSRF token on mount
@@ -72,7 +78,11 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!csrfToken) { setError('Missing security token — please refresh.'); return }
-    if (decision !== 'reject') {
+    if (decision === 'duplicate') {
+      if (!parentPrNumber || parseInt(parentPrNumber, 10) < 1) {
+        setError('Please enter a valid parent PR number.'); return
+      }
+    } else if (decision !== 'reject') {
       if (!nextStepSelection) { setError('Please select a next step.'); return }
       if (nextStepSelection === 'other' && !nextStepOther.trim()) {
         setError('Please describe the next step.'); return
@@ -83,7 +93,10 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
 
     try {
       const body: Record<string, unknown> = { pr_id: pr.id, decision }
-      if (decision === 'reject') {
+      if (decision === 'duplicate') {
+        body.parent_pr_number = parseInt(parentPrNumber, 10)
+        body.notes            = notes
+      } else if (decision === 'reject') {
         body.summary         = summary
         body.blocking_issues = blockingIssues
         body.to_reconsider   = toReconsider
@@ -120,12 +133,15 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
       <div className="vm-field">
         <label className="vm-label">Decision</label>
         <div className="vm-decision-group">
-          {(['accept', 'modify', 'reject'] as Decision[]).map(d => (
+          {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => (
             <button
               key={d}
               type="button"
               className={`vm-decision-btn vm-decision-btn--${d}${decision === d ? ' vm-decision-btn--active' : ''}`}
-              onClick={() => setDecision(d)}
+              onClick={() => {
+                setDecision(d)
+                onDecisionChange?.(d)
+              }}
             >
               {DECISION_LABELS[d]}
             </button>
@@ -134,7 +150,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
       </div>
 
       {/* Fields for Accept / Modify */}
-      {decision !== 'reject' && (
+      {(decision === 'accept' || decision === 'modify') && (
         <>
           <div className="vm-field">
             <label className="vm-label">Confidence</label>
@@ -247,6 +263,39 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
         </>
       )}
 
+      {/* Fields for Duplicate */}
+      {decision === 'duplicate' && (
+        <>
+          <div className="vm-field">
+            <label className="vm-label" htmlFor="vf-parent-pr">
+              Parent PR <span className="vm-required">*</span>
+            </label>
+            <input
+              id="vf-parent-pr"
+              className="vm-input"
+              type="number"
+              placeholder="e.g., 123"
+              min="1"
+              value={parentPrNumber}
+              onChange={e => setParentPrNumber(e.target.value)}
+              required
+            />
+          </div>
+          <div className="vm-field">
+            <label className="vm-label" htmlFor="vf-notes">Notes</label>
+            <textarea
+              id="vf-notes"
+              className="vm-textarea"
+              rows={3}
+              placeholder="Additional context (optional)…"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              maxLength={2000}
+            />
+          </div>
+        </>
+      )}
+
       {error && <p className="vm-error">{error}</p>}
 
       <div className="vm-footer">
@@ -254,16 +303,17 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess }: Pr
           Cancel
         </button>
         <button
-          type="submit"
-          className={`vm-btn-submit vm-btn-submit--${decision}`}
-          disabled={
-            submitting || !csrfToken ||
-            (decision !== 'reject' && (
-              !nextStepSelection ||
-              (nextStepSelection === 'other' && !nextStepOther.trim())
-            ))
-          }
-        >
+           type="submit"
+           className={`vm-btn-submit vm-btn-submit--${decision}`}
+           disabled={
+             submitting || !csrfToken ||
+             (decision === 'duplicate' && (!parentPrNumber || parseInt(parentPrNumber, 10) < 1)) ||
+             ((decision === 'accept' || decision === 'modify') && (
+               !nextStepSelection ||
+               (nextStepSelection === 'other' && !nextStepOther.trim())
+             ))
+           }
+         >
           {submitting ? 'Posting…' : `Post ${DECISION_LABELS[decision]} vote`}
         </button>
       </div>

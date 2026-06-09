@@ -62,14 +62,15 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   const blockingIssues = typeof body['blocking_issues'] === 'string' ? body['blocking_issues'].trim() : '';
   const toReconsider   = typeof body['to_reconsider'] === 'string' ? body['to_reconsider'].trim() : '';
   const notes          = typeof body['notes'] === 'string' ? body['notes'].trim() : '';
+  let parentPrNumber: number | null = null;
   let parentPrId: number | null = null;
   let resolvedParentId: number | null = null;
 
   if (decision === 'duplicate') {
-    // Validate parent_pr_id for duplicate votes
-    parentPrId = typeof body['parent_pr_id'] === 'number' ? body['parent_pr_id'] : null;
-    if (!parentPrId || !Number.isInteger(parentPrId) || parentPrId < 1) {
-      return jsonErr('parent_pr_id must be a positive integer for duplicate votes', 400, request);
+    // Validate parent_pr_number for duplicate votes (will be resolved to ID after we fetch current PR)
+    parentPrNumber = typeof body['parent_pr_number'] === 'number' ? body['parent_pr_number'] : null;
+    if (!parentPrNumber || !Number.isInteger(parentPrNumber) || parentPrNumber < 1) {
+      return jsonErr('parent_pr_number must be a positive integer for duplicate votes', 400, request);
     }
     if (notes.length > 2000) return jsonErr('notes too long (max 2000 chars)', 400, request);
   } else if (decision === 'reject') {
@@ -84,27 +85,6 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
     if (!summary)       return jsonErr('summary is required', 400, request);
     if (summary.length > 2000) return jsonErr('summary too long (max 2000 chars)', 400, request);
     if (nextStep.length > 2000)  return jsonErr('next_step too long', 400, request);
-  }
-
-  // For duplicate votes: lookup parent PR and resolve any chain
-  if (decision === 'duplicate' && parentPrId) {
-    const parentPr = await env.DB.prepare(
-      'SELECT id, duplicate_of FROM pull_requests WHERE id = ?',
-    ).bind(parentPrId).first<{ id: number; duplicate_of: number | null }>();
-    if (!parentPr) return jsonErr(`Parent PR #${parentPrId} not found`, 404, request);
-
-    // Walk the duplicate_of chain to find the canonical root
-    let current = parentPr.duplicate_of;
-    let hops = 0;
-    const maxHops = 10;
-    while (current && hops < maxHops) {
-      const next = await env.DB.prepare(
-        'SELECT duplicate_of FROM pull_requests WHERE id = ?',
-      ).bind(current).first<{ duplicate_of: number | null }>();
-      current = next?.duplicate_of ?? null;
-      hops++;
-    }
-    resolvedParentId = current ?? parentPrId;
   }
 
   // 5. Duplicate vote check
@@ -122,9 +102,32 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   if (!pr) return jsonErr('PR not found', 404, request);
   if (pr.state !== 'open') return jsonErr('Voting is only allowed on open PRs', 409, request);
 
+  // For duplicate votes: resolve parent_pr_number to database ID using same repo_name, then walk chain
+  if (decision === 'duplicate' && parentPrNumber) {
+    const parentPr = await env.DB.prepare(
+      'SELECT id, duplicate_of FROM pull_requests WHERE repo_name = ? AND number = ?',
+    ).bind(pr.repo_name, parentPrNumber).first<{ id: number; duplicate_of: number | null }>();
+    if (!parentPr) return jsonErr(`Parent PR #${parentPrNumber} not found in ${pr.repo_name}`, 404, request);
+
+    parentPrId = parentPr.id;
+
+    // Walk the duplicate_of chain to find the canonical root
+    let current = parentPr.duplicate_of;
+    let hops = 0;
+    const maxHops = 10;
+    while (current && hops < maxHops) {
+      const next = await env.DB.prepare(
+        'SELECT duplicate_of FROM pull_requests WHERE id = ?',
+      ).bind(current).first<{ duplicate_of: number | null }>();
+      current = next?.duplicate_of ?? null;
+      hops++;
+    }
+    resolvedParentId = current ?? parentPrId;
+  }
+
   // 7. Build OASIS comment body matching comment_templates.md
   const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : decision === 'reject' ? 'Reject' : 'Duplicate';
-  let commentBody: string;
+   let commentBody: string;
   if (decision === 'duplicate') {
     commentBody = [
       'Duplicate report:',
@@ -132,7 +135,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| | |',
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
-      `| Parent PR | #${parentPrId} |`,
+      `| Parent PR | #${parentPrNumber} |`,
       `| Notes | ${notes || '—'} |`,
     ].join('\n');
   } else if (decision === 'reject') {

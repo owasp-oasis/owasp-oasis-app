@@ -32,6 +32,7 @@ const VOTE_LABEL: Record<Decision, string> = {
   accept: '✓ Accept',
   modify: '⚠ Modify',
   reject: '✗ Reject',
+  duplicate: '🔀 Duplicate',
 }
 
 /** Returns CSS class(es) for row highlighting based on vote state and crowd agreement. */
@@ -44,10 +45,11 @@ function getRowClass(pr: AugmentedPR, myVote: Decision | undefined): string {
     const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
     if (total > 1) {
       const counts: Record<Decision, number> = {
-        accept: pr.consensus_accept,
-        modify: pr.consensus_modify,
-        reject: pr.consensus_reject,
-      }
+         accept: pr.consensus_accept,
+         modify: pr.consensus_modify,
+         reject: pr.consensus_reject,
+         duplicate: 0,  // not included in consensus comparison in getRowClass
+       }
       const max = Math.max(...Object.values(counts))
       const leaders = (Object.entries(counts) as [Decision, number][]).filter(([, v]) => v === max)
       if (leaders.length === 1) {
