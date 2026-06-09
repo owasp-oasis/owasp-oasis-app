@@ -38,13 +38,14 @@ export default function Leaderboards() {
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const [repos, setRepos]               = useState([])
-  const [prs, setPRs]                   = useState([])
-  const [contributors, setContributors] = useState([])
-  const [tools, setTools]               = useState([])
-  const [maintainers, setMaintainers]   = useState([])
+  const [repos, setRepos]               = useState<any[]>([])
+  const [prs, setPRs]                   = useState<any[]>([])
+  const [contributors, setContributors] = useState<any[]>([])
+  const [tools, setTools]               = useState<any[]>([])
+  const [maintainers, setMaintainers]   = useState<any[]>([])
   const [loaded, setLoaded]             = useState<Set<Tab>>(new Set())
   const [loading, setLoading]           = useState<Tab | null>(null)
+  const [tabErrors, setTabErrors]       = useState<Partial<Record<Tab, string>>>({})
 
   useEffect(() => {
     fetch('/api/leaderboard/meta')
@@ -81,6 +82,8 @@ export default function Leaderboards() {
   const fetchTab = useCallback(async (tab: Tab) => {
     if (loaded.has(tab)) return
     setLoading(tab)
+    // Clear error on retry
+    setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
     try {
       const endpoints: Record<Tab, string> = {
         projects:     '/api/leaderboard/repos',
@@ -90,19 +93,31 @@ export default function Leaderboards() {
         maintainers:  '/api/leaderboard/maintainers',
       }
       const res = await fetch(endpoints[tab])
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} — ${res.statusText || 'server error'}`)
+      }
       const data = await res.json()
-      if (tab === 'projects')     setRepos(data as never[])
-      if (tab === 'prs')          setPRs(data as never[])
-      if (tab === 'contributors') setContributors(data as never[])
-      if (tab === 'tools')        setTools(data as never[])
-      if (tab === 'maintainers')  setMaintainers(data as never[])
+      if (!Array.isArray(data)) {
+        throw new Error('Server returned an unexpected format (not an array)')
+      }
+      if (tab === 'projects')     setRepos(data)
+      if (tab === 'prs')          setPRs(data)
+      if (tab === 'contributors') setContributors(data)
+      if (tab === 'tools')        setTools(data)
+      if (tab === 'maintainers')  setMaintainers(data)
       setLoaded(prev => new Set([...prev, tab]))
-    } catch {
-      // leave empty
+    } catch (e) {
+      const msg = (e as Error).message ?? 'Unknown error'
+      setTabErrors(prev => ({ ...prev, [tab]: msg }))
     } finally {
       setLoading(null)
     }
   }, [loaded])
+
+  const handleRetry = useCallback((tab: Tab) => {
+    setLoaded(prev => { const n = new Set(prev); n.delete(tab); return n })
+    setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
+  }, [])
 
   useEffect(() => {
     fetchTab(activeTab)
@@ -148,21 +163,36 @@ export default function Leaderboards() {
 
           {/* Tab panels */}
           <div className="lb-panel" role="tabpanel">
-            {activeTab === 'projects' && (
+            {tabErrors[activeTab] ? (
+              <div className="lb-error-block">
+                <h3 className="lb-error-block__title">⚠️ Failed to load {activeTab} data</h3>
+                <p className="lb-error-block__detail">
+                  <code>{tabErrors[activeTab]}</code>
+                </p>
+                <div className="lb-error-block__advice">
+                  <p><strong>Troubleshooting:</strong></p>
+                  <ul>
+                    <li>Check your internet connection</li>
+                    <li>The OASIS server may be temporarily unavailable. Data syncs run every 4 hours, and the server may be restarting during that time.</li>
+                    <li>Try clicking the button below to retry. If the error persists, the service may be undergoing maintenance.</li>
+                    <li>If you continue to see this error, <a href="https://github.com/OWASP/oasis/issues" target="_blank" rel="noopener noreferrer">report it on GitHub</a></li>
+                  </ul>
+                </div>
+                <button className="lb-error-retry" onClick={() => handleRetry(activeTab)}>
+                  Try again
+                </button>
+              </div>
+            ) : activeTab === 'projects' ? (
               <ProjectsTab data={repos} loading={loading === 'projects'} />
-            )}
-            {activeTab === 'prs' && (
+            ) : activeTab === 'prs' ? (
               <PRsTab data={prs} loading={loading === 'prs'} />
-            )}
-            {activeTab === 'contributors' && (
+            ) : activeTab === 'contributors' ? (
               <ContributorsTab data={contributors} loading={loading === 'contributors'} />
-            )}
-            {activeTab === 'tools' && (
+            ) : activeTab === 'tools' ? (
               <ToolsTab data={tools} loading={loading === 'tools'} />
-            )}
-            {activeTab === 'maintainers' && (
+            ) : activeTab === 'maintainers' ? (
               <MaintainersTab data={maintainers} loading={loading === 'maintainers'} />
-            )}
+            ) : null}
           </div>
 
         </div>

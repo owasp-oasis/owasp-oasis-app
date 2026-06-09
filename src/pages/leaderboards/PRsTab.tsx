@@ -353,14 +353,14 @@ export default function PRsTab({ data, loading }: Props) {
     },
   ]
 
-  const augmented = useMemo<AugmentedPR[]>(() =>
-    data.map(pr => {
+  const augmented = useMemo<AugmentedPR[]>(() => {
+    if (!Array.isArray(data)) return []
+    return data.map(pr => {
       const overrides = localOverrides.get(pr.id) ?? {}
       const merged = { ...pr, ...overrides }
       return { ...merged, oasis_status: getOASISStatus(merged) }
-    }),
-    [data, localOverrides]
-  )
+    })
+  }, [data, localOverrides])
 
   const needsMyVoteCount = useMemo(() =>
     user

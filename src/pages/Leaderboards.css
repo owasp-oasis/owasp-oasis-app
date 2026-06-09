@@ -72,3 +72,82 @@
   height: 52px;
   margin-bottom: 28px;
 }
+
+/* Error block — displayed when a tab fetch fails */
+.lb-error-block {
+  padding: 24px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+}
+
+.lb-error-block__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.lb-error-block__detail {
+  font-size: 0.88rem;
+  margin: 0 0 16px 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  border-left: 3px solid #dc2626;
+}
+
+.lb-error-block__detail code {
+  font-family: var(--mono);
+  word-break: break-word;
+}
+
+.lb-error-block__advice {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin: 0 0 16px 0;
+}
+
+.lb-error-block__advice p {
+  margin: 0 0 8px 0;
+}
+
+.lb-error-block__advice ul {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+
+.lb-error-block__advice li {
+  margin: 6px 0;
+}
+
+.lb-error-block__advice a {
+  color: #991b1b;
+  text-decoration: underline;
+}
+
+.lb-error-block__advice a:hover {
+  opacity: 0.8;
+}
+
+.lb-error-retry {
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #991b1b;
+  background: #fecaca;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+  font-family: var(--font);
+}
+
+.lb-error-retry:hover {
+  background: #f8a9a9;
+  opacity: 0.95;
+}
+
+.lb-error-retry:active {
+  background: #fca5a5;
+}
