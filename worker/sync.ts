@@ -12,7 +12,7 @@
 
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
-  getSyncState, setSyncState, rebuildContributors, rebuildDuplicates,
+  setSyncState, rebuildContributors, rebuildDuplicates,
   upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
   updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
@@ -251,7 +251,6 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
   const stats: SyncStats = { repos: 0, prs: 0, comments: 0 };
 
   try {
-    const since     = await getSyncState(db, 'last_synced_at');
     const syncStart = new Date().toISOString();
     const allRepos  = await ghFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, token);
     const repos     = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
@@ -260,12 +259,17 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
       const detail      = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
       const upstreamUrl = detail.parent?.html_url ?? null;
 
+      // Get the previous sync timestamp for this repo (or epoch if new)
+      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE name = ?')
+        .bind(repo.name).first<{ synced_at: string | null }>();
+      const repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
+
       await upsertRepo(db, repo, upstreamUrl, syncStart);
       stats.repos++;
 
       const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
       const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-      const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
+      const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
 
       for (const pr of prs) {
         stats.prs++;
@@ -302,7 +306,6 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
   const stats: SyncStats = { repos: 0, prs: 0, comments: 0 };
 
   try {
-    const since     = await getSyncState(db, 'last_synced_at');
     const syncStart = new Date().toISOString();
 
     // Fetch repo list (1 subrequest)
@@ -341,22 +344,28 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     let upstreamUrl: string | null = null;
 
     // First chunk for this repo: upsert repo row + fetch PR list
+    let repoSince: string;
     if (prStart === 0) {
       const detail = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
       upstreamUrl  = detail.parent?.html_url ?? null;
+      // Get the previous sync timestamp for this repo (or epoch if new)
+      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE name = ?')
+        .bind(repo.name).first<{ synced_at: string | null }>();
+      repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
       await upsertRepo(db, repo, upstreamUrl, syncStart);
       stats.repos++;
     } else {
-      // Subsequent chunks: read upstream_url from DB (already stored on first chunk)
-      const repoRow = await db.prepare('SELECT upstream_url FROM repos WHERE name = ?')
-        .bind(repo.name).first<{ upstream_url: string | null }>();
+      // Subsequent chunks: read upstream_url and synced_at from DB (already stored on first chunk)
+      const repoRow = await db.prepare('SELECT upstream_url, synced_at FROM repos WHERE name = ?')
+        .bind(repo.name).first<{ upstream_url: string | null; synced_at: string | null }>();
       upstreamUrl = repoRow?.upstream_url ?? null;
+      repoSince = repoRow?.synced_at ?? '1970-01-01T00:00:00Z';
     }
 
     // Fetch all PRs for this repo (1-2 subrequests, paginated)
     const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
     const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-    const allPRs    = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= since);
+    const allPRs    = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
 
     // Slice this chunk
     const chunk   = allPRs.slice(prStart, prStart + CHUNK_SIZE);
