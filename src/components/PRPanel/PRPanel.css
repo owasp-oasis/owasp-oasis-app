@@ -580,9 +580,9 @@
 }
 
 .prp-diff-table {
-  width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .prp-diff-num {
@@ -601,9 +601,6 @@
   padding: 1px 10px;
   white-space: pre;
   vertical-align: top;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* max-width: 0 trick removed — colgroup handles widths instead */
 }
 
 .prp-diff-sep {
@@ -637,6 +634,9 @@
   margin-left: auto;
   padding: 0 10px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .prp-diff-select {
@@ -659,6 +659,35 @@
   border-color: var(--blue);
 }
 
+/* ── Word-wrap toggle ────────────────────────────────────────── */
+.prp-diff-wrap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.prp-diff-wrap-toggle input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Word-wrap active state — overrides scroll behavior */
+.prp-diff-wrap--wrap {
+  overflow-x: hidden;
+}
+.prp-diff-wrap--wrap .prp-diff-table {
+  min-width: unset;
+  width: 100%;
+}
+.prp-diff-wrap--wrap .prp-diff-cell {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* ── Intra-line character highlights ─────────────────────────── */
 .prp-char-del {
   background: #fca5a5;  /* stronger red within a del row */
@@ -674,7 +703,7 @@
 /* Reuses .prp-diff-wrap, .prp-diff-table, .prp-diff-num, .prp-diff-cell, .prp-diff-hunk-row */
 
 .prp-diff-table--unified {
-  table-layout: fixed;
+  /* Inherits table-layout: auto from .prp-diff-table */
 }
 
 /* Column widths for unified view are set via <colgroup> in the component */

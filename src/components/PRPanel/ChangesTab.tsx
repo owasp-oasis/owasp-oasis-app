@@ -151,7 +151,7 @@ function CharSpans({
 }
 
 /* ── Split (side-by-side) table ─────────────────────────────── */
-function SplitDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean }) {
+function SplitDiffTable({ patch, charDiff, wordWrap }: { patch: string; charDiff: boolean; wordWrap: boolean }) {
   const rows = pairRows(parseDiff(patch))
 
   // Build a map from pairId → { delText, addText } for character diffing
@@ -170,7 +170,7 @@ function SplitDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean 
   }
 
   return (
-    <div className="prp-diff-wrap">
+    <div className={`prp-diff-wrap${wordWrap ? ' prp-diff-wrap--wrap' : ''}`}>
       <table className="prp-diff-table">
         <colgroup>
           <col style={{ width: '40px' }} />
@@ -243,7 +243,7 @@ function SplitDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean 
 }
 
 /* ── Unified diff table ──────────────────────────────────────── */
-function UnifiedDiffTable({ patch, charDiff }: { patch: string; charDiff: boolean }) {
+function UnifiedDiffTable({ patch, charDiff, wordWrap }: { patch: string; charDiff: boolean; wordWrap: boolean }) {
   const rows = pairRows(parseDiff(patch))
 
   const pairs = new Map<number, { delText: string; addText: string }>()
@@ -261,7 +261,7 @@ function UnifiedDiffTable({ patch, charDiff }: { patch: string; charDiff: boolea
   }
 
   return (
-    <div className="prp-diff-wrap">
+    <div className={`prp-diff-wrap${wordWrap ? ' prp-diff-wrap--wrap' : ''}`}>
       <table className="prp-diff-table prp-diff-table--unified">
         <colgroup>
           <col style={{ width: '36px' }} />
@@ -350,9 +350,29 @@ export default function ChangesTab({ prId }: Props) {
   const [error, setError]         = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<string | null>(null)
 
-  // Diff view controls — managed internally
-  const [diffView, setDiffView] = useState<DiffView>('split')
-  const [charDiff, setCharDiff] = useState(false)
+  // Diff view controls — managed internally, persisted to localStorage
+  const [diffView, setDiffView] = useState<DiffView>(() => {
+    try {
+      const stored = localStorage.getItem('prp-diff-view')
+      return (stored as DiffView) ?? 'split'
+    } catch {
+      return 'split'
+    }
+  })
+  const [charDiff, setCharDiff] = useState(() => {
+    try {
+      return localStorage.getItem('prp-char-diff') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const [wordWrap, setWordWrap] = useState(() => {
+    try {
+      return localStorage.getItem('prp-word-wrap') === 'true'
+    } catch {
+      return false
+    }
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -414,16 +434,36 @@ export default function ChangesTab({ prId }: Props) {
 
         {/* Diff view dropdown — right side of the sub-tab bar */}
         <div className="prp-diff-controls">
+          <label className="prp-diff-wrap-toggle">
+            <input
+              type="checkbox"
+              checked={wordWrap}
+              onChange={e => {
+                const v = e.target.checked
+                setWordWrap(v)
+                try {
+                  localStorage.setItem('prp-word-wrap', String(v))
+                } catch {}
+              }}
+            />
+            Word wrap
+          </label>
           <select
-            className="prp-diff-select"
-            aria-label="Diff view mode"
-            value={`${diffView}${charDiff ? '+char' : ''}`}
-            onChange={e => {
-              const v = e.target.value
-              setDiffView(v.startsWith('unified') ? 'unified' : 'split')
-              setCharDiff(v.endsWith('+char'))
-            }}
-          >
+             className="prp-diff-select"
+             aria-label="Diff view mode"
+             value={`${diffView}${charDiff ? '+char' : ''}`}
+             onChange={e => {
+               const v = e.target.value
+               const newDiffView = v.startsWith('unified') ? 'unified' : 'split'
+               const newCharDiff = v.endsWith('+char')
+               setDiffView(newDiffView)
+               setCharDiff(newCharDiff)
+               try {
+                 localStorage.setItem('prp-diff-view', newDiffView)
+                 localStorage.setItem('prp-char-diff', String(newCharDiff))
+               } catch {}
+             }}
+           >
             <option value="split">Split</option>
             <option value="split+char">Split + char diff</option>
             <option value="unified">Unified</option>
@@ -432,17 +472,17 @@ export default function ChangesTab({ prId }: Props) {
         </div>
       </div>
 
-      {/* Active file diff */}
-      {currentFile && (
-        <div className="prp-file-diff-body">
-          {currentFile.patch
-            ? diffView === 'unified'
-              ? <UnifiedDiffTable patch={currentFile.patch} charDiff={charDiff} />
-              : <SplitDiffTable   patch={currentFile.patch} charDiff={charDiff} />
-            : <p className="prp-no-patch">No patch available (binary or large file).</p>
-          }
-        </div>
-      )}
+       {/* Active file diff */}
+       {currentFile && (
+         <div className="prp-file-diff-body">
+           {currentFile.patch
+             ? diffView === 'unified'
+               ? <UnifiedDiffTable patch={currentFile.patch} charDiff={charDiff} wordWrap={wordWrap} />
+               : <SplitDiffTable   patch={currentFile.patch} charDiff={charDiff} wordWrap={wordWrap} />
+             : <p className="prp-no-patch">No patch available (binary or large file).</p>
+           }
+         </div>
+       )}
     </div>
   )
 }
