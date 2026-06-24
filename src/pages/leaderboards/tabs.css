@@ -36,6 +36,7 @@
 .state-needs-review { background: #fef9c3; color: #854d0e; }
 .state-trusted      { background: #dcfce7; color: #166534; }
 .state-open         { background: #dcfce7; color: #166534; }
+.state-withdrawn    { background: #ffedd5; color: #9a3412; }
 .state-closed       { background: #fee2e2; color: #991b1b; }
 .state-merged       { background: #ede9fe; color: #5b21b6; }
 
@@ -349,6 +350,43 @@ tr:hover .row-chevron {
   font-size: 0.82rem;
   color: var(--gray-600);
   line-height: 1.5;
+}
+
+/* ── Status key priority ranking section ──────────────────────── */
+.status-key-priority-ranking {
+  border-top: 1px solid var(--gray-200);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.status-key-priority-ranking h4 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--blue-dark);
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.status-key-ranking-chain {
+  font-size: 0.82rem;
+  color: var(--gray-700);
+  font-weight: 600;
+  word-break: break-word;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.ranking-arrow {
+  margin: 0 4px;
+  color: var(--gray-400);
+}
+
+.status-key-ranking-note {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* ── PR filter bar ────────────────────────────────────────────── */

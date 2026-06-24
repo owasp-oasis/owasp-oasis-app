@@ -12,7 +12,7 @@
 
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
-  setSyncState, rebuildContributors, rebuildDuplicates,
+  setSyncState, rebuildContributors, rebuildDuplicates, syncVotesFromComments,
   upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
   updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
@@ -280,11 +280,15 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
       await updateRepoPRCount(db, repo.name, syncStart);
     }
 
-    // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
-    await rebuildDuplicates(db, token);
-    
-    // Rebuild contributor reputation scores
-    await rebuildContributors(db, syncStart);
+     // Sync user votes from pr_comments before resolving duplicates
+     // (so duplicate chain resolution has complete vote data)
+     await syncVotesFromComments(db);
+     
+     // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
+     await rebuildDuplicates(db, token);
+     
+     // Rebuild contributor reputation scores
+     await rebuildContributors(db, syncStart);
     
     await setSyncState(db, 'last_synced_at', syncStart);
     await setSyncState(db, 'sync_running', '0');
@@ -326,19 +330,23 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
       prStart  = parseInt(parts[1], 10) || 0;
     }
 
-    // All repos processed — rebuild contributors and finish
-    if (repoIdx >= repos.length) {
-      // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
-      await rebuildDuplicates(db, token);
-      
-      // Rebuild contributor reputation scores
-      await rebuildContributors(db, syncStart);
-      
-      await setSyncState(db, 'last_synced_at', syncStart);
-      await setSyncState(db, 'sync_running', '0');
-      await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
-      return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
-    }
+     // All repos processed — rebuild contributors and finish
+     if (repoIdx >= repos.length) {
+       // Sync user votes from pr_comments before resolving duplicates
+       // (so duplicate chain resolution has complete vote data)
+       await syncVotesFromComments(db);
+       
+       // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
+       await rebuildDuplicates(db, token);
+       
+       // Rebuild contributor reputation scores
+       await rebuildContributors(db, syncStart);
+       
+       await setSyncState(db, 'last_synced_at', syncStart);
+       await setSyncState(db, 'sync_running', '0');
+       await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
+       return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
+     }
 
     const repo = repos[repoIdx];
     let upstreamUrl: string | null = null;
@@ -352,7 +360,7 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
       const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE name = ?')
         .bind(repo.name).first<{ synced_at: string | null }>();
       repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
-      await upsertRepo(db, repo, upstreamUrl, syncStart);
+      await upsertRepo(db, repo, upstreamUrl, repoSince);
       stats.repos++;
     } else {
       // Subsequent chunks: read upstream_url and synced_at from DB (already stored on first chunk)
@@ -381,7 +389,8 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
     // After last chunk for this repo: update open_prs count
     if (!hasMore) {
-      await updateRepoPRCount(db, repo.name, syncStart);
+      const finalSyncedAt = allPRs[0]?.updated_at ?? syncStart;
+      await updateRepoPRCount(db, repo.name, syncStart, finalSyncedAt);
     }
 
     // Advance cursor

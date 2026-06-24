@@ -66,7 +66,11 @@ type ActiveTab = 'score' | 'contributions' | 'formula';
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
 function fmt(n: number, decimals = 2): string {
-  return n.toFixed(decimals).replace(/\.?0+$/, '') || '0';
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  });
 }
 
 function fmtDate(iso: string): string {
@@ -328,6 +332,63 @@ modified_reputation = base_reputation × (1 + total_bonus)`}</pre>
   );
 }
 
+/* ─── SKELETON LOADER ─────────────────────────────────────────── */
+function SkeletonScoreTab() {
+  return (
+    <div className="cp-tab-content">
+      {/* Score table skeleton */}
+      <div className="cp-skeleton cp-skeleton-table">
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '85%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '75%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '80%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '90%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '70%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '95%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+        <div className="cp-skeleton-table-row">
+          <div className="cp-skeleton-label"><div className="cp-skeleton-block" style={{ width: '65%' }} /></div>
+          <div className="cp-skeleton-value"><div className="cp-skeleton-block" /></div>
+        </div>
+      </div>
+
+      {/* Rank summary skeleton */}
+      <div className="cp-skeleton-rank-grid">
+        <div className="cp-skeleton-rank-box">
+          <div className="cp-skeleton-block" />
+          <div className="cp-skeleton-block" />
+        </div>
+        <div className="cp-skeleton-rank-box">
+          <div className="cp-skeleton-block" />
+          <div className="cp-skeleton-block" />
+        </div>
+      </div>
+
+      {/* Staleness note skeleton */}
+      <div className="cp-skeleton cp-skeleton-note">
+        <div className="cp-skeleton-block" style={{ width: '100%' }} />
+        <div className="cp-skeleton-block" style={{ width: '90%' }} />
+      </div>
+    </div>
+  );
+}
+
 /* ─── MAIN COMPONENT ──────────────────────────────────────────── */
 interface Props {
   login: string | null;
@@ -359,9 +420,10 @@ export default function ContributorPanel({ login, onClose }: Props) {
     setLoading(true);
     setError(null);
     setActiveTab('score');
+    setOpen(true); // Open panel immediately with skeleton
     fetch(`/api/contributors/${encodeURIComponent(login)}`)
       .then(r => r.json())
-      .then((d: PanelData) => { setData(d); setLoading(false); setOpen(true); })
+      .then((d: PanelData) => { setData(d); setLoading(false); })
       .catch(() => { setError('Failed to load contributor data.'); setLoading(false); });
   }, [login]);
 
@@ -414,7 +476,7 @@ export default function ContributorPanel({ login, onClose }: Props) {
         </div>
 
         {/* Content */}
-        {loading && <div className="cp-loading">Loading…</div>}
+        {loading && <SkeletonScoreTab />}
         {error   && <div className="cp-error">{error}</div>}
         {!loading && !error && data && contributor && (
           <>

@@ -62,6 +62,7 @@
  */
 
 import type { ParticipantData, CommentData, ReactionData } from './types.js';
+import { isValidatorBot } from './github.js';
 
 /* ─── SYNC STATE ─────────────────────────────────────────────── */
 export async function getSyncState(db: D1Database, key: string): Promise<string> {
@@ -199,19 +200,89 @@ export async function upsertReactions(db: D1Database, reactions: ReactionData[])
   }
 }
 
-export async function updateRepoPRCount(db: D1Database, repoName: string, syncStart: string): Promise<void> {
+export async function updateRepoPRCount(db: D1Database, repoName: string, syncStart: string, syncedAt?: string): Promise<void> {
   const openCount = await db.prepare(
     "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'",
   ).bind(repoName).first<{ c: number }>();
   const duplicateCount = await db.prepare(
     "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND duplicate_of IS NOT NULL",
   ).bind(repoName).first<{ c: number }>();
-  await db.prepare('UPDATE repos SET open_prs = ?, duplicate_count = ?, synced_at = ? WHERE name = ?')
-    .bind(openCount?.c ?? 0, duplicateCount?.c ?? 0, syncStart, repoName).run();
-}
+   await db.prepare('UPDATE repos SET open_prs = ?, duplicate_count = ?, synced_at = ? WHERE name = ?')
+     .bind(openCount?.c ?? 0, duplicateCount?.c ?? 0, syncedAt ?? syncStart, repoName).run();
+ }
 
 /**
- * Rebuilds the duplicate relationship chains for all PRs with duplicate votes.
+ * Syncs user votes from pr_comments after all PRs have been processed by sync.
+ * Called after all comments are upserted but BEFORE rebuildDuplicates() so that
+ * duplicate chain resolution has access to complete vote data.
+ *
+ * For each non-validator-bot OASIS-template comment:
+ *   - Insert a corresponding user_votes record
+ *   - For duplicate decisions, resolve the parent PR number to its database ID
+ *   - Skip validator bots (they shouldn't have user_votes entries)
+ *   - Use INSERT OR IGNORE to preserve existing UI-cast votes (which are timestamped at vote time, not comment time)
+ *
+ * This ensures user_votes stays in sync with pr_comments, so both tables
+ * reflect the same source of truth from GitHub.
+ */
+export async function syncVotesFromComments(db: D1Database): Promise<void> {
+  // Fetch all OASIS-template comments that aren't from validator bots or automated accounts
+  const comments = await db.prepare(`
+    SELECT
+      pc.id,
+      pc.login,
+      pc.pr_id,
+      pc.repo_name,
+      pc.pr_number,
+      pc.decision,
+      pc.duplicate_of,
+      pc.created_at
+    FROM pr_comments pc
+    WHERE pc.decision IS NOT NULL
+  `).all<{
+    id: number;
+    login: string;
+    pr_id: number;
+    repo_name: string;
+    pr_number: number;
+    decision: string;
+    duplicate_of: number | null;
+    created_at: string;
+  }>();
+
+  // Process each comment and insert into user_votes, skipping validator bots
+  for (const comment of comments.results ?? []) {
+    // Skip validator bots and automated accounts
+    if (isValidatorBot(comment.login)) continue;
+
+    // For duplicate votes, resolve the parent PR's database ID
+    let parentPrId: number | null = null;
+    if (comment.decision === 'duplicate' && comment.duplicate_of) {
+      const parentPr = await db.prepare(
+        'SELECT id FROM pull_requests WHERE repo_name = ? AND number = ?',
+      ).bind(comment.repo_name, comment.duplicate_of).first<{ id: number }>();
+      parentPrId = parentPr?.id ?? null;
+    }
+
+    // INSERT OR IGNORE preserves any existing UI-cast votes (they have higher priority)
+    await db.prepare(`
+      INSERT OR IGNORE INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, voted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      comment.login,
+      comment.pr_id,
+      comment.repo_name,
+      comment.pr_number,
+      comment.decision,
+      parentPrId,
+      comment.created_at,
+    ).run();
+  }
+}
+
+ /**
+  * Rebuilds the duplicate relationship chains for all PRs with duplicate votes.
  * For each PR with duplicate votes, re-resolves the chain and updates pull_requests.duplicate_of
  * to point to the canonical root (in case parent's duplicate_of changed since votes were cast).
  * Also handles auto-closing PRs when consensus + merged parent.

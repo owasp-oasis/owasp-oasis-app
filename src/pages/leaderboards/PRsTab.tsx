@@ -62,11 +62,14 @@ function getRowClass(pr: AugmentedPR, myVote: Decision | undefined): string {
   return classes.join(' ')
 }
 
-type OASISStatus = 'Needs Review' | 'Trusted' | 'Rejected' | 'Accepted'
+type OASISStatus = 'Needs Review' | 'Trusted' | 'Withdrawn' | 'Rejected' | 'Accepted'
 
 function getOASISStatus(pr: PR): OASISStatus {
   if (pr.merged_upstream && pr.state === 'closed') return 'Accepted'
-  if (pr.state === 'closed' && !pr.merged_upstream) return 'Rejected'
+  if (pr.state === 'closed') {
+    if (pr.consensus_accept > 0) return 'Withdrawn'
+    return 'Rejected'
+  }
   const totalVotes = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
   const acceptRate = totalVotes > 0 ? pr.consensus_accept / totalVotes : 0
   if (pr.participants >= TRUST_MIN_CONTRIBUTORS && acceptRate >= TRUST_MIN_ACCEPT_RATE) return 'Trusted'
@@ -77,6 +80,7 @@ function StatusBadge({ status }: { status: OASISStatus }) {
   const cls: Record<OASISStatus, string> = {
     'Needs Review': 'state-badge state-needs-review',
     'Trusted':      'state-badge state-trusted',
+    'Withdrawn':    'state-badge state-withdrawn',
     'Rejected':     'state-badge state-closed',
     'Accepted':     'state-badge state-merged',
   }
@@ -85,9 +89,9 @@ function StatusBadge({ status }: { status: OASISStatus }) {
 
 const STATUS_DEFINITIONS: { status: OASISStatus; cls: string; description: string; todo?: boolean }[] = [
   {
-    status: 'Needs Review',
-    cls: 'state-needs-review',
-    description: 'Open PR in the OASIS fork that has not yet reached the minimum criteria for an OASIS Stamp of Trust.',
+    status: 'Accepted',
+    cls: 'state-merged',
+    description: 'The fix was merged into the upstream repository and the fork PR is closed.',
   },
   {
     status: 'Trusted',
@@ -95,15 +99,19 @@ const STATUS_DEFINITIONS: { status: OASISStatus; cls: string; description: strin
     description: `Open PR that meets the trust threshold (${TRUST_MIN_CONTRIBUTORS}+ participants, ${Math.round(TRUST_MIN_ACCEPT_RATE * 100)}%+ acceptance votes). Ready to be considered for upstream submission.`,
   },
   {
-    status: 'Rejected',
-    cls: 'state-closed',
-    description: 'The OASIS fork PR has been closed without being merged upstream. The fix was not adopted.',
+    status: 'Needs Review',
+    cls: 'state-needs-review',
+    description: 'Open PR in the OASIS fork that has not yet reached the minimum criteria for an OASIS Stamp of Trust.',
   },
   {
-    status: 'Accepted',
-    cls: 'state-merged',
-    description: 'The fix was merged into the upstream repository and the fork PR is closed. Automatic detection of upstream merges is a TODO — this status is currently set manually.',
-    todo: true,
+    status: 'Withdrawn',
+    cls: 'state-withdrawn',
+    description: 'The OASIS community voted to accept this finding. The fork PR was closed without a confirmed upstream merge — the fix may have landed via a separate PR or commit.',
+  },
+  {
+    status: 'Rejected',
+    cls: 'state-closed',
+    description: 'The fork PR was closed with no accept votes recorded. The fix was not adopted.',
   },
 ]
 
@@ -155,6 +163,15 @@ function StatusKey() {
               Thresholds are a stub — they will be reviewed and ratified by the OASIS community.
             </p>
           </div>
+          <div className="status-key-priority-ranking">
+            <h4>Priority ranking</h4>
+            <p className="status-key-ranking-chain">
+              Accepted <span className="ranking-arrow">›</span> Trusted <span className="ranking-arrow">›</span> Needs Review <span className="ranking-arrow">›</span> Withdrawn <span className="ranking-arrow">›</span> Rejected
+            </p>
+            <p className="status-key-ranking-note">
+              Accepted represents the highest value outcome; Rejected represents the lowest. This ranking reflects the trust and engagement signaled by each status.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -190,10 +207,11 @@ function ConsensusMiniBar({ accept, modify, reject, oasisVotes, nonOasisVotes }:
 type FilterMode = 'all' | OASISStatus | 'needs-my-vote'
 const BASE_FILTER_MODES: { id: FilterMode; label: string }[] = [
   { id: 'all',          label: 'All PRs' },
-  { id: 'Needs Review', label: 'Needs Review' },
-  { id: 'Trusted',      label: 'Trusted' },
-  { id: 'Rejected',     label: 'Rejected' },
   { id: 'Accepted',     label: 'Accepted' },
+  { id: 'Trusted',      label: 'Trusted' },
+  { id: 'Needs Review', label: 'Needs Review' },
+  { id: 'Withdrawn',    label: 'Withdrawn' },
+  { id: 'Rejected',     label: 'Rejected' },
 ]
 
 type AugmentedPR = PR & { oasis_status: OASISStatus }

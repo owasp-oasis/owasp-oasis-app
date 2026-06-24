@@ -202,6 +202,13 @@ export function normaliseToolName(raw: string): string {
  *
  * Returns true  → commit found in upstream (merged_upstream = 1)
  * Returns false → 404 or any error (keep existing merged_upstream value)
+ *
+ * TODO (Option 3): Improve detection to handle squash-merge, rebase, and cherry-pick scenarios.
+ * Current implementation only finds exact SHA matches. Future enhancement should:
+ *   1. Check GitHub PR merge status via GET /pulls/{n}/merge for direct merge confirmation
+ *   2. Search upstream by commit tree hash (content-based matching) rather than SHA
+ *   3. Cross-reference upstream commits by message patterns or author metadata
+ * This would reduce "Withdrawn" misclassifications for legitimate upstream merges with different SHAs.
  */
 export async function isHeadMergedUpstream(
   upstreamOwner: string,
@@ -226,6 +233,22 @@ export async function isHeadMergedUpstream(
     return false; // network error — treat as not found, preserve existing value
   }
 }
+
+/**
+ * TODO: Track PR closure actor via GitHub Issues Events API.
+ * Future enhancement to support: GET /repos/{org}/{repo}/issues/{pr_number}/events
+ * 
+ * This would allow distinguishing between:
+ *   - Author self-closing the PR (withdrawal)
+ *   - Maintainer closing the PR (acceptance/rejection decision)
+ *   - Bot auto-closing (duplicate, etc.)
+ *
+ * New DB fields: closed_by (actor login), closed_at (timestamp)
+ *
+ * Use case: Refine "Withdrawn" classification to consider who made the closure decision.
+ * An author self-close with no accept votes = likely rejected.
+ * A maintainer close with accept votes = likely accepted upstream.
+ */
 
 /**
  * Parses "owner" and "repo" from a GitHub HTML URL.

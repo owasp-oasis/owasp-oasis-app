@@ -22,6 +22,13 @@ interface Contributor {
   avg_per_pr: number
 }
 
+function fmtRep(v: unknown): string {
+  const n = Math.floor(Number(v));
+  if (n >= 10_000_000) return `${Math.floor(n / 1_000_000)}m`;
+  if (n >= 10_000)     return `${Math.floor(n / 1_000)}k`;
+  return String(n);
+}
+
 const columns: Column<Contributor>[] = [
   {
     key: 'login',
@@ -77,7 +84,7 @@ const columns: Column<Contributor>[] = [
     sortable: true,
     searchable: false,
     align: 'right',
-    render: (v) => <span className="col-banded">{Number(v).toFixed(2)}</span>,
+    render: (v) => <span className="col-banded">{fmtRep(v)}</span>,
   },
   {
     key: 'modified_reputation',
@@ -85,7 +92,7 @@ const columns: Column<Contributor>[] = [
     sortable: true,
     searchable: false,
     align: 'right',
-    render: (v) => <span className="reputation-score col-banded">{Number(v).toFixed(2)}</span>,
+    render: (v) => <span className="reputation-score col-banded">{fmtRep(v)}</span>,
   },
   {
     key: 'rank_90d',
