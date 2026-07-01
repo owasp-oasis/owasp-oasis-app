@@ -18,6 +18,7 @@ import { runSync, runSyncOneRepo } from './sync.js';
 import {
   handleMeta,
   handleRepos,
+  handleRepoDetail,
   handlePRs,
   handleContributors,
   handleContributorDetail,
@@ -157,22 +158,30 @@ export default {
         return secHeaders(Response.json(result), request);
       }
 
-      /* ── Leaderboard API ───────────────────────────────────────── */
-      if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
-        return await handleMeta(env, request);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
-        return await handleRepos(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
-        return await handlePRs(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
-        return await handleContributors(env, request, url);
+       /* ── Leaderboard API ───────────────────────────────────────── */
+       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
+         return await handleMeta(env, request);
+       if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
+         return await handleRepos(env, request, url);
 
-      /* ── Contributor detail (for ContributorPanel slide-out) ───── */
-      const contributorDetailMatch = url.pathname.match(/^\/api\/contributors\/([^/]+)$/);
-      if (method === 'GET' && contributorDetailMatch) {
-        const login = decodeURIComponent(contributorDetailMatch[1]);
-        return await handleContributorDetail(env, request, login);
-      }
+       /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
+       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/([^/]+)$/);
+       if (method === 'GET' && repoDetailMatch) {
+         const repoName = decodeURIComponent(repoDetailMatch[1]);
+         return await handleRepoDetail(env, request, repoName);
+       }
+
+       if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
+         return await handlePRs(env, request, url);
+       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
+         return await handleContributors(env, request, url);
+
+       /* ── Contributor detail (for ContributorPanel slide-out) ───── */
+       const contributorDetailMatch = url.pathname.match(/^\/api\/contributors\/([^/]+)$/);
+       if (method === 'GET' && contributorDetailMatch) {
+         const login = decodeURIComponent(contributorDetailMatch[1]);
+         return await handleContributorDetail(env, request, login);
+       }
 
       if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
         return await handleMaintainers(env, request, url);

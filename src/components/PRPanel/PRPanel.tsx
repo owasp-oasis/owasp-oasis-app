@@ -108,6 +108,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
   const [showSignIn, setShowSignIn]     = useState(false)
+  const [nudgeDismissed, setNudgeDismissed] = useState(false)
 
   // Details fetch (shared by PR tab, Body tab, Summary tab)
   const [details, setDetails]     = useState<PRDetails | null>(null)
@@ -128,6 +129,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
       setCommentCount(null)
       setDetails(null)
       setDetailsError(null)
+      setNudgeDismissed(false)
       if (bodyRef.current) bodyRef.current.scrollTop = 0
     }
   }, [pr])
@@ -230,8 +232,19 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
           </a>
         </div>
 
-        {/* Vote bar (open PRs only) */}
-         {isOpen && (
+        {/* Auth nudge banner (unauthenticated users only, dismissible) */}
+        {!user && !nudgeDismissed && (
+          <div className="prp-auth-nudge">
+            <span>Sign in to cast your vote</span>
+            <a href="/api/auth/login" className="prp-nudge-signin">Sign in with GitHub</a>
+            <button className="prp-nudge-dismiss" onClick={() => setNudgeDismissed(true)}>
+              Continue read-only ×
+            </button>
+          </div>
+        )}
+
+        {/* Vote bar (open PRs only, authenticated users only) */}
+        {isOpen && user && (
           <div className="prp-vote-bar">
             <span className="prp-vote-label">Your vote:</span>
             {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
@@ -258,11 +271,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
                 </button>
               )
             })}
-            {!user && (
-              <a href="/api/auth/login" className="prp-gh-link" style={{ marginLeft: 'auto' }}>
-                Sign in to vote
-              </a>
-            )}
           </div>
         )}
 

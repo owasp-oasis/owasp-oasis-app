@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { Decision } from '../components/VoteForm'
 import ProjectsTab from './leaderboards/ProjectsTab'
 import PRsTab from './leaderboards/PRsTab'
 import ContributorsTab from './leaderboards/ContributorsTab'
@@ -46,6 +47,8 @@ export default function Leaderboards() {
   const [loaded, setLoaded]             = useState<Set<Tab>>(new Set())
   const [loading, setLoading]           = useState<Tab | null>(null)
   const [tabErrors, setTabErrors]       = useState<Partial<Record<Tab, string>>>({})
+  const [myVotes]           = useState<Map<number, Decision>>(new Map())
+  const [prsInitialRepo, setPrsInitialRepo] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/leaderboard/meta')
@@ -119,6 +122,15 @@ export default function Leaderboards() {
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
   }, [])
 
+  const handleNavigateToPRs = useCallback((repoName: string) => {
+    setPrsInitialRepo(repoName)
+    setActiveTab('prs')
+    // Ensure data is loaded
+    if (!loaded.has('prs')) {
+      setTimeout(() => fetchTab('prs'), 0)
+    }
+  }, [loaded, fetchTab])
+
   useEffect(() => {
     fetchTab(activeTab)
   }, [activeTab, fetchTab])
@@ -183,9 +195,18 @@ export default function Leaderboards() {
                 </button>
               </div>
             ) : activeTab === 'projects' ? (
-              <ProjectsTab data={repos} loading={loading === 'projects'} />
+              <ProjectsTab
+                data={repos}
+                loading={loading === 'projects'}
+                myVotes={myVotes}
+                onNavigateToPRs={handleNavigateToPRs}
+              />
             ) : activeTab === 'prs' ? (
-              <PRsTab data={prs} loading={loading === 'prs'} />
+              <PRsTab
+                data={prs}
+                loading={loading === 'prs'}
+                initialRepoFilter={prsInitialRepo}
+              />
             ) : activeTab === 'contributors' ? (
               <ContributorsTab data={contributors} loading={loading === 'contributors'} />
             ) : activeTab === 'tools' ? (

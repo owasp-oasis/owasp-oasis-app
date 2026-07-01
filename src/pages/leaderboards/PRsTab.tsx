@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import SortableTable from '../../components/SortableTable'
 import type { Column } from '../../components/SortableTable'
 import ColHeader from '../../components/ColHeader'
-import PRPanel, { SignInModal, type PanelPR } from '../../components/PRPanel/PRPanel'
+import PRPanel, { type PanelPR } from '../../components/PRPanel/PRPanel'
 import type { Decision } from '../../components/VoteForm'
 import { useAuth } from '../../context/AuthContext'
 
@@ -218,9 +218,13 @@ type AugmentedPR = PR & { oasis_status: OASISStatus }
 
 type VoteMap = Map<number, Decision>
 
-interface Props { data: PR[]; loading: boolean }
+interface Props {
+  data: PR[]
+  loading: boolean
+  initialRepoFilter?: string | null
+}
 
-export default function PRsTab({ data, loading }: Props) {
+export default function PRsTab({ data, loading, initialRepoFilter }: Props) {
   const [filter, setFilter] = useState<FilterMode>('needs-my-vote')
   const { user } = useAuth()
 
@@ -230,8 +234,8 @@ export default function PRsTab({ data, loading }: Props) {
   // Panel state — which PR is open in the side panel
   const [panelPR, setPanelPR] = useState<AugmentedPR | null>(null)
 
-  // Sign-in modal (shown when unauthenticated user clicks a row)
-  const [showSignIn, setShowSignIn] = useState(false)
+  // Repo filter state
+  const [repoFilter, setRepoFilter] = useState<string | null>(null)
 
   // Local PR overrides for optimistic updates (consensus counts)
   const [localOverrides, setLocalOverrides] = useState<Map<number, Partial<PR>>>(new Map())
@@ -251,6 +255,13 @@ export default function PRsTab({ data, loading }: Props) {
   }, [user])
 
   useEffect(() => { fetchMyVotes() }, [fetchMyVotes])
+
+  // Sync with initialRepoFilter prop
+  useEffect(() => {
+    if (initialRepoFilter) {
+      setRepoFilter(initialRepoFilter)
+    }
+  }, [initialRepoFilter])
 
   // If user signs out while on the needs-my-vote filter, fall back to 'all'
   useEffect(() => {
@@ -276,10 +287,6 @@ export default function PRsTab({ data, loading }: Props) {
   }
 
   function handleRowClick(pr: AugmentedPR) {
-    if (!user) {
-      setShowSignIn(true)
-      return
-    }
     if (panelPR?.id === pr.id) {
       setPanelPR(null)
     } else {
@@ -401,14 +408,22 @@ export default function PRsTab({ data, loading }: Props) {
   }, [user, needsMyVoteCount])
 
   const filtered = useMemo(() => {
+    let result = augmented
+    
+    // Apply repo filter first
+    if (repoFilter) {
+      result = result.filter(pr => pr.repo_name === repoFilter)
+    }
+    
+    // Apply status filter
     if (filter === 'needs-my-vote') {
-      return augmented.filter(pr =>
+      return result.filter(pr =>
         (pr.oasis_status === 'Needs Review' || pr.oasis_status === 'Trusted') &&
         !myVotes.has(pr.id)
       )
     }
-    return filter === 'all' ? augmented : augmented.filter(pr => pr.oasis_status === filter)
-  }, [augmented, filter, myVotes])
+    return filter === 'all' ? result : result.filter(pr => pr.oasis_status === filter)
+  }, [augmented, filter, myVotes, repoFilter])
 
   const emptyMessage = useMemo(() => {
     if (filter === 'needs-my-vote') {
@@ -439,6 +454,11 @@ export default function PRsTab({ data, loading }: Props) {
           {label}
         </button>
       ))}
+      {repoFilter && (
+        <button className="filter-chip active" onClick={() => setRepoFilter(null)}>
+          × {repoFilter}
+        </button>
+      )}
     </div>
   )
 
@@ -467,9 +487,6 @@ export default function PRsTab({ data, loading }: Props) {
         onClose={() => setPanelPR(null)}
         onVoteSuccess={handleVoteSuccess}
       />
-
-      {/* Sign-in modal for unauthenticated row clicks */}
-      {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
     </>
   )
 }

@@ -62,6 +62,67 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
   return lbResponse(results, req);
 }
 
+/**
+ * GET /api/leaderboard/repos/:name
+ * Returns detailed project info for the ProjectPanel slide-out:
+ *   - repo row (full metadata)
+ *   - all PRs for the repo
+ *   - top 20 contributors by comment count
+ */
+export async function handleRepoDetail(env: Env, req: Request, repoName: string): Promise<Response> {
+  // Parallelize Q1 (repo) and Q2 (PRs)
+  const [repoRow, prsRows] = await Promise.all([
+    env.DB.prepare(`
+      SELECT id, name, full_name, description, language,
+             open_prs, duplicate_count, stars, upstream_url, synced_at,
+             (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name)                             AS total_prs,
+             (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
+             (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_accept,
+             (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_modify,
+             (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject,
+             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_duplicate
+      FROM repos r WHERE r.name = ?
+    `).bind(repoName).first<Record<string, unknown>>(),
+    env.DB.prepare(`
+      SELECT id, number, title, state, author, html_url,
+             comment_count, oasis_comment_count, non_oasis_comment_count,
+             participants, consensus_accept, consensus_modify, consensus_reject,
+             merged_upstream, updated_at
+      FROM pull_requests WHERE repo_name = ?
+      ORDER BY updated_at DESC
+    `).bind(repoName).all<Record<string, unknown>>(),
+  ]);
+
+  if (!repoRow) {
+    return new Response(JSON.stringify({ ok: false, error: 'Project not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Q3: Top contributors for this repo
+  const contributorsRows = await env.DB.prepare(`
+    SELECT p.login, c.avatar_url,
+           COUNT(*) AS comment_count,
+           SUM(CASE WHEN p.decision='accept' THEN 1 ELSE 0 END) AS accepts,
+           SUM(CASE WHEN p.decision='modify' THEN 1 ELSE 0 END) AS modifies,
+           SUM(CASE WHEN p.decision='reject' THEN 1 ELSE 0 END) AS rejects
+    FROM pr_comments p
+    LEFT JOIN contributors c ON c.login = p.login
+    WHERE p.repo_name = ?
+    GROUP BY p.login
+    ORDER BY comment_count DESC
+    LIMIT 20
+  `).bind(repoName).all<Record<string, unknown>>();
+
+  return lbResponse({
+    ok: true,
+    repo: repoRow,
+    prs: prsRows.results,
+    top_contributors: contributorsRows.results,
+  }, req);
+}
+
 export async function handlePRs(env: Env, req: Request, url: URL): Promise<Response> {
   const { sort, dir, q } = parseQuery(url);
   const VALID = new Set(['repo_name','number','title','state','comment_count',
