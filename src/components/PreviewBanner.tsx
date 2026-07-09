@@ -26,6 +26,7 @@ export default function PreviewBanner() {
   const [severity, setSeverity] = useState<Severity>('bug')
   const [contact, setContact] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const [csrfToken, setCsrfToken] = useState<string | null>(null)
 
   // Sync body class and --banner-height with dismissed state
   useEffect(() => {
@@ -38,6 +39,14 @@ export default function PreviewBanner() {
       document.body.classList.remove('banner-dismissed')
     }
   }, [dismissed])
+
+  // Fetch CSRF token on mount
+  useEffect(() => {
+    fetch('/api/csrf', { credentials: 'include' })
+      .then(r => r.json())
+      .then((d: unknown) => setCsrfToken((d as { token: string }).token))
+      .catch(() => setErrorMsg('Failed to load security token — please refresh.'))
+  }, [])
 
   function handleDismiss() {
     try {
@@ -66,13 +75,17 @@ export default function PreviewBanner() {
       setErrorMsg('Please describe the issue.')
       return
     }
+    if (!csrfToken) {
+      setErrorMsg('Missing security token — please refresh.')
+      return
+    }
     setFeedbackState('loading')
     setErrorMsg('')
 
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
         body: JSON.stringify({
           description: description.trim(),
           severity,
