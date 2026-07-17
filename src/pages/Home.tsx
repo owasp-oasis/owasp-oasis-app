@@ -21,6 +21,14 @@ const quotes: Quote[] = [
     photoUrl: '/headshots/michael-cartsonis.jpeg',
     linkedinUrl: 'https://www.linkedin.com/in/cartsoni/',
   },
+  {
+    name: 'Aaron Birnbaum',
+    title: 'Co-founder & Chief Security Officer',
+    company: 'Seron Security',
+    quote: "Great to see OASIS officially accepted into OWASP. The increase in AI-accelerated attacks on open source software is alarming. From poisoned packages, automated dependency abuse, and over-extended security teams makes this one of the fastest-growing blind spots in modern security programs. A vendor-neutral, community-driven standard for defending the ecosystem is long overdue. So much of an organization's real exposure now lives in its open-source dependencies, so a project like this strengthens the whole chain. Congratulations to the team and to the validators making it happen — happy to contribute where useful.",
+    photoUrl: '/headshots/aaron-birnbaum.jpeg',
+    linkedinUrl: 'https://www.linkedin.com/in/aaron-s-birnbaum/',
+  }
 ]
 
 const ShieldSVG = () => (
