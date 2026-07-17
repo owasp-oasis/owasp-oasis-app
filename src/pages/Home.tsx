@@ -114,7 +114,7 @@ export default function Home() {
         <div className="wrap home-hero-grid">
           {/* Left: headline + actions + ethos strip */}
           <div className="home-hero-left">
-            <div className="home-kicker">Proposed OWASP project — open now</div>
+            <div className="home-kicker">An officially accepted OWASP project — open now</div>
             <h1 className="home-headline">
               <span className="line-open">Open source powers the world.</span>
               <span className="line-threat">Vibe hacking exploits it.</span>
@@ -245,7 +245,7 @@ export default function Home() {
           <div className="home-final-box">
             <div>
               <h2>Take 5 minutes. Help secure the software that runs the world.</h2>
-              <p>Formal OWASP approval may take months. OASIS isn't waiting.</p>
+              <p>Get started now.</p>
             </div>
             <a className="btn btn-secondary" href="#register-form">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="btn-icon"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>

@@ -1,26 +1,26 @@
 import './About.css'
 
 const team = [
-  {
-    name: 'Chris Holt',
-    role: 'Project Lead & Technical Architect',
-    bio: `Chris has run bug bounty programs and community for one of the world's largest bug bounty platforms, where distributed communities of experts proved they could do offensive security work at scale. That model — crowdsourced expertise applied to a hard problem — is exactly what OASIS brings to the defense side. When fix automation made it possible to generate candidate patches at speed, Chris saw the opportunity to build the community mechanism that would make those fixes credible and trustworthy for open source maintainers.`,
-    github: 'humor4fun',
-    photoUrl: '/headshots/chris-holt.jpeg',
-  },
-  {
-    name: 'Michael Cartsonis',
-    role: 'Co-Founder',
-    bio: `Michael brought the frustration of watching application security treated as an afterthought across the industry. AppSec professionals are some of the most capable people in technology — and in most organizations, they're denied the agency to act directly on that expertise. They sit outside the teams writing the code. They can see what's broken. They're rarely given the agency to help. OASIS changes that: a real pipeline of candidate fixes the AppSec community can validate and connect to the maintainers who need them.`,
-    github: null,
-    photoUrl: '/headshots/michael-cartsonis.jpeg',
-  },
+   {
+     name: 'Chris Holt',
+     role: 'Project Lead & Technical Architect',
+     bio: `Chris has run bug bounty programs and community for one of the world's largest bug bounty platforms, where distributed communities of experts proved they could do offensive security work at scale. That model — crowdsourced expertise applied to a hard problem — is exactly what OASIS brings to the defense side. When fix automation made it possible to generate candidate patches at speed, Chris saw the opportunity to build the community mechanism that would make those fixes credible and trustworthy for open source maintainers. Chris is a founding member of the OWASP OASIS project.`,
+     github: 'humor4fun',
+     photoUrl: '/headshots/chris-holt.jpeg',
+   },
+   {
+     name: 'Michael Cartsonis',
+     role: 'Co-Founder',
+     bio: `Michael brought the frustration of watching application security treated as an afterthought across the industry. AppSec professionals are some of the most capable people in technology — and in most organizations, they're denied the agency to act directly on that expertise. They sit outside the teams writing the code. They can see what's broken. They're rarely given the agency to help. OASIS changes that: a real pipeline of candidate fixes the AppSec community can validate and connect to the maintainers who need them. Michael is a founding member of the OWASP OASIS project.`,
+     github: null,
+     photoUrl: '/headshots/michael-cartsonis.jpeg',
+   },
 ]
 
 const advisor = {
   name: 'David Wichers',
-  role: 'Founding Advisor & OWASP Liaison',
-  bio: `David Wichers is one of the founders of OWASP and the creator of the OWASP Benchmark — the industry's most widely cited standard for evaluating SAST tool performance. His involvement in OASIS signals something important: the technologies and processes OASIS is building represent a genuine advance for the application security community. David submitted the OASIS project proposal to OWASP, and is already validating PRs himself.`,
+   role: 'Founding Member & OWASP Liaison',
+   bio: `David Wichers is one of the founders of OWASP and the creator of the OWASP Benchmark — the industry's most widely cited standard for evaluating SAST tool performance. His involvement in OASIS signals something important: the technologies and processes OASIS is building represent a genuine advance for the application security community. David submitted the OASIS project proposal to OWASP — securing its official acceptance — and is already validating PRs himself.`,
   github: null,
 }
 
@@ -77,9 +77,8 @@ export default function About() {
             <p>
               Chris and Michael brought the opportunity to{' '}
               <strong>David Wichers</strong> — one of the founders of OWASP and
-              creator of the OWASP Benchmark. He agreed to submit the project
-              proposal. Formal approval may take months.{' '}
-              <strong>OASIS isn't waiting.</strong>
+              creator of the OWASP Benchmark. He submitted the project proposal,
+              and OASIS has been officially accepted as an OWASP project.
             </p>
             <p>
               The volunteer team is now five people and growing. Several projects

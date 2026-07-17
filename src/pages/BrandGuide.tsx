@@ -123,8 +123,7 @@ export default function BrandGuide() {
                 the maintainers who need them.
               </p>
               <p>
-                OASIS has submitted a project proposal to OWASP and is currently seeking formal approval. Until that approval
-                is granted, the OWASP name and logo must not appear in OASIS brand materials.
+                OASIS is an officially accepted OWASP project.
               </p>
               <h3>Three brand qualities</h3>
               <div className="bg-do-dont" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -174,14 +173,14 @@ export default function BrandGuide() {
                   </ul>
                 </div>
                 <div className="bg-dont">
-                  <p className="bg-dont-label">Never write</p>
-                  <ul>
-                    <li>Oasis</li>
-                    <li>oasis</li>
-                    <li>OWASP OASIS <em>(until formally approved)</em></li>
-                    <li>the OASIS tool / platform</li>
-                  </ul>
-                </div>
+                   <p className="bg-dont-label">Never write</p>
+                   <ul>
+                     <li>Oasis</li>
+                     <li>oasis</li>
+                     <li>OWASP OASIS <em>(as the standalone project name — always use OASIS)</em></li>
+                     <li>the OASIS tool / platform</li>
+                   </ul>
+                 </div>
               </div>
               <h3>Long-form usage</h3>
               <p>
@@ -189,15 +188,10 @@ export default function BrandGuide() {
                 press materials, and any context where the audience may not know the acronym. Subsequent references
                 may use OASIS alone.
               </p>
-              <h3>OWASP relationship</h3>
-              <p>
-                When the OWASP relationship must be mentioned, use this exact phrasing:<br />
-                <em>"OASIS has submitted a project proposal to OWASP and is currently seeking formal approval."</em>
-              </p>
-              <p>
-                Do not use the OWASP name or logo in logos, favicons, social assets, or UI elements
-                until the proposal is formally accepted.
-              </p>
+               <h3>OWASP relationship</h3>
+               <p>
+                 OASIS is an officially accepted OWASP project. When the OWASP relationship is mentioned, use: <em>"OASIS is an officially accepted OWASP project."</em>
+               </p>
             </section>
 
             {/* 3. Terminology */}
@@ -630,7 +624,7 @@ export default function BrandGuide() {
                     <li>Do not rotate or skew the logo</li>
                     <li>Do not add drop shadows or effects to the SVG</li>
                     <li>Do not use a raster (PNG) version where an SVG is available</li>
-                    <li>Do not combine the OASIS logo with the OWASP logo until formal approval is granted</li>
+                    <li>Combine the OASIS logo with the OWASP logo only in contexts that follow OWASP co-branding guidelines</li>
                   </ul>
                 </div>
               </div>
@@ -774,11 +768,11 @@ export default function BrandGuide() {
               <p>
                 When quoting OASIS in press materials or external publications, use the following attribution line:
               </p>
-              <p>
-                <em>OASIS (Open Automated Security Initiative for Software) is an open source project automating
-                security fix generation, validation, and upstream submission across the open source ecosystem.
-                OASIS has submitted a project proposal to OWASP and is currently seeking formal approval.</em>
-              </p>
+               <p>
+                 <em>OASIS (Open Automated Security Initiative for Software) is an open source project automating
+                 security fix generation, validation, and upstream submission across the open source ecosystem.
+                 OASIS is an officially accepted OWASP project.</em>
+               </p>
             </section>
 
           </div>{/* .bg-content */}

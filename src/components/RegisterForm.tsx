@@ -117,8 +117,7 @@ export default function RegisterForm({
       </button>
 
       <p className="register-note">
-        No commitment beyond interest. Your signup is a documented vote of
-        community support for OWASP project acceptance.
+        No commitment beyond interest. Your signup puts you at the front of the community.
       </p>
     </form>
   )
