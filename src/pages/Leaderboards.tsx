@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Decision } from '../components/VoteForm'
 import ProjectsTab from './leaderboards/ProjectsTab'
 import PRsTab from './leaderboards/PRsTab'
@@ -35,20 +34,10 @@ function timeAgo(iso: string | null): string {
 }
 
 export default function Leaderboards() {
-  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<Tab>('prs')
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
-
-  // Parse URL params for initial filters from onboarding
-  const initialFilters = useMemo(() => {
-    return {
-      languages: searchParams.get('lang')?.split(',').filter(Boolean) ?? [],
-      severities: searchParams.get('severity')?.split(',').filter(Boolean) ?? [],
-      experience: searchParams.get('exp') ?? null,
-    }
-  }, [searchParams])
 
   const [repos, setRepos]               = useState<any[]>([])
   const [prs, setPRs]                   = useState<any[]>([])
@@ -217,8 +206,6 @@ export default function Leaderboards() {
                 data={prs}
                 loading={loading === 'prs'}
                 initialRepoFilter={prsInitialRepo}
-                initialLanguages={initialFilters.languages}
-                initialSeverities={initialFilters.severities}
               />
             ) : activeTab === 'contributors' ? (
               <ContributorsTab data={contributors} loading={loading === 'contributors'} />

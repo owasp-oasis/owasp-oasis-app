@@ -28,14 +28,12 @@ export default function Footer() {
         <div className="footer-external">
           <a href="https://github.com/owasp-oasis/project-overview" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="https://owasp.org" target="_blank" rel="noopener noreferrer">OWASP</a>
-          <a href="https://owasp.slack.com/archives/C0BJACRTT0T" target="_blank" rel="noopener noreferrer">Slack</a>
         </div>
       </div>
       <div className="footer-bottom">
         <div className="container">
           <span>OASIS — An officially accepted OWASP project. &copy; {new Date().getFullYear()}</span>
           <span className="footer-legal">Vendor-neutral. Community-driven. Open source.</span>
-          <span className="footer-version">v2026.07.005</span>
         </div>
       </div>
     </footer>

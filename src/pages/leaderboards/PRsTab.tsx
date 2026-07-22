@@ -222,17 +222,9 @@ interface Props {
   data: PR[]
   loading: boolean
   initialRepoFilter?: string | null
-  initialLanguages?: string[]
-  initialSeverities?: string[]
 }
 
-export default function PRsTab({
-  data,
-  loading,
-  initialRepoFilter,
-  initialLanguages = [],
-  initialSeverities = [],
-}: Props) {
+export default function PRsTab({ data, loading, initialRepoFilter }: Props) {
   const [filter, setFilter] = useState<FilterMode>('needs-my-vote')
   const { user } = useAuth()
 
@@ -244,10 +236,6 @@ export default function PRsTab({
 
   // Repo filter state
   const [repoFilter, setRepoFilter] = useState<string | null>(null)
-
-  // Language and severity filter state (from onboarding) — reserved for future filtering implementation
-  const [_languageFilter] = useState<string[]>(initialLanguages)
-  const [_severityFilter] = useState<string[]>(initialSeverities)
 
   // Local PR overrides for optimistic updates (consensus counts)
   const [localOverrides, setLocalOverrides] = useState<Map<number, Partial<PR>>>(new Map())

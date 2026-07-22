@@ -177,36 +177,7 @@ export default function Support() {
         </div>
       </section>
 
-      {/* ── 4. Join the Community ── */}
-      <section className="section support-community-section">
-        <div className="container">
-          <h2 className="support-section-title">Join the Community on Slack</h2>
-          <p className="support-section-sub">
-            Connect with other OASIS validators, ask questions, share ideas, and stay updated on project news.
-          </p>
-          <div className="community-card">
-            <div className="community-card-icon" aria-hidden="true">💬</div>
-            <div className="community-card-content">
-              <h3>OWASP Slack #oasis channel</h3>
-              <p>
-                The OASIS community lives in the #oasis channel on the OWASP Slack workspace.
-                Validators, maintainers, and project leads hang out here to collaborate, answer questions,
-                and coordinate on fixes.
-              </p>
-              <a
-                href="https://owasp.slack.com/archives/C0BJACRTT0T"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary"
-              >
-                Join on Slack &rarr;
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 5. Be a Sponsor ── */}
+      {/* ── 4. Be a Sponsor ── */}
       <section className="section support-sponsor-section">
         <div className="container">
           <h2 className="support-section-title">Be a Sponsor</h2>

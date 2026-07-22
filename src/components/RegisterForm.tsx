@@ -67,12 +67,6 @@ export default function RegisterForm({
       <div className="register-success">
         <div className="register-success-icon" aria-hidden="true">✓</div>
         <p>{successMessage}</p>
-        <p className="register-success-slack">
-          Come introduce yourself on Slack:{' '}
-          <a href="https://owasp.slack.com/archives/C0BJACRTT0T" target="_blank" rel="noopener noreferrer">
-            Join #oasis
-          </a>
-        </p>
       </div>
     )
   }
@@ -123,7 +117,7 @@ export default function RegisterForm({
       </button>
 
       <p className="register-note">
-        You'll receive occasional updates about OASIS. Unsubscribe any time.
+        No commitment beyond interest. Your signup puts you at the front of the community.
       </p>
     </form>
   )

@@ -118,25 +118,25 @@ export default function Sponsors() {
             ))}
           </div>
 
-           {/* Future sponsor slot */}
-           <div className="sponsor-slots">
-             <a href="#sponsor-interest" className="sponsor-slot-placeholder">
-               <span>Your organization here</span>
-               <span className="sponsor-slot-cta">Become a sponsor &rarr;</span>
-             </a>
-           </div>
+          {/* Future sponsor slot */}
+          <div className="sponsor-slots">
+            <a href="#sponsor-interest" className="sponsor-slot-placeholder">
+              <span>Your organization here</span>
+              <span className="sponsor-slot-cta">Register interest &rarr;</span>
+            </a>
+          </div>
         </div>
       </section>
 
-       {/* Interest form */}
-       <section className="section sponsors-form-section" id="sponsor-interest">
-         <div className="container sponsors-form-inner">
-           <div className="sponsors-form-copy">
-             <h2>Interested in supporting OASIS?</h2>
-             <p>
-               Join our mailing list and the OASIS team will be in touch. All we
-               need is your email — you'll receive occasional updates about partnership opportunities.
-             </p>
+      {/* Interest form */}
+      <section className="section sponsors-form-section" id="sponsor-interest">
+        <div className="container sponsors-form-inner">
+          <div className="sponsors-form-copy">
+            <h2>Interested in supporting OASIS?</h2>
+            <p>
+              Register your interest and the OASIS team will be in touch. All we
+              need is your email &mdash; no commitment required.
+            </p>
             <p>
               Corporate sponsorship does not influence OASIS governance, fix
               selection, validation outcomes, or community direction. The project

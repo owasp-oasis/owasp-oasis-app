@@ -61,8 +61,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
     // TODO(security): public_repo grants write access to all public repos the user can access.
     // GitHub does not offer a narrower scope for issue comment reactions on public repos.
     // write:discussion was removed — it is for GitHub Discussions, not PR/issue comment reactions.
-    // user:email is needed to fetch the user's primary verified email for mailing list registration.
-    scope:        'public_repo user:email',
+    scope:        'public_repo',
     state,
   });
   const githubUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
@@ -122,7 +121,7 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
   }
 
   // Fetch GitHub user info
-  let login: string, avatarUrl: string, email: string = '';
+  let login: string, avatarUrl: string;
   try {
     const userRes = await fetch('https://api.github.com/user', {
       headers: {
@@ -139,27 +138,6 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
     return redirectWithError('/leaderboards', 'GitHub user fetch error');
   }
 
-  // Fetch user emails to get primary verified email for mailing list registration
-  try {
-    const emailRes = await fetch('https://api.github.com/user/emails', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept:        'application/vnd.github+json',
-        'User-Agent':  'oasis-worker-auth/1.0',
-      },
-    });
-    if (emailRes.ok) {
-      const emails = await emailRes.json() as Array<{ email?: string; primary?: boolean; verified?: boolean }>;
-      // Prefer primary + verified, then verified, then any
-      const primary = emails.find((e) => e.primary && e.verified);
-      const verified = emails.find((e) => e.verified);
-      const any = emails[0];
-      email = primary?.email ?? verified?.email ?? any?.email ?? '';
-    }
-  } catch {
-    // Email fetch failed — continue without it (not fatal)
-  }
-
   // Create session in D1 (token is NOT stored in the database)
   const sessionId = generateCSRF(); // 64-char hex
   const now = new Date();
@@ -173,32 +151,6 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
     ).bind(sessionId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
   } catch {
     return redirectWithError('/leaderboards', 'Session creation failed');
-  }
-
-  // Auto-register the user as a validator in the registrations table (if not already registered)
-  try {
-    // INSERT OR IGNORE if email is unique — don't overwrite form-registered users
-    if (email) {
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO registrations (name, email, github, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(login, email, login, 'validator', 'oauth', now.toISOString()).run();
-    } else {
-      // If no email, insert with empty email and rely on github column for upgrade
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO registrations (name, email, github, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(login, '', login, 'validator', 'oauth', now.toISOString()).run();
-    }
-
-    // Upgrade existing registrations: if the user already has a row (matched by github handle)
-    // and their role is empty or 'general' (interested), upgrade to 'validator'
-    await env.DB.prepare(
-      `UPDATE registrations SET role = 'validator', updated_at = ? WHERE github = ? AND role IN ('', 'general')`,
-    ).bind(now.toISOString(), login).run();
-  } catch {
-    // Registration upsert failed — not fatal, continue with session creation
-    console.error('Failed to upsert registration during OAuth');
   }
 
   // Encrypt the OAuth token for storage in a separate HttpOnly cookie.
