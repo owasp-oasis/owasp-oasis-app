@@ -28,6 +28,7 @@ import {
 import { handleRegister } from './handlers/register.js';
 import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
+import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
 
@@ -96,15 +97,19 @@ export default {
         return await handleFeedback(request, env);
       }
 
-      /* ── Auth (GitHub OAuth) ────────────────────────────────────── */
-      if (method === 'GET'  && url.pathname === '/api/auth/login')    return await handleLogin(request, env);
-      if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env);
-      if (method === 'GET'  && url.pathname === '/api/auth/me')       return await handleMe(request, env);
-      if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
+       /* ── Auth (GitHub OAuth) ────────────────────────────────────── */
+       if (method === 'GET'  && url.pathname === '/api/auth/login')    return await handleLogin(request, env);
+       if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env);
+       if (method === 'GET'  && url.pathname === '/api/auth/me')       return await handleMe(request, env);
+       if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
 
-      /* ── Voting ─────────────────────────────────────────────────── */
-      if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
-      if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
+       /* ── User Preferences ───────────────────────────────────────── */
+       if (method === 'GET'  && url.pathname === '/api/preferences/mine') return await handleGetPreferences(request, env);
+       if (method === 'PUT'  && url.pathname === '/api/preferences/mine') return await handlePutPreferences(request, env);
+
+       /* ── Voting ─────────────────────────────────────────────────── */
+       if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
+       if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
 
       /* ── PR Panel (proxy to GitHub API) ─────────────────────────── */
       const prPanelMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/(details|files|comments|react)$/);

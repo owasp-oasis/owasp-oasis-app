@@ -26,9 +26,10 @@ CREATE TABLE IF NOT EXISTS applications (
   UNIQUE(email, role)
 );
 
-CREATE INDEX IF NOT EXISTS idx_registrations_email ON registrations(email);
-CREATE INDEX IF NOT EXISTS idx_applications_email  ON applications(email);
-CREATE INDEX IF NOT EXISTS idx_applications_role   ON applications(role);
+CREATE INDEX IF NOT EXISTS idx_registrations_email  ON registrations(email);
+CREATE INDEX IF NOT EXISTS idx_registrations_github ON registrations(github);
+CREATE INDEX IF NOT EXISTS idx_applications_email   ON applications(email);
+CREATE INDEX IF NOT EXISTS idx_applications_role    ON applications(role);
 
 -- ── Leaderboard tables (preview/production D1 — apply via wrangler d1 execute) ──────────────
 -- These tables are populated by the GitHub sync cron and /leaderboard-refresh endpoint.
@@ -192,6 +193,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   avatar_url   TEXT,
   created_at   TEXT NOT NULL,
   expires_at   TEXT NOT NULL       -- ISO-8601, 7 days from login
+);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+  github_login         TEXT PRIMARY KEY,
+  languages            TEXT,    -- JSON array: ["Python", "Go", "JavaScript"] or null for no preference
+  severities           TEXT,    -- JSON array: ["critical", "high", "medium", "low"] or null for all
+  experience           TEXT,    -- 'new' | 'some' | 'experienced' or null for not yet set
+  onboarding_version   TEXT,    -- e.g. "2026.07.005" — tracks which version of onboarding user has completed
+  created_at           TEXT NOT NULL,
+  updated_at           TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_votes (
