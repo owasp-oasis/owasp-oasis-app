@@ -12,7 +12,11 @@ const links = [
   { to: '/sponsors', label: 'Sponsors', exact: false },
 ]
 
-export default function Nav() {
+interface NavProps {
+  onOpenOnboarding?: () => void
+}
+
+export default function Nav({ onOpenOnboarding }: NavProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const navRef = useRef<HTMLElement>(null)
   const { user, loading, logout } = useAuth()
@@ -81,6 +85,13 @@ export default function Nav() {
                 height={28}
               />
               <span className="nav-auth-login">@{user.login}</span>
+              <button
+                className="nav-auth-btn"
+                onClick={() => { onOpenOnboarding?.(); closeMenu() }}
+                title="Update your preferences"
+              >
+                Preferences
+              </button>
               <button
                 className="nav-auth-signout"
                 onClick={() => { logout(); closeMenu() }}

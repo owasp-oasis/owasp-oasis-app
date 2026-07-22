@@ -149,8 +149,8 @@ export default function Home() {
             <div className="home-register-head">
               <ShieldSVG />
               <div>
-                <h2 id="register-title">Register interest</h2>
-                <p>Sign up to lend your AppSec expertise as OASIS gets off the ground.</p>
+                <h2 id="register-title">Register</h2>
+                <p>Join the OASIS mailing list. Be the first to know about project updates and community events.</p>
               </div>
             </div>
             <RegisterForm type="validator" />
