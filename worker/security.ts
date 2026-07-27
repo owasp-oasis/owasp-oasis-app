@@ -48,7 +48,7 @@ export const ALLOWED_ORIGINS = [
   'https://preview.owasp-oasis.org',
 ];
 
-export const ALLOWED_METHODS = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
+export const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'OPTIONS', 'HEAD']);
 
 export function secHeaders(res: Response, request?: Request): Response {
   const r = new Response(res.body, res);

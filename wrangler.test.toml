@@ -1,0 +1,28 @@
+name               = "owasp-oasis-test"
+main               = "worker/index.ts"
+compatibility_date = "2025-05-01"
+
+# ── Test environment uses in-memory D1 and KV (no ASSETS) ──────────
+[env.test]
+
+[[env.test.d1_databases]]
+binding       = "DB"
+database_name = "oasis-db-test"
+database_id   = "00000000-0000-0000-0000-000000000000"
+
+[[env.test.kv_namespaces]]
+binding = "RATE_KV"
+id      = "00000000000000000000000000000000"
+
+# ── Test environment variables ──────────────────────────────────────
+[env.test.vars]
+ENVIRONMENT          = "test"
+OAUTH_CALLBACK_URL   = "http://localhost/api/auth/callback"
+
+# ── Test secrets (fake values, safe for test environment) ──────────
+[env.test.secrets]
+GITHUB_CLIENT_ID     = "test-client-id"
+GITHUB_CLIENT_SECRET = "test-client-secret"
+GITHUB_TOKEN         = "test-github-token"
+TOKEN_ENCRYPTION_KEY = "test-encryption-key-32-bytes-long!"
+ADMIN_SECRET         = "test-admin-secret"

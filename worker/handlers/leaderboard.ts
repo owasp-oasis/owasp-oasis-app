@@ -44,12 +44,12 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
   const rows  = await env.DB.prepare(`
     SELECT r.id, r.name, r.full_name, r.description, r.language,
            r.open_prs, r.duplicate_count, r.stars, r.upstream_url, r.synced_at,
-           (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name)                             AS total_prs,
+           (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0)                             AS total_prs,
            (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
-           (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_accept,
-           (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_modify,
-           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject,
-           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_duplicate
+           (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_accept,
+           (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_modify,
+           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_reject,
+           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_duplicate
     FROM repos r
     ORDER BY ${col} ${dir}
   `).all();
@@ -75,12 +75,12 @@ export async function handleRepoDetail(env: Env, req: Request, repoName: string)
     env.DB.prepare(`
       SELECT id, name, full_name, description, language,
              open_prs, duplicate_count, stars, upstream_url, synced_at,
-             (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name)                             AS total_prs,
+             (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0)                             AS total_prs,
              (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
-             (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_accept,
-             (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_modify,
-             (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_reject,
-             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name) AS total_duplicate
+             (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_accept,
+             (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_modify,
+             (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_reject,
+             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_duplicate
       FROM repos r WHERE r.name = ?
     `).bind(repoName).first<Record<string, unknown>>(),
     env.DB.prepare(`
@@ -88,7 +88,7 @@ export async function handleRepoDetail(env: Env, req: Request, repoName: string)
              comment_count, oasis_comment_count, non_oasis_comment_count,
              participants, consensus_accept, consensus_modify, consensus_reject,
              merged_upstream, updated_at
-      FROM pull_requests WHERE repo_name = ?
+      FROM pull_requests WHERE repo_name = ? AND deleted = 0
       ORDER BY updated_at DESC
     `).bind(repoName).all<Record<string, unknown>>(),
   ]);
@@ -138,7 +138,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
            duplicate_of, closed_as_duplicate,
            merged_upstream, merged_at, created_at, updated_at
-    FROM pull_requests ORDER BY ${col} ${dir} LIMIT 500
+    FROM pull_requests WHERE deleted = 0 ORDER BY ${col} ${dir} LIMIT 500
   `).all();
   let results = rows.results;
   if (q) results = results.filter((r: Record<string, unknown>) =>
@@ -378,6 +378,7 @@ export async function handleMaintainers(env: Env, req: Request, url: URL): Promi
              ELSE 0 END AS merge_rate,
            SUM(p.consensus_accept) AS total_accept_consensus
     FROM pull_requests p JOIN repos r ON r.name = p.repo_name
+    WHERE p.deleted = 0
     GROUP BY p.repo_name ORDER BY ${col} ${dir}
   `).all();
   let results = rows.results;
@@ -397,7 +398,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
            SUM(COALESCE(oasis_comment_count, 0)) AS total_comments,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
-    FROM pull_requests WHERE author IS NOT NULL GROUP BY author ORDER BY total_prs DESC
+    FROM pull_requests WHERE author IS NOT NULL AND deleted = 0 GROUP BY author ORDER BY total_prs DESC
   `).all<{
     author: string;
     total_prs: number;
@@ -443,7 +444,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
            SUM(merged_upstream) AS accepted_upstream,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
-    FROM pull_requests WHERE detection_tool IS NOT NULL GROUP BY detection_tool ORDER BY vulnerabilities DESC
+    FROM pull_requests WHERE detection_tool IS NOT NULL AND deleted = 0 GROUP BY detection_tool ORDER BY vulnerabilities DESC
   `).all<{
     detection_tool: string;
     vulnerabilities: number;

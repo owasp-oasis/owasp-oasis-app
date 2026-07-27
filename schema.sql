@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   updated_at              TEXT,
   detection_tool          TEXT,
   synced_at               TEXT,
+  deleted                 INTEGER DEFAULT 0,     -- 1 if PR no longer exists on GitHub (soft delete)
+  deleted_at              TEXT,                  -- ISO-8601 timestamp when PR was flagged as deleted
   UNIQUE(repo_name, number)
 );
 
@@ -161,6 +163,10 @@ CREATE INDEX IF NOT EXISTS idx_comment_reactions_reactor ON comment_reactions(re
 -- ALTER TABLE contributors ADD COLUMN duplicates               INTEGER DEFAULT 0;
 -- ALTER TABLE pr_comments ADD COLUMN duplicate_of              INTEGER DEFAULT NULL;
 -- ALTER TABLE user_votes ADD COLUMN parent_pr_id               INTEGER DEFAULT NULL;
+--
+-- Cleanup feature migrations (PR deletion):
+-- ALTER TABLE pull_requests ADD COLUMN deleted        INTEGER DEFAULT 0;
+-- ALTER TABLE pull_requests ADD COLUMN deleted_at     TEXT;
 
 CREATE TABLE IF NOT EXISTS pr_participants (
   pr_id                  INTEGER NOT NULL,

@@ -10,7 +10,12 @@
     "build": "tsc -b && npm run build:worker && npm run build:frontend",
     "preview": "vite preview",
     "deploy:preview": "npm run build && wrangler deploy",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/worker/unit",
+    "test:int": "vitest run tests/worker/integration",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
@@ -23,6 +28,7 @@
     "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^4.20260426.1",
     "@types/diff": "^7.0.2",
     "@types/node": "^24.0.0",
@@ -31,6 +37,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.7.2",
     "vite": "^6.3.5",
+    "vitest": "^4.1.10",
     "wrangler": "^4.78.0"
   }
 }

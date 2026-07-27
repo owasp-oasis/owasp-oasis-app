@@ -14,5 +14,5 @@
     "verbatimModuleSyntax": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["worker"]
+  "include": ["worker", "tests/worker"]
 }
