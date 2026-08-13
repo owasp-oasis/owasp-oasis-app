@@ -16,6 +16,19 @@ const MAX_BODY_BYTES        = 8_192; // 8KB max request body — prevents DoS vi
 const ALLOWED_ROLES         = new Set(['validator', 'general', '']);
 const ALLOWED_METHODS       = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
 
+function isLocalRequest(request, url = new URL(request.url), env = {}) {
+  const host = request.headers.get('Host') || '';
+  return (
+    (env.ENVIRONMENT && env.ENVIRONMENT !== 'production') ||
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.hostname === '[::1]' ||
+    host.startsWith('localhost:') ||
+    host.startsWith('127.0.0.1:') ||
+    host.startsWith('[::1]:')
+  );
+}
+
 /* ─── SECURITY HEADERS ───────────────────────────────────────── */
 const SEC_HEADERS = {
   'Content-Security-Policy': [
@@ -40,14 +53,19 @@ const SEC_HEADERS = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
-function secHeaders(res, request) {
+function secHeaders(res, request, env = {}) {
   const r = new Response(res.body, res);
-  for (const [k, v] of Object.entries(SEC_HEADERS)) r.headers.set(k, v);
+  const isLocal = request ? isLocalRequest(request, new URL(request.url), env) : false;
+  for (const [k, v] of Object.entries(SEC_HEADERS)) {
+    if (isLocal && k === 'Strict-Transport-Security') continue;
+    r.headers.set(k, v);
+  }
   // Allow both .com and .org origins for API responses
   if (request) {
     const origin = request.headers.get('Origin') || '';
     const allowed = ['https://www.owasp-oasis.com','https://www.owasp-oasis.org',
                      'https://owasp-oasis.com','https://owasp-oasis.org'];
+    if (isLocal) allowed.push('http://localhost:8787', 'http://127.0.0.1:8787');
     if (allowed.includes(origin)) {
       r.headers.set('Access-Control-Allow-Origin', origin);
       r.headers.set('Access-Control-Allow-Credentials', 'true');
@@ -57,14 +75,16 @@ function secHeaders(res, request) {
 }
 
 /* ─── RESPONSE HELPERS ───────────────────────────────────────── */
-const jsonOk  = (data, req)        => secHeaders(Response.json({ ok: true,  ...data },     { status: 200 }), req);
-const jsonErr = (msg, status=400, req) => secHeaders(Response.json({ ok: false, error: msg }, { status }), req);
+const jsonOk  = (data, req, env)        => secHeaders(Response.json({ ok: true,  ...data },     { status: 200 }), req, env);
+const jsonErr = (msg, status=400, req, env) => secHeaders(Response.json({ ok: false, error: msg }, { status }), req, env);
 
 /* ─── CORS (same-origin only — no external API access) ──────── */
-function handleOptions(request) {
+function handleOptions(request, env) {
   const origin = request.headers.get('Origin') || '';
+  const isLocal = isLocalRequest(request, new URL(request.url), env);
   const allowed = ['https://www.owasp-oasis.com','https://www.owasp-oasis.org',
                    'https://owasp-oasis.com','https://owasp-oasis.org'];
+  if (isLocal) allowed.push('http://localhost:8787', 'http://127.0.0.1:8787');
   const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
   return new Response(null, {
     status: 204,
@@ -261,10 +281,10 @@ export default {
     }
 
     /* Handle CORS preflight */
-    if (method === 'OPTIONS') return handleOptions(request);
+    if (method === 'OPTIONS') return handleOptions(request, env);
 
     /* HTTPS enforcement — skip on localhost */
-    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    const isLocal = isLocalRequest(request, url, env);
     if (url.protocol === 'http:' && !isLocal) {
       return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 301);
     }
@@ -293,9 +313,9 @@ export default {
           headers: {
             'Content-Type':  'text/html; charset=utf-8',
             'Cache-Control': 'no-store, no-cache, must-revalidate',
-            'Set-Cookie':    `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; Secure; HttpOnly; Max-Age=3600`,
+            'Set-Cookie':    `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; ${isLocal ? '' : 'Secure; '}HttpOnly; Max-Age=3600`,
           },
-        }));
+        }), request, env);
       }
 
       /* GET /api/count */
