@@ -1,3 +1,52 @@
+/* Workspace hero — a distinct, task-focused treatment for the app's work area */
+.workspace-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 68px 0 58px;
+  text-align: left;
+  background:
+    radial-gradient(circle at 84% 18%, rgba(76, 217, 100, 0.2), transparent 26%),
+    linear-gradient(120deg, var(--ink) 0%, var(--blue-dark) 62%, #087744 100%);
+  border-bottom: 5px solid var(--green-bright);
+}
+
+.workspace-hero::after {
+  content: '';
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  right: 6%;
+  top: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  transform: translateY(-50%) rotate(18deg);
+  pointer-events: none;
+}
+
+.workspace-hero .container {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-hero h1 {
+  margin-bottom: 10px;
+}
+
+.workspace-hero p {
+  max-width: 680px;
+  margin: 0;
+}
+
+.workspace-hero__eyebrow {
+  margin-bottom: 8px;
+  color: var(--green-bright);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 /* Tab nav */
 .lb-tabs {
   display: flex;
@@ -7,6 +56,8 @@
 }
 
 .lb-tab {
+  display: inline-flex;
+  align-items: center;
   padding: 10px 20px;
   font-size: 0.95rem;
   font-weight: 500;
@@ -19,11 +70,13 @@
   font-family: var(--font);
   transition: color 0.15s, border-color 0.15s;
   border-radius: 6px 6px 0 0;
+  text-decoration: none;
 }
 
 .lb-tab:hover {
   color: var(--blue);
   background: var(--gray-100);
+  text-decoration: none;
 }
 
 .lb-tab--active {
@@ -150,4 +203,19 @@
 
 .lb-error-retry:active {
   background: #fca5a5;
+}
+
+@media (max-width: 640px) {
+  .workspace-hero {
+    padding: 52px 0 44px;
+  }
+
+  .lb-tabs {
+    overflow-x: auto;
+  }
+
+  .lb-tab {
+    padding-inline: 14px;
+    white-space: nowrap;
+  }
 }

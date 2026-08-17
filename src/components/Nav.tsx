@@ -7,7 +7,7 @@ const links = [
   { to: '/', label: 'Home', exact: true },
   { to: '/about', label: 'About', exact: false },
   { to: '/overview', label: 'Overview', exact: false },
-  { to: '/leaderboards', label: 'Leaderboards', exact: false },
+  { to: '/workspace', label: 'Workspace', exact: false },
   { to: '/support', label: 'Support', exact: false },
   { to: '/sponsors', label: 'Sponsors', exact: false },
 ]

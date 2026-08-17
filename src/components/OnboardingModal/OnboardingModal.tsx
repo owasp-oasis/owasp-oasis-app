@@ -5,7 +5,7 @@
  * - Displays on first login OR when user has zero votes
  * - 6 steps: Welcome, Languages, Severity, Experience, Ready, WhatsNew
  * - Dismiss button on WhatsNew marks onboarding_version as seen without navigation
- * - "Get Started" button navigates to /leaderboards with URL params for filtering
+ * - "Get Started" button navigates to the Workspace pull-request queue with URL filters
  * - "Update Preferences" from Nav allows re-opening at any time
  */
 
@@ -85,7 +85,7 @@ export default function OnboardingModal({ isOpen, onClose, forceShow = false }: 
   }
 
   const handleComplete = async () => {
-    // Save preferences and navigate to leaderboards with URL params
+    // Save preferences and navigate to the Workspace with URL params
     await updatePreferences({
       languages: state.languages.length > 0 ? state.languages : null,
       severities: state.severities.length > 0 ? state.severities : null,
@@ -106,7 +106,8 @@ export default function OnboardingModal({ isOpen, onClose, forceShow = false }: 
     }
 
     onClose()
-    navigate(`/leaderboards?${params.toString()}`)
+    const query = params.toString()
+    navigate(`/workspace/pull-requests${query ? `?${query}` : ''}`)
   }
 
   if (!isOpen || !user) return null

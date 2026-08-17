@@ -305,7 +305,7 @@ export default function BrandGuide() {
                   <tbody>
                     <tr><td>Homepage hero</td><td>Bold and declarative — "The open source ecosystem has a security debt."</td></tr>
                     <tr><td>Validator onboarding</td><td>Welcoming, practical, step-by-step — remove friction</td></tr>
-                    <tr><td>Leaderboard copy</td><td>Celebratory but earned — acknowledge real contribution</td></tr>
+                    <tr><td>Workspace copy</td><td>Action-oriented and clear — help contributors find the next useful task</td></tr>
                     <tr><td>Press / external</td><td>Factual and precise — cite data, avoid adjectives</td></tr>
                     <tr><td>Error states / UI</td><td>Clear, calm, actionable — never blame the user</td></tr>
                   </tbody>
@@ -641,7 +641,7 @@ export default function BrandGuide() {
               <h3>Buttons</h3>
               <div className="bg-specimen-row">
                 <button className="btn btn-primary">Join Team OASIS</button>
-                <button className="btn btn-secondary">View leaderboards</button>
+                <button className="btn btn-secondary">Open workspace</button>
                 <button className="btn btn-outline">Learn more</button>
               </div>
               <div className="bg-table-wrap" style={{ marginTop: 12 }}>
@@ -748,7 +748,7 @@ export default function BrandGuide() {
                     <li>Spell out numbers one through nine; use numerals for 10+</li>
                     <li>Use the Oxford comma: "discovery, validation, and submission"</li>
                     <li>Use em dashes (—) without spaces for parenthetical asides</li>
-                    <li>Link text should describe the destination: "view the leaderboards" not "click here"</li>
+                    <li>Link text should describe the destination: "open the workspace" not "click here"</li>
                     <li>Attribute direct quotes with full name and role on first mention</li>
                   </ul>
                 </div>

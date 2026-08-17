@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Decision } from '../components/VoteForm'
 import ProjectsTab from './leaderboards/ProjectsTab'
 import PRsTab from './leaderboards/PRsTab'
@@ -8,14 +8,14 @@ import MaintainersTab from './leaderboards/MaintainersTab'
 import ToolsTab from './leaderboards/ToolsTab'
 import './Leaderboards.css'
 
-type Tab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers'
+export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'projects',      label: 'Projects' },
-  { id: 'prs',          label: 'PRs' },
-  { id: 'contributors', label: 'Contributors' },
-  // { id: 'tools',        label: 'Tools' },
-  { id: 'maintainers',  label: 'Maintainers' },
+const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
+  { id: 'projects',      label: 'Projects',      path: '/workspace/projects' },
+  { id: 'prs',           label: 'Pull Requests', path: '/workspace/pull-requests' },
+  { id: 'contributors', label: 'Contributors',  path: '/workspace/contributors' },
+  // { id: 'tools',        label: 'Tools',         path: '/workspace/tools' },
+  { id: 'maintainers',  label: 'Maintainers',   path: '/workspace/maintainers' },
 ]
 
 interface Meta {
@@ -34,9 +34,13 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-export default function Leaderboards() {
+interface LeaderboardsProps {
+  activeTab: WorkspaceTab
+}
+
+export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<Tab>('prs')
+  const navigate = useNavigate()
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -47,6 +51,7 @@ export default function Leaderboards() {
       languages: searchParams.get('lang')?.split(',').filter(Boolean) ?? [],
       severities: searchParams.get('severity')?.split(',').filter(Boolean) ?? [],
       experience: searchParams.get('exp') ?? null,
+      repo: searchParams.get('repo'),
     }
   }, [searchParams])
 
@@ -55,11 +60,10 @@ export default function Leaderboards() {
   const [contributors, setContributors] = useState<any[]>([])
   const [tools, setTools]               = useState<any[]>([])
   const [maintainers, setMaintainers]   = useState<any[]>([])
-  const [loaded, setLoaded]             = useState<Set<Tab>>(new Set())
-  const [loading, setLoading]           = useState<Tab | null>(null)
-  const [tabErrors, setTabErrors]       = useState<Partial<Record<Tab, string>>>({})
+  const [loaded, setLoaded]             = useState<Set<WorkspaceTab>>(new Set())
+  const [loading, setLoading]           = useState<WorkspaceTab | null>(null)
+  const [tabErrors, setTabErrors]       = useState<Partial<Record<WorkspaceTab, string>>>({})
   const [myVotes]           = useState<Map<number, Decision>>(new Map())
-  const [prsInitialRepo, setPrsInitialRepo] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/leaderboard/meta')
@@ -93,13 +97,13 @@ export default function Leaderboards() {
     }
   }, [])
 
-  const fetchTab = useCallback(async (tab: Tab) => {
+  const fetchTab = useCallback(async (tab: WorkspaceTab) => {
     if (loaded.has(tab)) return
     setLoading(tab)
     // Clear error on retry
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
     try {
-      const endpoints: Record<Tab, string> = {
+      const endpoints: Record<WorkspaceTab, string> = {
         projects:     '/api/leaderboard/repos',
         prs:          '/api/leaderboard/prs',
         contributors: '/api/leaderboard/contributors',
@@ -128,32 +132,41 @@ export default function Leaderboards() {
     }
   }, [loaded])
 
-  const handleRetry = useCallback((tab: Tab) => {
+  const handleRetry = useCallback((tab: WorkspaceTab) => {
     setLoaded(prev => { const n = new Set(prev); n.delete(tab); return n })
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
   }, [])
 
   const handleNavigateToPRs = useCallback((repoName: string) => {
-    setPrsInitialRepo(repoName)
-    setActiveTab('prs')
-    // Ensure data is loaded
-    if (!loaded.has('prs')) {
-      setTimeout(() => fetchTab('prs'), 0)
+    const params = new URLSearchParams(searchParams)
+    params.set('repo', repoName)
+    navigate(`/workspace/pull-requests?${params.toString()}`)
+  }, [navigate, searchParams])
+
+  const handleRepoFilterChange = useCallback((repoName: string | null) => {
+    const params = new URLSearchParams(searchParams)
+    if (repoName) {
+      params.set('repo', repoName)
+    } else {
+      params.delete('repo')
     }
-  }, [loaded, fetchTab])
+    const query = params.toString()
+    navigate(`/workspace/pull-requests${query ? `?${query}` : ''}`, { replace: true })
+  }, [navigate, searchParams])
 
   useEffect(() => {
     fetchTab(activeTab)
   }, [activeTab, fetchTab])
 
   return (
-    <div className="leaderboards">
-      <div className="page-hero">
+    <div className="leaderboards workspace">
+      <div className="page-hero workspace-hero">
         <div className="container">
-          <h1>Leaderboards</h1>
+          <div className="workspace-hero__eyebrow">OASIS work area</div>
+          <h1>Workspace</h1>
           <p>
-            Where we surface work to be done, celebrate participant success, and help
-            open source maintainers find the next PR they should merge.
+            Find security work that needs attention, review open pull requests, and help
+            maintainers move trusted fixes forward.
           </p>
         </div>
       </div>
@@ -168,15 +181,18 @@ export default function Leaderboards() {
           {tabsSticky && <div className="lb-tabs-placeholder" aria-hidden="true" />}
           <div className={`lb-tabs${tabsSticky ? ' lb-tabs--sticky' : ''}`} role="tablist">
             {TABS.map(tab => (
-              <button
+              <NavLink
                 key={tab.id}
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 className={`lb-tab${activeTab === tab.id ? ' lb-tab--active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                to={{
+                  pathname: tab.path,
+                  search: searchParams.toString() ? `?${searchParams.toString()}` : '',
+                }}
               >
                 {tab.label}
-              </button>
+              </NavLink>
             ))}
             {/* Sync status chip — right side of tab bar */}
             <span className="lb-sync-chip" title={meta.last_synced_at ?? undefined}>
@@ -216,9 +232,10 @@ export default function Leaderboards() {
               <PRsTab
                 data={prs}
                 loading={loading === 'prs'}
-                initialRepoFilter={prsInitialRepo}
+                initialRepoFilter={initialFilters.repo}
                 initialLanguages={initialFilters.languages}
                 initialSeverities={initialFilters.severities}
+                onRepoFilterChange={handleRepoFilterChange}
               />
             ) : activeTab === 'contributors' ? (
               <ContributorsTab data={contributors} loading={loading === 'contributors'} />

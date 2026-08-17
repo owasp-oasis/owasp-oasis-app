@@ -97,7 +97,7 @@ src/                       ← React SPA (frontend)
     AuthContext.tsx         ← React context — GitHub auth state (user, loading, logout, refetch)
   pages/
     Home.tsx               ← Landing page
-    Leaderboards.tsx       ← Tabbed leaderboard (PRs, Contributors, Maintainers, Projects, Tools)
+    Leaderboards.tsx       ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
     About.tsx              ← Team and project background
     Overview.tsx           ← How OASIS works
     Support.tsx            ← How to help: share, recruit, validate, sponsor
@@ -174,7 +174,7 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | Page | Route | Description |
 |---|---|---|
 | Home | `/` | Landing page with hero, feature overview, registration form, and quotes carousel |
-| Leaderboards | `/leaderboards` | Tabbed leaderboard with PRs (default), Contributors, Maintainers, Projects, and Tools tabs; includes sticky tab bar on scroll |
+| Workspace | `/workspace/pull-requests` | Task-focused work area with directly linkable Pull Requests, Projects, Contributors, and Maintainers tables; `/workspace` redirects here |
 | About | `/about` | Team, project background, and OWASP affiliation |
 | Overview | `/overview` | How OASIS works — full process walkthrough |
 | Support | `/support` | How to help: share social messages, targeted conversations, become a validator, sponsor the project |
@@ -200,7 +200,7 @@ The worker handles all server-side logic. Here is what each module is responsibl
 
 ## Authentication
 
-GitHub OAuth is used for features that write to GitHub (voting, reactions). No account is required to browse the site or leaderboards.
+GitHub OAuth is used for features that write to GitHub (voting, reactions). No account is required to browse the site or Workspace.
 
 ### Flow
 
@@ -215,7 +215,7 @@ User clicks "Sign in with GitHub"
       fetches GitHub user info (login, avatar_url)
       creates session row in D1 user_sessions (30-day TTL)
       sets HttpOnly session cookie
-      redirects to /leaderboards
+      redirects to /workspace/pull-requests
   → GET /api/auth/me  (called on every page load)
       returns { user: { login, avatar_url } } or { user: null }
   → POST /api/auth/logout  (requires CSRF token)
@@ -291,9 +291,9 @@ Rejection summary:
 
 ---
 
-## PR Leaderboard table
+## Workspace pull-request table
 
-The **PRs tab** in the leaderboard is the primary work queue for validators.
+The **Pull Requests** table in the Workspace is the primary work queue for validators and is directly linkable at `/workspace/pull-requests`.
 
 ### Columns
 
@@ -309,7 +309,9 @@ The **PRs tab** in the leaderboard is the primary work queue for validators.
 
 ### Filter pills
 
-"Quick filters:" pills sit to the **right** of the search input in the shared toolbar. When logged in, a **Needs My Vote** pill appears showing the count of unreviewed open PRs. Selecting it when there are none shows: _"You've reviewed all open PRs — great work!"_ with a "View all PRs" inline button.
+"Quick filters:" pills sit below the search input in the shared toolbar. When logged in, a **Needs My Vote** pill appears showing the count of unreviewed open PRs. Selecting it when there are none shows: _"You've reviewed all open PRs — great work!"_ with a "View all PRs" inline button.
+
+The **Project** dropdown filters the queue to a repository. Its selection is stored in the `repo` query parameter, so the filtered Workspace URL can be copied and shared directly.
 
 ### Status thresholds (stub)
 
@@ -319,7 +321,7 @@ The **PRs tab** in the leaderboard is the primary work queue for validators.
 
 ## PR Panel
 
-The PR Panel is a slide-out side panel that loads live GitHub data for any PR in the leaderboard.
+The PR Panel is a slide-out side panel that loads live GitHub data for any PR in the Workspace.
 
 ### API endpoints
 

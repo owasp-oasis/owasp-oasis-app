@@ -3,7 +3,7 @@
  *
  * Flow:
  *   GET /api/auth/login    → redirect to GitHub OAuth, set __oauth_state cookie
- *   GET /api/auth/callback → exchange code, create session, redirect to /leaderboards
+ *   GET /api/auth/callback → exchange code, create session, redirect to the Workspace
  *   GET /api/auth/me       → return {user:{login,avatar_url}} or {user:null}
  *   POST /api/auth/logout  → delete session, clear cookie
  */
@@ -89,10 +89,10 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
   // Validate state (timing-safe comparison)
   const cookieState = getCookieValue(request, OAUTH_STATE_COOKIE);
   if (!code || !state || !cookieState) {
-    return redirectWithError('/leaderboards', 'OAuth state missing');
+    return redirectWithError('/workspace/pull-requests', 'OAuth state missing');
   }
   if (!timingSafeEqual(state, cookieState)) {
-    return redirectWithError('/leaderboards', 'OAuth state mismatch');
+    return redirectWithError('/workspace/pull-requests', 'OAuth state mismatch');
   }
 
   // Exchange code for access token
@@ -114,11 +114,11 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
     });
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
     if (!tokenData.access_token) {
-      return redirectWithError('/leaderboards', tokenData.error ?? 'Token exchange failed');
+      return redirectWithError('/workspace/pull-requests', tokenData.error ?? 'Token exchange failed');
     }
     accessToken = tokenData.access_token;
   } catch {
-    return redirectWithError('/leaderboards', 'Token exchange error');
+    return redirectWithError('/workspace/pull-requests', 'Token exchange error');
   }
 
   // Fetch GitHub user info
@@ -132,11 +132,11 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
       },
     });
     const user = await userRes.json() as { login?: string; avatar_url?: string };
-    if (!user.login) return redirectWithError('/leaderboards', 'Could not fetch GitHub user');
+    if (!user.login) return redirectWithError('/workspace/pull-requests', 'Could not fetch GitHub user');
     login     = user.login;
     avatarUrl = user.avatar_url ?? `https://github.com/${user.login}.png?size=64`;
   } catch {
-    return redirectWithError('/leaderboards', 'GitHub user fetch error');
+    return redirectWithError('/workspace/pull-requests', 'GitHub user fetch error');
   }
 
   // Fetch user emails to get primary verified email for mailing list registration
@@ -172,7 +172,7 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
        VALUES (?, ?, ?, ?, ?)`,
     ).bind(sessionId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
   } catch {
-    return redirectWithError('/leaderboards', 'Session creation failed');
+    return redirectWithError('/workspace/pull-requests', 'Session creation failed');
   }
 
   // Auto-register the user as a validator in the registrations table (if not already registered)
@@ -207,13 +207,13 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
   try {
     encryptedToken = await encryptToken(env.TOKEN_ENCRYPTION_KEY, accessToken);
   } catch {
-    return redirectWithError('/leaderboards', 'Token encryption failed');
+    return redirectWithError('/workspace/pull-requests', 'Token encryption failed');
   }
 
-  // Redirect to leaderboards with session and token cookies set.
+  // Redirect to the Workspace with session and token cookies set.
   // IMPORTANT: Set-Cookie must be separate headers — joining with ', ' breaks cookie parsing.
   const callbackHeaders = new Headers({
-    Location: '/leaderboards',
+    Location: '/workspace/pull-requests',
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   });
   callbackHeaders.append('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);

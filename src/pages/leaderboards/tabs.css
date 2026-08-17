@@ -937,6 +937,48 @@ tr:hover .row-chevron {
 }
 
 /* ── Filter chips (for language and repo filtering) ─────────────── */
+.pr-project-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-project-filter label {
+  color: var(--gray-600);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pr-project-filter select {
+  min-width: 190px;
+  max-width: 300px;
+  padding: 7px 32px 7px 10px;
+  color: var(--gray-800);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.pr-project-filter select:hover,
+.pr-project-filter select:focus {
+  border-color: var(--blue);
+}
+
+.pr-project-filter select:focus-visible {
+  outline: 3px solid rgba(76, 217, 100, 0.4);
+  outline-offset: 2px;
+}
+
+.pr-filter-divider {
+  width: 1px;
+  height: 28px;
+  margin-inline: 4px;
+  background: var(--gray-200);
+}
+
 .filter-chip-row {
   display: flex;
   gap: 8px;
@@ -968,6 +1010,21 @@ tr:hover .row-chevron {
 
 .filter-chip.active {
   background: var(--blue);
+}
+
+@media (max-width: 640px) {
+  .pr-project-filter {
+    width: 100%;
+  }
+
+  .pr-project-filter select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pr-filter-divider {
+    display: none;
+  }
 }
 
 /* ── Language badge styling (clickable) ──────────────────────── */

@@ -27,7 +27,11 @@ export default function App() {
             <Route path="/home" element={<Navigate to="/" replace />} />
             <Route path="/about" element={<About />} />
             <Route path="/overview" element={<Overview />} />
-            <Route path="/leaderboards" element={<Leaderboards />} />
+            <Route path="/workspace" element={<Navigate to="/workspace/pull-requests" replace />} />
+            <Route path="/workspace/projects" element={<Leaderboards activeTab="projects" />} />
+            <Route path="/workspace/pull-requests" element={<Leaderboards activeTab="prs" />} />
+            <Route path="/workspace/contributors" element={<Leaderboards activeTab="contributors" />} />
+            <Route path="/workspace/maintainers" element={<Leaderboards activeTab="maintainers" />} />
             <Route path="/support" element={<Support />} />
             <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/brand" element={<BrandGuide />} />

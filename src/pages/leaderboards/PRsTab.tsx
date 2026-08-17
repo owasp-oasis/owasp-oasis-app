@@ -224,6 +224,7 @@ interface Props {
   initialRepoFilter?: string | null
   initialLanguages?: string[]
   initialSeverities?: string[]
+  onRepoFilterChange?: (repoName: string | null) => void
 }
 
 export default function PRsTab({
@@ -232,6 +233,7 @@ export default function PRsTab({
   initialRepoFilter,
   initialLanguages = [],
   initialSeverities = [],
+  onRepoFilterChange,
 }: Props) {
   const [filter, setFilter] = useState<FilterMode>('needs-my-vote')
   const { user } = useAuth()
@@ -270,10 +272,18 @@ export default function PRsTab({
 
   // Sync with initialRepoFilter prop
   useEffect(() => {
-    if (initialRepoFilter) {
-      setRepoFilter(initialRepoFilter)
-    }
+    setRepoFilter(initialRepoFilter ?? null)
   }, [initialRepoFilter])
+
+  const projects = useMemo(
+    () => [...new Set(data.map(pr => pr.repo_name))].sort((a, b) => a.localeCompare(b)),
+    [data],
+  )
+
+  const selectProject = useCallback((repoName: string | null) => {
+    setRepoFilter(repoName)
+    onRepoFilterChange?.(repoName)
+  }, [onRepoFilterChange])
 
   // If user signs out while on the needs-my-vote filter, fall back to 'all'
   useEffect(() => {
@@ -456,6 +466,20 @@ export default function PRsTab({
 
   const filterBar = (
     <div className="pr-filter-bar">
+      <div className="pr-project-filter">
+        <label htmlFor="pr-project-filter">Project</label>
+        <select
+          id="pr-project-filter"
+          value={repoFilter ?? ''}
+          onChange={event => selectProject(event.target.value || null)}
+        >
+          <option value="">All projects</option>
+          {projects.map(project => (
+            <option key={project} value={project}>{project}</option>
+          ))}
+        </select>
+      </div>
+      <span className="pr-filter-divider" aria-hidden="true" />
       <span className="pr-filter-label">Quick filters:</span>
       {visibleFilters.map(({ id, label }) => (
         <button
@@ -466,11 +490,6 @@ export default function PRsTab({
           {label}
         </button>
       ))}
-      {repoFilter && (
-        <button className="filter-chip active" onClick={() => setRepoFilter(null)}>
-          × {repoFilter}
-        </button>
-      )}
     </div>
   )
 

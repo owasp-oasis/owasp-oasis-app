@@ -125,7 +125,7 @@ describe('Authentication (OAuth)', () => {
       );
 
       expect(callbackRes.status).toBe(302);
-      expect(callbackRes.headers.get('Location')).toBe('/leaderboards');
+      expect(callbackRes.headers.get('Location')).toBe('/workspace/pull-requests');
     });
 
     it('creates user_sessions row', async () => {

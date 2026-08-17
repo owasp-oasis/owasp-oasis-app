@@ -154,8 +154,8 @@ export default function Support() {
                 <h3>Build your reputation</h3>
                 <p>
                   Every validated PR earns you interactions, peer reactions, and a growing
-                  reputation score visible on the{' '}
-                  <a href="/leaderboards">OASIS Leaderboards</a>. Consistent, high-quality
+                  reputation score visible in the{' '}
+                  <a href="/workspace/contributors">OASIS Workspace</a>. Consistent, high-quality
                   validators gain credibility weight &mdash; your vote carries more over time.
                 </p>
               </div>
