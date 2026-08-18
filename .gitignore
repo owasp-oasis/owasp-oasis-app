@@ -4,3 +4,25 @@ dist-worker/
 .wrangler/
 *.local
 .DS_Store
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
+
+# Local credentials and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases, dumps, and PII exports
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+registrations.csv
+applications.csv
