@@ -24,7 +24,6 @@ export default function PreviewBanner() {
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('idle')
   const [description, setDescription] = useState('')
   const [severity, setSeverity] = useState<Severity>('bug')
-  const [contact, setContact] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
 
@@ -65,7 +64,6 @@ export default function PreviewBanner() {
     setFeedbackState('idle')
     setDescription('')
     setSeverity('bug')
-    setContact('')
     setErrorMsg('')
   }
 
@@ -89,7 +87,6 @@ export default function PreviewBanner() {
         body: JSON.stringify({
           description: description.trim(),
           severity,
-          contact: contact.trim() || undefined,
         }),
       })
       if (res.ok) {
@@ -155,6 +152,10 @@ export default function PreviewBanner() {
             </div>
           ) : (
             <form className="feedback-form" onSubmit={handleSubmit} noValidate>
+              <p className="feedback-privacy-note">
+                Reports are filed as public GitHub issues. Do not include email addresses,
+                credentials, or other private information.
+              </p>
               <div className="feedback-field">
                 <label htmlFor="feedback-severity">Type</label>
                 <div className="feedback-severity-group">
@@ -185,20 +186,6 @@ export default function PreviewBanner() {
                   placeholder="What did you see? What did you expect?"
                   rows={4}
                   required
-                  disabled={feedbackState === 'loading'}
-                />
-              </div>
-
-              <div className="feedback-field">
-                <label htmlFor="feedback-contact">
-                  Contact <span className="optional">(optional)</span>
-                </label>
-                <input
-                  id="feedback-contact"
-                  type="text"
-                  value={contact}
-                  onChange={e => setContact(e.target.value)}
-                  placeholder="Email or GitHub handle — if you want a reply"
                   disabled={feedbackState === 'loading'}
                 />
               </div>

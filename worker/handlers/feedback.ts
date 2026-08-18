@@ -6,6 +6,9 @@ import type { Env } from '../types.js';
 import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
 import { parseBody } from '../validation.js';
 
+const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const CREDENTIAL_PATTERN = /(?:github_pat_|gh[pousr]_|AKIA)[A-Z0-9_]{16,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
+
 export async function handleFeedback(request: Request, env: Env): Promise<Response> {
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
 
@@ -24,10 +27,12 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   if (description.length > 5000) {
     return jsonErr('Description must be 5000 characters or fewer.', 400, request);
   }
+  if (EMAIL_PATTERN.test(description) || CREDENTIAL_PATTERN.test(description)) {
+    return jsonErr('Remove email addresses, credentials, and other private information before submitting.', 400, request);
+  }
 
   const VALID_SEVERITY = new Set(['bug', 'suggestion', 'other']);
   const severity = VALID_SEVERITY.has(String(body['severity'])) ? String(body['severity']) : 'other';
-  const contact  = String(body['contact'] ?? '').trim().slice(0, 200) || null;
 
   const token = env.GITHUB_TOKEN;
   if (!token) {
@@ -39,14 +44,13 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   const issueTitle    = `${severityLabel} Preview site feedback`;
   const issueBody = [
     `**Type:** ${severity}`,
-    contact ? `**Contact:** ${contact}` : null,
     '',
     '**Description:**',
     description,
     '',
     '---',
     `_Submitted via preview site feedback form on ${new Date().toUTCString()}_`,
-  ].filter((line): line is string => line !== null).join('\n');
+  ].join('\n');
 
   const ghRes = await fetch('https://api.github.com/repos/owasp-oasis/owasp-oasis-app/issues', {
     method: 'POST',
