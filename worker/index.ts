@@ -15,7 +15,7 @@ import {
   jsonErr,
 } from './security.js';
 import { runSync, runSyncOneRepo } from './sync.js';
-import { runCleanup } from './cleanup.js';
+import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
 import {
   handleMeta,
   handleRepos,
@@ -165,9 +165,9 @@ export default {
        }
 
        /* ── GET /api/admin/run-cleanup ───────────────────────────────
-        * Triggers the cleanup task manually (without waiting for cron).
-        * Checks all non-deleted PRs against GitHub API and flags any
-        * that return 404 or 410 as deleted (soft delete).
+        * Triggers both cleanup passes manually (without waiting for cron).
+        * First reconciles removed repositories from the complete public
+        * organization listing, then checks remaining PRs individually.
         *
         * Protected by X-Admin-Secret header (same as other admin endpoints).
         * ──────────────────────────────────────────────────────────── */
@@ -176,8 +176,9 @@ export default {
          const envSecret = env.ADMIN_SECRET ?? '';
          if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
          if (!env.DB) return jsonErr('DB not available', 503, request);
-         const result = await runCleanup(env);
-         return secHeaders(Response.json(result), request);
+         const repositories = await reconcileRemovedRepositories(env);
+         const pullRequests = await runCleanup(env);
+         return secHeaders(Response.json({ repositories, pull_requests: pullRequests }), request);
        }
 
        /* ── Leaderboard API ───────────────────────────────────────── */
@@ -238,6 +239,12 @@ export default {
 
   /* ── Cron — every 4 hours ──────────────────────────────────── */
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Reconcile removed repositories before the full sync consumes its GitHub
+    // request/runtime budget. A failed full sync must not block this cleanup.
+    console.log('Starting removed repository reconciliation...');
+    const repositoryCleanup = await reconcileRemovedRepositories(env);
+    console.log('Repository reconciliation result:', JSON.stringify(repositoryCleanup));
+
     console.log('Starting scheduled GitHub sync...');
     if (env.DB) {
       await env.DB.prepare(

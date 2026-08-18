@@ -5,12 +5,96 @@
  */
 
 import type { Env } from './types.js';
+import { ghFetchAll, META_REPOS, ORG, type GitHubRepo } from './github.js';
 
 interface CleanupResult {
   checked: number;
   flagged: number;
   errors: number;
   deletedPRs: Array<{ repo: string; number: number; id: number }>;
+}
+
+interface RepositoryReconciliationResult {
+  checked: number;
+  removed: number;
+  flagged: number;
+  errors: number;
+  repositories: Array<{ repo: string; prs_flagged: number }>;
+}
+
+/**
+ * Finds tracked repositories that are absent from a complete public fork listing.
+ * Kept pure so the safety-critical set comparison can be tested independently.
+ */
+export function findRemovedRepositoryNames(
+  publicRepos: Array<Pick<GitHubRepo, 'name' | 'fork'>>,
+  trackedNames: string[],
+): string[] {
+  const currentNames = new Set(
+    publicRepos
+      .filter(repo => repo.fork && !META_REPOS.has(repo.name))
+      .map(repo => repo.name),
+  );
+
+  if (currentNames.size === 0) return [];
+  return trackedNames.filter(name => !currentNames.has(name)).sort();
+}
+
+/**
+ * Reconciles D1 against GitHub's complete public repository listing.
+ *
+ * This is deliberately safer than treating a repository-level 404 as proof of
+ * deletion: ghFetchAll must first return a valid, non-empty, fully paginated
+ * organization listing. If GitHub authentication, pagination, or transport
+ * fails, no records are changed.
+ */
+export async function reconcileRemovedRepositories(env: Env): Promise<RepositoryReconciliationResult> {
+  const result: RepositoryReconciliationResult = {
+    checked: 0,
+    removed: 0,
+    flagged: 0,
+    errors: 0,
+    repositories: [],
+  };
+
+  if (!env.DB) {
+    console.warn('Repository reconciliation: DB not available, skipping');
+    return result;
+  }
+
+  try {
+    const publicRepos = await ghFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, env.GITHUB_TOKEN);
+    const currentForkCount = publicRepos.filter(repo => repo.fork && !META_REPOS.has(repo.name)).length;
+    if (currentForkCount === 0) {
+      console.warn('Repository reconciliation: GitHub returned no public forks; refusing to modify D1');
+      result.errors++;
+      return result;
+    }
+
+    const trackedRows = await env.DB.prepare(
+      'SELECT DISTINCT repo_name FROM pull_requests WHERE deleted = 0 ORDER BY repo_name',
+    ).all<{ repo_name: string }>();
+    const trackedNames = (trackedRows.results ?? []).map(row => row.repo_name);
+    const removedNames = findRemovedRepositoryNames(publicRepos, trackedNames);
+    result.checked = trackedNames.length;
+
+    for (const repoName of removedNames) {
+      const deletion = await env.DB.prepare(
+        'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE repo_name = ? AND deleted = 0',
+      ).bind(new Date().toISOString(), repoName).run();
+      const flagged = deletion.meta.changes ?? 0;
+
+      result.removed++;
+      result.flagged += flagged;
+      result.repositories.push({ repo: repoName, prs_flagged: flagged });
+      console.log(`Repository reconciliation: ${repoName} removed; flagged ${flagged} PR(s)`);
+    }
+  } catch (err) {
+    result.errors++;
+    console.error('Repository reconciliation failed:', (err as Error)?.message);
+  }
+
+  return result;
 }
 
 /**
