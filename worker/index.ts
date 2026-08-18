@@ -17,6 +17,10 @@ import {
 import { runSync, runSyncOneRepo } from './sync.js';
 import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
 import {
+  scheduledTaskForCron,
+  syncRegistrationsToSheets,
+} from './sheetsSync.js';
+import {
   handleMeta,
   handleRepos,
   handleRepoDetail,
@@ -237,8 +241,18 @@ export default {
     }
   },
 
-  /* ── Cron — every 4 hours ──────────────────────────────────── */
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+  /* ── Scheduled jobs ─────────────────────────────────────────── */
+  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const task = scheduledTaskForCron(event.cron);
+    if (task === 'sheets_sync') {
+      await syncRegistrationsToSheets(env);
+      return;
+    }
+    if (task === null) {
+      console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
+      return;
+    }
+
     // Reconcile removed repositories before the full sync consumes its GitHub
     // request/runtime budget. A failed full sync must not block this cleanup.
     console.log('Starting removed repository reconciliation...');

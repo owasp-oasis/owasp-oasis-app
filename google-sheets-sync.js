@@ -1,99 +1,84 @@
 /**
- * OASIS — Google Sheets Auto-Import
- * API_SECRET is passed from GitHub Actions — not hardcoded here
+ * OASIS — Google Sheets registration import endpoint.
+ *
+ * Deploy this as a Google Apps Script web app and configure the
+ * SHEETS_SYNC_SECRET script property. Cloudflare sends an HMAC-signed payload;
+ * the secret itself never crosses the wire.
  */
 
-const WORKER_URL          = 'https://www.owasp-oasis.org';
 const SHEET_REGISTRATIONS = 'Registrations';
-const SHEET_LOG           = 'Sync Log';
+const SHEET_LOG = 'Sync Log';
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
-// ─── CALLED BY GITHUB ACTIONS (POST with data + secret) ──────
+function jsonResponse(value) {
+  return ContentService
+    .createTextOutput(JSON.stringify(value))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function bytesToHex(bytes) {
+  return bytes
+    .map(byte => ((byte + 256) % 256).toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function constantTimeEqual(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string' || left.length !== right.length) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < left.length; index++) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+function verifyEnvelope(envelope, secret) {
+  if (!envelope || typeof envelope.payload !== 'string' || typeof envelope.signature !== 'string') {
+    throw new Error('Invalid envelope');
+  }
+
+  const expected = bytesToHex(Utilities.computeHmacSha256Signature(
+    envelope.payload,
+    secret,
+    Utilities.Charset.UTF_8,
+  ));
+  if (!constantTimeEqual(envelope.signature, expected)) throw new Error('Invalid signature');
+
+  const payload = JSON.parse(envelope.payload);
+  if (payload.version !== 1 || !Array.isArray(payload.registrations)) {
+    throw new Error('Unsupported payload');
+  }
+
+  const sentAt = Date.parse(payload.sent_at);
+  if (!Number.isFinite(sentAt) || Math.abs(Date.now() - sentAt) > MAX_CLOCK_SKEW_MS) {
+    throw new Error('Expired payload');
+  }
+  return payload;
+}
+
 function doPost(e) {
   try {
-    const data   = JSON.parse(e.postData.contents);
-
-    // Validate secret passed from GitHub Actions
-    const secret     = e.parameter.secret || '';
-    const storedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || '';
-    if (!secret || secret !== storedSecret) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ ok: false, error: 'Unauthorised' }))
-        .setMimeType(ContentService.MimeType.JSON);
+    const secret = PropertiesService.getScriptProperties().getProperty('SHEETS_SYNC_SECRET') || '';
+    if (!secret) throw new Error('Sync secret is not configured');
+    if (!e || !e.postData || typeof e.postData.contents !== 'string') {
+      throw new Error('Request body is required');
     }
 
-    const registrations = data.registrations || [];
-    writeToSheet(registrations);
-    logSync(`GitHub Actions synced ${registrations.length} registrations.`);
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true, count: registrations.length }))
-      .setMimeType(ContentService.MimeType.JSON);
+    const envelope = JSON.parse(e.postData.contents);
+    const payload = verifyEnvelope(envelope, secret);
+    writeToSheet(payload.registrations);
+    logSync(`Cloudflare Worker synced ${payload.registrations.length} registrations.`);
+    return jsonResponse({ ok: true, count: payload.registrations.length });
   } catch (err) {
-    logSync(`ERROR (doPost): ${err.message}`);
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    logSync('ERROR: registration sync failed.');
+    return jsonResponse({ ok: false, error: 'Sync rejected' });
   }
 }
 
-// ─── CALLED MANUALLY (GET) ────────────────────────────────────
-function doGet(e) {
-  try {
-    const secret       = e.parameter.secret || '';
-    const storedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET') || '';
-    if (!secret || secret !== storedSecret) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ ok: false, error: 'Unauthorised' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    syncRegistrations();
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true, message: 'Sync complete' }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-// ─── FETCH FROM WORKER AND SYNC ───────────────────────────────
-function syncRegistrations() {
-  const adminSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
-  const response = UrlFetchApp.fetch(`${WORKER_URL}/api/admin/registrations`, {
-    method: 'GET',
-    headers: { 'X-Admin-Secret': adminSecret },
-    muteHttpExceptions: true,
-  });
-
-  if (response.getResponseCode() !== 200) {
-    throw new Error(`HTTP ${response.getResponseCode()}: ${response.getContentText()}`);
-  }
-
-  const data = JSON.parse(response.getContentText());
-  const registrations = data.registrations || [];
-  writeToSheet(registrations);
-  logSync(`Synced ${registrations.length} registrations.`);
-}
-
-// ─── SET SECRET (run once manually after pasting) ─────────────
-// SECURITY(F1): NEVER commit a real ADMIN_SECRET value here.
-// This file is version-controlled. The placeholder below must remain a placeholder.
-// To set the secret:
-//   1. Generate a strong random value (e.g. openssl rand -base64 32)
-//   2. Paste ONLY into this function locally, run setSecrets() once from the Apps Script editor
-//   3. Immediately revert this file to the placeholder before committing
-//   4. The production value must also be set via: wrangler secret put ADMIN_SECRET
-function setSecrets() {
-  PropertiesService.getScriptProperties().setProperties({
-    'ADMIN_SECRET': 'REPLACE_WITH_STRONG_SECRET_NEVER_COMMIT',  // see instructions above
-  });
-  Logger.log('Secret saved to Script Properties.');
-}
-
-// ─── WRITE TO SHEET ───────────────────────────────────────────
 function writeToSheet(registrations) {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet   = ss.getSheetByName(SHEET_REGISTRATIONS);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_REGISTRATIONS);
   if (!sheet) sheet = ss.insertSheet(SHEET_REGISTRATIONS);
 
   sheet.clearContents();
@@ -108,32 +93,26 @@ function writeToSheet(registrations) {
   headerRange.setFontSize(11);
 
   if (registrations.length > 0) {
-    const rows = registrations.map(r => [
-      r.id || '', r.name || '', r.email || '',
-      r.github || '', r.role || '',
-      r.created_at ? new Date(r.created_at).toLocaleString() : '',
+    const rows = registrations.map(registration => [
+      registration.id || '',
+      registration.name || '',
+      registration.email || '',
+      registration.github || '',
+      registration.role || '',
+      registration.created_at ? new Date(registration.created_at).toLocaleString() : '',
     ]);
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }
 
-  for (let i = 1; i <= headers.length; i++) sheet.autoResizeColumn(i);
+  for (let column = 1; column <= headers.length; column++) sheet.autoResizeColumn(column);
   sheet.setFrozenRows(1);
   sheet.getRange('H1').setValue(`Total: ${registrations.length}`)
     .setFontWeight('bold').setFontColor('#0B4F8A');
 }
 
-// ─── LOG ──────────────────────────────────────────────────────
 function logSync(message) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_LOG);
   if (!sheet) sheet = ss.insertSheet(SHEET_LOG);
   sheet.appendRow([new Date().toLocaleString(), message]);
-}
-
-// ─── MENU ─────────────────────────────────────────────────────
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('OASIS')
-    .addItem('Sync Now', 'syncRegistrations')
-    .addToUi();
 }

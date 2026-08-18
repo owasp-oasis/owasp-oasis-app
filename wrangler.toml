@@ -72,4 +72,4 @@ ENVIRONMENT        = "production"
 OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
 
 [env.production.triggers]
-crons = ["0 */4 * * *"]
+crons = ["0 */4 * * *", "15 * * * *"]
