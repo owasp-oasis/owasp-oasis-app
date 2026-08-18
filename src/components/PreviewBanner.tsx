@@ -24,6 +24,7 @@ export default function PreviewBanner() {
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('idle')
   const [description, setDescription] = useState('')
   const [severity, setSeverity] = useState<Severity>('bug')
+  const [githubUsername, setGithubUsername] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
 
@@ -64,6 +65,7 @@ export default function PreviewBanner() {
     setFeedbackState('idle')
     setDescription('')
     setSeverity('bug')
+    setGithubUsername('')
     setErrorMsg('')
   }
 
@@ -87,6 +89,7 @@ export default function PreviewBanner() {
         body: JSON.stringify({
           description: description.trim(),
           severity,
+          github_username: githubUsername.trim() || undefined,
         }),
       })
       if (res.ok) {
@@ -153,8 +156,8 @@ export default function PreviewBanner() {
           ) : (
             <form className="feedback-form" onSubmit={handleSubmit} noValidate>
               <p className="feedback-privacy-note">
-                Reports are filed as public GitHub issues. Do not include email addresses,
-                credentials, or other private information.
+                Reports are filed as public GitHub issues. Add your GitHub username if you
+                want to be mentioned and notified. Never include credentials or private secrets.
               </p>
               <div className="feedback-field">
                 <label htmlFor="feedback-severity">Type</label>
@@ -186,6 +189,21 @@ export default function PreviewBanner() {
                   placeholder="What did you see? What did you expect?"
                   rows={4}
                   required
+                  disabled={feedbackState === 'loading'}
+                />
+              </div>
+
+              <div className="feedback-field">
+                <label htmlFor="feedback-github-username">
+                  GitHub username <span className="optional">(optional)</span>
+                </label>
+                <input
+                  id="feedback-github-username"
+                  type="text"
+                  value={githubUsername}
+                  onChange={e => setGithubUsername(e.target.value)}
+                  placeholder="octocat"
+                  autoComplete="off"
                   disabled={feedbackState === 'loading'}
                 />
               </div>

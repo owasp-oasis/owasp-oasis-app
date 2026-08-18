@@ -171,7 +171,8 @@ body.banner-dismissed {
   color: var(--blue-dark);
 }
 
-.feedback-field textarea {
+.feedback-field textarea,
+.feedback-field input[type="text"] {
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   padding: 10px 12px;
@@ -184,12 +185,14 @@ body.banner-dismissed {
   outline: none;
 }
 
-.feedback-field textarea:focus {
+.feedback-field textarea:focus,
+.feedback-field input[type="text"]:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
 
-.feedback-field textarea:disabled {
+.feedback-field textarea:disabled,
+.feedback-field input[type="text"]:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

@@ -4,10 +4,61 @@
 
 import type { Env } from '../types.js';
 import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
-import { parseBody } from '../validation.js';
+import { parseBody, vGitHub } from '../validation.js';
 
-const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const CREDENTIAL_PATTERN = /(?:github_pat_|gh[pousr]_|AKIA)[A-Z0-9_]{16,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
+
+export function containsCredentialLikeSecret(value: string): boolean {
+  return CREDENTIAL_PATTERN.test(value);
+}
+
+export type ReporterLookupResult =
+  | { ok: true; login: string }
+  | { ok: false; reason: 'not_found' | 'upstream' };
+
+export async function verifyGitHubReporter(
+  username: string,
+  token: string,
+  fetcher: typeof fetch = fetch,
+): Promise<ReporterLookupResult> {
+  const response = await fetcher(`https://api.github.com/users/${encodeURIComponent(username)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'owasp-oasis-worker/1.0',
+    },
+  });
+
+  if (response.status === 404) return { ok: false, reason: 'not_found' };
+  if (!response.ok) return { ok: false, reason: 'upstream' };
+
+  const profile: unknown = await response.json();
+  const login = typeof profile === 'object' && profile !== null && 'login' in profile
+    ? String(profile.login)
+    : '';
+  const validated = vGitHub(login);
+  if (!validated.ok || !validated.val) return { ok: false, reason: 'upstream' };
+  return { ok: true, login: validated.val };
+}
+
+export function buildFeedbackIssueBody(
+  severity: string,
+  description: string,
+  reporter: string | null,
+  submittedAt = new Date(),
+): string {
+  return [
+    `**Type:** ${severity}`,
+    reporter ? `**Reporter:** @${reporter}` : null,
+    '',
+    '**Description:**',
+    description,
+    '',
+    '---',
+    `_Submitted via preview site feedback form on ${submittedAt.toUTCString()}_`,
+  ].filter((line): line is string => line !== null).join('\n');
+}
 
 export async function handleFeedback(request: Request, env: Env): Promise<Response> {
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
@@ -27,12 +78,15 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   if (description.length > 5000) {
     return jsonErr('Description must be 5000 characters or fewer.', 400, request);
   }
-  if (EMAIL_PATTERN.test(description) || CREDENTIAL_PATTERN.test(description)) {
-    return jsonErr('Remove email addresses, credentials, and other private information before submitting.', 400, request);
+  if (containsCredentialLikeSecret(description)) {
+    return jsonErr('Remove credentials and other private secrets before submitting.', 400, request);
   }
 
   const VALID_SEVERITY = new Set(['bug', 'suggestion', 'other']);
   const severity = VALID_SEVERITY.has(String(body['severity'])) ? String(body['severity']) : 'other';
+
+  const reporterValidation = vGitHub(body['github_username'] ?? '');
+  if (!reporterValidation.ok) return jsonErr(reporterValidation.error, 400, request);
 
   const token = env.GITHUB_TOKEN;
   if (!token) {
@@ -40,17 +94,25 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
     return jsonErr('Feedback service unavailable.', 503, request);
   }
 
+  let reporter: string | null = null;
+  if (reporterValidation.val) {
+    try {
+      const lookup = await verifyGitHubReporter(reporterValidation.val, token);
+      if (!lookup.ok) {
+        if (lookup.reason === 'not_found') return jsonErr('GitHub username not found.', 400, request);
+        console.warn('GitHub reporter lookup failed');
+        return jsonErr('Unable to verify GitHub username. Please try again.', 502, request);
+      }
+      reporter = lookup.login;
+    } catch (err) {
+      console.warn('GitHub reporter lookup failed:', (err as Error)?.message);
+      return jsonErr('Unable to verify GitHub username. Please try again.', 502, request);
+    }
+  }
+
   const severityLabel = severity === 'bug' ? '[Bug]' : severity === 'suggestion' ? '[Suggestion]' : '[Feedback]';
   const issueTitle    = `${severityLabel} Preview site feedback`;
-  const issueBody = [
-    `**Type:** ${severity}`,
-    '',
-    '**Description:**',
-    description,
-    '',
-    '---',
-    `_Submitted via preview site feedback form on ${new Date().toUTCString()}_`,
-  ].join('\n');
+  const issueBody = buildFeedbackIssueBody(severity, description, reporter);
 
   const ghRes = await fetch('https://api.github.com/repos/owasp-oasis/owasp-oasis-app/issues', {
     method: 'POST',
