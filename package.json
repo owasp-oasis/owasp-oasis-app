@@ -10,7 +10,7 @@
     "build": "tsc -b && npm run build:worker && npm run build:frontend",
     "preview": "vite preview",
     "deploy:preview": "npm run build && wrangler deploy",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy --env production",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/worker/unit",

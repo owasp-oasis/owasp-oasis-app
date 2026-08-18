@@ -444,8 +444,8 @@ export CLOUDFLARE_ACCOUNT_ID=<your-account-id>
 # Build and deploy the preview worker
 npm run deploy:preview
 
-# Or build and deploy directly (uses wrangler.toml config)
-npm run build && wrangler deploy
+# Build and deploy the production environment to owasp-oasis
+npm run deploy
 ```
 
 ---

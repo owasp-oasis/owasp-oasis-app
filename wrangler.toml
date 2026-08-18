@@ -38,7 +38,7 @@ crons = ["0 */4 * * *"]
 
 # ── Production environment ──
 [env.production]
-name = "owasp-oasis-app"
+name = "owasp-oasis"
 
 [[env.production.routes]]
 pattern   = "www.owasp-oasis.org/*"
