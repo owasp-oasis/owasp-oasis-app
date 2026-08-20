@@ -241,6 +241,43 @@ async function hashString(str) {
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/* ─── HUBSPOT SYNC ───────────────────────────────────────────
+   Cannot break registration: no-op without a token, 5s timeout,
+   catches everything. Upsert keyed on email — no duplicates.   */
+async function createHubSpotContact(env, email, name) {
+  if (!env.HUBSPOT_TOKEN) return;
+
+  const space = name.indexOf(' ');
+
+  try {
+    const res = await fetch(
+      'https://api.hubapi.com/crm/v3/objects/contacts/batch/upsert',
+      {
+        method: 'POST',
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          Authorization:  `Bearer ${env.HUBSPOT_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: [{
+            idProperty: 'email',
+            id: email,
+            properties: {
+              email,
+              firstname: space === -1 ? name : name.slice(0, space),
+              lastname:  space === -1 ? ''   : name.slice(space + 1),
+            },
+          }],
+        }),
+      }
+    );
+    if (!res.ok) console.warn('HubSpot upsert failed:', res.status);
+  } catch (err) {
+    console.error('HubSpot error:', err?.message);
+  }
+}
+
 /* ─── DUPLICATE CHECK HELPERS ────────────────────────────────── */
 async function isEmailRegistered(env, email) {
   if (!env.DB) return false;
@@ -421,6 +458,7 @@ async function handleRegister(request, env) {
         await hashString(ip),
         new Date().toISOString(),
       ).run();
+      await createHubSpotContact(env, emailRes.val, nameRes.val);
     } catch (err) {
       console.error('DB error (register):', err?.message);
       if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
@@ -490,6 +528,7 @@ async function handleApply(request, env) {
         await hashString(ip),
         new Date().toISOString(),
       ).run();
+       await createHubSpotContact(env, emailRes.val, nameRes.val);
     } catch (err) {
       console.error('DB error (apply):', err?.message);
       // Handle race-condition duplicate
