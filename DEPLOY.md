@@ -5,8 +5,10 @@
 |------|---------|
 | `index.html` | The website |
 | `worker.js` | Cloudflare Worker (API + HTML serving) |
+| `hubspot.js` | Durable HubSpot contact synchronization |
 | `wrangler.toml` | Worker configuration |
 | `schema.sql` | D1 database tables |
+| `migrations/` | Production D1 migrations and HubSpot backfill |
 
 ---
 
@@ -27,6 +29,13 @@ Copy the `database_id` from the output and paste it into `wrangler.toml`.
 Then create the tables:
 ```bash
 npx wrangler d1 execute oasis-db --file=schema.sql
+```
+
+For an existing deployment, apply pending migrations before deploying the
+Worker. The GitHub Actions production job performs this step automatically:
+
+```bash
+npx wrangler d1 migrations apply oasis-db --remote --env production
 ```
 
 ---
@@ -50,8 +59,22 @@ Open `http://localhost:8787` — fill in the form and check it works.
 
 ## Step 5 — Deploy
 ```bash
-npx wrangler deploy
+npx wrangler deploy --env production
 ```
+
+Before deployment, confirm the existing `owasp-oasis` Worker has a
+`HUBSPOT_TOKEN` secret with `crm.objects.contacts.read` and
+`crm.objects.contacts.write` scopes. Do not place the token in `wrangler.toml`.
+
+Production runs HubSpot reconciliation at `15 * * * *`. Failed jobs stay in
+`hubspot_sync_queue`, use capped exponential backoff, and are retried without
+blocking registration or application responses. The initial migration queues
+existing records for backfill.
+
+Optional OASIS metadata can be mapped to pre-created HubSpot custom contact
+properties with the non-secret `HUBSPOT_PROPERTY_MAP` JSON variable. Supported
+keys are `github`, `role`, `source`, `organization`, and `submitted_at`.
+Application free text is deliberately excluded from HubSpot.
 
 ---
 

@@ -74,10 +74,11 @@ npm run dev
 |------|---------|
 | `index.html` | The website UI |
 | `worker.js` | Cloudflare Worker — API + security |
+| `hubspot.js` | Durable HubSpot outbox processing, contact creation, and retries |
 | `wrangler.toml` | Cloudflare config |
 | `schema.sql` | DB schema (fresh installs only) |
+| `migrations/` | Ordered D1 production migrations applied before deployment |
 | `export-db.js` | Export DB to CSV |
-| `google-sheets-sync.js` | Google Sheets auto-sync |
 | `.dev.vars` | Local secrets — git-ignored |
 | `.github/workflows/deploy.yml` | Auto-deploy pipeline |
 
@@ -97,8 +98,33 @@ node export-db.js
 
 ```bash
 npx wrangler secret put ADMIN_SECRET
+npx wrangler secret put HUBSPOT_TOKEN --name owasp-oasis
 npx wrangler secret list
 ```
+
+`HUBSPOT_TOKEN` must be a HubSpot private-app token with
+`crm.objects.contacts.read` and `crm.objects.contacts.write` scopes.
+
+### HubSpot contact synchronization
+
+Registrations and applications are written to D1 together with a durable
+outbox job. The request returns immediately, then the Worker attempts the job
+in the background. Production retries pending jobs hourly at 15 minutes past
+the hour with capped exponential backoff. The first migration also queues all
+existing registrations and applications as a one-time backfill.
+
+New contacts receive email and the submitted name. Existing contacts keep
+their HubSpot-managed first and last names. OASIS metadata is retained in the
+outbox and can be mapped to existing HubSpot custom contact properties through
+the non-secret `HUBSPOT_PROPERTY_MAP` JSON variable:
+
+```toml
+HUBSPOT_PROPERTY_MAP = """{"github":"oasis_github","role":"oasis_role","source":"oasis_source","organization":"oasis_organization","submitted_at":"oasis_submitted_at"}"""
+```
+
+Create those custom properties in HubSpot before enabling the mapping. The
+free-text application reason is intentionally kept in D1 and is never sent to
+HubSpot. Sync logs contain only counts and safe error categories.
 
 ---
 

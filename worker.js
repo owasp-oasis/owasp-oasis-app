@@ -4,6 +4,12 @@
  */
 
 import HTML from './index.html';
+import {
+  enqueueHubSpotSync,
+  prepareHubSpotEnqueue,
+  processHubSpotQueue,
+  scheduleHubSpotSync,
+} from './hubspot.js';
 
 /* ─── CONFIG ─────────────────────────────────────────────────── */
 const RATE_LIMIT_WINDOW_SEC = 60;
@@ -268,7 +274,7 @@ async function isAlreadyApplied(env, email, role) {
 
 /* ─── MAIN HANDLER ───────────────────────────────────────────── */
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url    = new URL(request.url);
     const method = request.method;
 
@@ -332,15 +338,15 @@ export default {
 
       /* POST /api/register */
       if (method === 'POST' && url.pathname === '/api/register') {
-        return await handleRegister(request, env);
+        return await handleRegister(request, env, ctx);
       }
 
       /* POST /api/apply */
       if (method === 'POST' && url.pathname === '/api/apply') {
-        return await handleApply(request, env);
+        return await handleApply(request, env, ctx);
       }
 
-      /* GET /api/admin/registrations — for Google Sheets sync */
+      /* GET /api/admin/registrations — protected registration export */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
         const secret = request.headers.get('X-Admin-Secret');
         const envSecret = env.ADMIN_SECRET || '';
@@ -370,10 +376,14 @@ export default {
       return jsonErr('An unexpected error occurred. Please try again.', 500);
     }
   },
+
+  async scheduled(_event, env) {
+    await processHubSpotQueue(env, { limit: 25 });
+  },
 };
 
 /* ─── REGISTER HANDLER ───────────────────────────────────────── */
-async function handleRegister(request, env) {
+async function handleRegister(request, env, ctx) {
   const req = request;
   /* 1. CSRF */
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, req);
@@ -404,26 +414,61 @@ async function handleRegister(request, env) {
   /* 5. Explicit duplicate check — return friendly message */
   const isDuplicate = await isEmailRegistered(env, emailRes.val);
   if (isDuplicate) {
+    const submittedAt = new Date().toISOString();
+    try {
+      await enqueueHubSpotSync(env.DB, {
+        source: 'registration',
+        email: emailRes.val,
+        name: nameRes.val,
+        github: ghRes.val,
+        role: roleRes.val,
+        organization: '',
+        submitted_at: submittedAt,
+      }, new Date(submittedAt));
+      scheduleHubSpotSync(ctx, env);
+    } catch {
+      console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
+    }
     return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
   }
 
   /* 6. Write to D1 */
   if (env.DB) {
+    const submittedAt = new Date().toISOString();
+    const submission = {
+      source: 'registration',
+      email: emailRes.val,
+      name: nameRes.val,
+      github: ghRes.val,
+      role: roleRes.val,
+      organization: '',
+      submitted_at: submittedAt,
+    };
     try {
-      await env.DB.prepare(
-        `INSERT INTO registrations (name, email, github, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(
-        nameRes.val,
-        emailRes.val,
-        ghRes.val,
-        roleRes.val,
-        await hashString(ip),
-        new Date().toISOString(),
-      ).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO registrations (name, email, github, role, ip_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(
+          nameRes.val,
+          emailRes.val,
+          ghRes.val,
+          roleRes.val,
+          await hashString(ip),
+          submittedAt,
+        ),
+        prepareHubSpotEnqueue(env.DB, submission, new Date(submittedAt)),
+      ]);
+      scheduleHubSpotSync(ctx, env);
     } catch (err) {
       console.error('DB error (register):', err?.message);
       if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
+        try {
+          await enqueueHubSpotSync(env.DB, submission, new Date(submittedAt));
+          scheduleHubSpotSync(ctx, env);
+        } catch {
+          console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
+        }
         return jsonOk({ message: 'You\'re already registered. We\'ll be in touch!' }, request);
       }
       return jsonErr('Registration failed — please try again.', 500, request);
@@ -434,7 +479,7 @@ async function handleRegister(request, env) {
 }
 
 /* ─── APPLY HANDLER ──────────────────────────────────────────── */
-async function handleApply(request, env) {
+async function handleApply(request, env, ctx) {
   /* 1. CSRF */
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403);
 
@@ -471,29 +516,64 @@ async function handleApply(request, env) {
   /* 5. Explicit duplicate check — friendly message, no info leak */
   const isDuplicate = await isAlreadyApplied(env, emailRes.val, roleRes.val);
   if (isDuplicate) {
+    const submittedAt = new Date().toISOString();
+    try {
+      await enqueueHubSpotSync(env.DB, {
+        source: 'application',
+        email: emailRes.val,
+        name: nameRes.val,
+        github: ghRes.val,
+        role: roleRes.val,
+        organization: orgRes.val,
+        submitted_at: submittedAt,
+      }, new Date(submittedAt));
+      scheduleHubSpotSync(ctx, env);
+    } catch {
+      console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'application' }));
+    }
     return jsonOk({ message: 'You\'ve already applied for this role. We\'ll review it soon!' }, request);
   }
 
   /* 6. Write to D1 */
   if (env.DB) {
+    const submittedAt = new Date().toISOString();
+    const submission = {
+      source: 'application',
+      email: emailRes.val,
+      name: nameRes.val,
+      github: ghRes.val,
+      role: roleRes.val,
+      organization: orgRes.val,
+      submitted_at: submittedAt,
+    };
     try {
-      await env.DB.prepare(
-        `INSERT INTO applications (email, name, github, org, why, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(
-        emailRes.val,
-        nameRes.val,
-        ghRes.val,
-        orgRes.val,
-        whyRes.val,
-        roleRes.val,
-        await hashString(ip),
-        new Date().toISOString(),
-      ).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO applications (email, name, github, org, why, role, ip_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(
+          emailRes.val,
+          nameRes.val,
+          ghRes.val,
+          orgRes.val,
+          whyRes.val,
+          roleRes.val,
+          await hashString(ip),
+          submittedAt,
+        ),
+        prepareHubSpotEnqueue(env.DB, submission, new Date(submittedAt)),
+      ]);
+      scheduleHubSpotSync(ctx, env);
     } catch (err) {
       console.error('DB error (apply):', err?.message);
       // Handle race-condition duplicate
       if (err?.message?.includes('UNIQUE') || err?.message?.includes('constraint')) {
+        try {
+          await enqueueHubSpotSync(env.DB, submission, new Date(submittedAt));
+          scheduleHubSpotSync(ctx, env);
+        } catch {
+          console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'application' }));
+        }
         return jsonOk({ message: 'You\'ve already applied for this role. We\'ll review it soon!' }, request);
       }
       return jsonErr('Application failed — please try again.', 500, request);
