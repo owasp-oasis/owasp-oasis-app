@@ -1,7 +1,7 @@
-name       = "owasp-oasis"
+name       = "owasp-oasis-app-preview"
 main       = "worker.js"
-compatibility_date = "2024-01-01"
-workers_dev = true
+compatibility_date = "2026-08-21"
+workers_dev = false
 find_additional_modules = false
 
 # ── Tell Wrangler to treat .html as text modules ──
@@ -10,22 +10,9 @@ type = "Text"
 globs = ["**/*.html"]
 fallthrough = true
 
-# ── .com routes ──
+# ── Preview route ──
 [[routes]]
-pattern = "www.owasp-oasis.com/*"
-zone_name = "owasp-oasis.com"
-
-[[routes]]
-pattern = "owasp-oasis.com/*"
-zone_name = "owasp-oasis.com"
-
-# ── .org routes ──
-[[routes]]
-pattern = "www.owasp-oasis.org/*"
-zone_name = "owasp-oasis.org"
-
-[[routes]]
-pattern = "owasp-oasis.org/*"
+pattern = "preview.owasp-oasis.org/*"
 zone_name = "owasp-oasis.org"
 
 # ── D1 Database ──
@@ -33,6 +20,7 @@ zone_name = "owasp-oasis.org"
 binding              = "DB"
 database_name        = "oasis-db"
 database_id          = "d14003aa-36a7-42f3-8374-7cd060b56333"
+migrations_dir       = "migrations"
 
 # ── KV Namespace (rate limiting) ──
 [[kv_namespaces]]
@@ -42,4 +30,43 @@ preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 
 # ── Environment variables ──
 [vars]
+ENVIRONMENT = "preview"
+
+# ── Production environment ──
+[env.production]
+name = "owasp-oasis"
+workers_dev = true
+
+[[env.production.routes]]
+pattern = "www.owasp-oasis.com/*"
+zone_name = "owasp-oasis.com"
+
+[[env.production.routes]]
+pattern = "owasp-oasis.com/*"
+zone_name = "owasp-oasis.com"
+
+[[env.production.routes]]
+pattern = "www.owasp-oasis.org/*"
+zone_name = "owasp-oasis.org"
+
+[[env.production.routes]]
+pattern = "owasp-oasis.org/*"
+zone_name = "owasp-oasis.org"
+
+[[env.production.d1_databases]]
+binding              = "DB"
+database_name        = "oasis-db"
+database_id          = "d14003aa-36a7-42f3-8374-7cd060b56333"
+migrations_dir       = "migrations"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_KV"
+id      = "4668dfe626b144de82ceec91df80c7ce"
+
+[env.production.vars]
 ENVIRONMENT = "production"
+# After creating matching custom contact properties in HubSpot, add:
+# HUBSPOT_PROPERTY_MAP = """{"github":"oasis_github","role":"oasis_role","source":"oasis_source","organization":"oasis_organization","submitted_at":"oasis_submitted_at"}"""
+
+[env.production.triggers]
+crons = ["15 * * * *"]
