@@ -32,6 +32,22 @@ preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 [vars]
 ENVIRONMENT = "preview"
 
+# ── Workers Logs ──
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
 # ── Production environment ──
 [env.production]
 name = "owasp-oasis"
