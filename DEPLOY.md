@@ -32,7 +32,7 @@ npx wrangler d1 execute oasis-db --file=schema.sql
 ```
 
 For an existing deployment, apply pending migrations before deploying the
-Worker. The GitHub Actions production job performs this step automatically:
+Worker. The production deploy script performs this step automatically:
 
 ```bash
 npx wrangler d1 migrations apply oasis-db --remote --env production
@@ -59,8 +59,26 @@ Open `http://localhost:8787` — fill in the form and check it works.
 
 ## Step 5 — Deploy
 ```bash
-npx wrangler deploy --env production
+npm run deploy
 ```
+
+Production deployment is owned by Cloudflare Workers Builds, not GitHub
+Actions. Configure the `owasp-oasis` Worker's Git integration with:
+
+| Setting | Value |
+|---------|-------|
+| Production branch | `main` |
+| Build command | `npm run build` |
+| Deploy command | `npm run deploy` |
+| Root directory | `/` |
+| Build variable | `NODE_VERSION=24` |
+
+The deploy command applies D1 migrations before publishing the production
+Worker. Select a custom Workers Builds user API token with account-level
+**D1 Edit** and **Workers Scripts Edit** permissions; Cloudflare's default
+auto-generated token does not grant D1 access. GitHub Actions only validates
+the repository and must not contain a Worker deployment job or Cloudflare
+credentials.
 
 Before deployment, confirm the existing `owasp-oasis` Worker has a
 `HUBSPOT_TOKEN` secret with `crm.objects.contacts.read` and

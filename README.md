@@ -7,7 +7,7 @@ Live at: https://www.owasp-oasis.com + https://www.owasp-oasis.org
 ## 🚀 Quick deploy
 
 ```bash
-git push origin main   # triggers auto-deploy via GitHub Actions
+git push origin main   # triggers Cloudflare Workers Builds
 ```
 
 ---
@@ -43,9 +43,9 @@ git commit -m "feat: describe what you changed"
 git push origin feature/your-feature-name
 
 # 6. Open a Pull Request on GitHub
-# → GitHub Actions will run lint checks automatically
+# → GitHub Actions will run validation automatically
 # → Get a review from a teammate
-# → Merge to main → auto-deploys to live site ✅
+# → Merge to main → Cloudflare deploys the live site ✅
 ```
 
 ---
@@ -80,7 +80,7 @@ npm run dev
 | `migrations/` | Ordered D1 production migrations applied before deployment |
 | `export-db.js` | Export DB to CSV |
 | `.dev.vars` | Local secrets — git-ignored |
-| `.github/workflows/deploy.yml` | Auto-deploy pipeline |
+| `.github/workflows/validate.yml` | GitHub validation only; never deploys |
 
 ---
 
@@ -128,13 +128,23 @@ HubSpot. Sync logs contain only counts and safe error categories.
 
 ---
 
-## GitHub Actions
+## Deployment ownership
 
 | Trigger | What happens |
 |---------|-------------|
-| Push to `main` | Lint + auto-deploy to production |
-| Pull Request | Lint checks only (no deploy) |
-| Manual | GitHub → Actions → Run workflow |
+| Push to `main` | GitHub validates; Cloudflare Workers Builds deploys production |
+| Pull Request | GitHub validates; Cloudflare may create a preview build |
+
+GitHub Actions never deploys this Worker and does not hold Cloudflare deployment
+credentials. Configure the `owasp-oasis` Workers Build with production branch
+`main`, build command `npm run build`, deploy command `npm run deploy`, root
+directory `/`, and build environment variable `NODE_VERSION=24`.
+
+`npm run deploy` applies pending production D1 migrations before invoking
+`wrangler deploy --env production`. The Workers Builds API token must therefore
+include account-level **D1 Edit** and **Workers Scripts Edit** permissions. The
+default auto-generated Workers Builds token does not include D1 access; select
+a custom user API token in the Worker build settings.
 
 ---
 
