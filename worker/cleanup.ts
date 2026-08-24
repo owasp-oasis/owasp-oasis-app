@@ -72,22 +72,33 @@ export async function reconcileRemovedRepositories(env: Env): Promise<Repository
     }
 
     const trackedRows = await env.DB.prepare(
-      'SELECT DISTINCT repo_name FROM pull_requests WHERE deleted = 0 ORDER BY repo_name',
-    ).all<{ repo_name: string }>();
-    const trackedNames = (trackedRows.results ?? []).map(row => row.repo_name);
+      'SELECT name FROM repos ORDER BY name',
+    ).all<{ name: string }>();
+    const trackedNames = (trackedRows.results ?? []).map(row => row.name);
     const removedNames = findRemovedRepositoryNames(publicRepos, trackedNames);
     result.checked = trackedNames.length;
 
     for (const repoName of removedNames) {
-      const deletion = await env.DB.prepare(
-        'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE repo_name = ? AND deleted = 0',
-      ).bind(new Date().toISOString(), repoName).run();
-      const flagged = deletion.meta.changes ?? 0;
+      try {
+        const [prDeletion] = await env.DB.batch([
+          env.DB.prepare(
+            'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE repo_name = ? AND deleted = 0',
+          ).bind(new Date().toISOString(), repoName),
+          env.DB.prepare('DELETE FROM repos WHERE name = ?').bind(repoName),
+        ]);
+        const flagged = prDeletion.meta.changes ?? 0;
 
-      result.removed++;
-      result.flagged += flagged;
-      result.repositories.push({ repo: repoName, prs_flagged: flagged });
-      console.log(`Repository reconciliation: ${repoName} removed; flagged ${flagged} PR(s)`);
+        result.removed++;
+        result.flagged += flagged;
+        result.repositories.push({ repo: repoName, prs_flagged: flagged });
+        console.log(`Repository reconciliation: removed ${repoName} metadata; flagged ${flagged} PR(s)`);
+      } catch (err) {
+        result.errors++;
+        console.error(
+          `Repository reconciliation: failed to remove ${repoName}:`,
+          (err as Error)?.message,
+        );
+      }
     }
   } catch (err) {
     result.errors++;

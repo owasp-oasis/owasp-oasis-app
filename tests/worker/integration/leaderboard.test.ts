@@ -46,9 +46,11 @@ describe('Leaderboard endpoints', () => {
       expect(body).toHaveLength(0);
     });
 
-    it('returns repos after insert', async () => {
+    it('returns repos that contribute current PRs', async () => {
       await insertTestRepo(env, { name: 'test-repo-1' });
       await insertTestRepo(env, { name: 'test-repo-2' });
+      await insertTestPR(env, { id: 1001, repo_name: 'test-repo-1' });
+      await insertTestPR(env, { id: 1002, repo_name: 'test-repo-2' });
 
       const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
 
@@ -56,6 +58,23 @@ describe('Leaderboard endpoints', () => {
       const body = await res.json();
       expect(body.length).toBeGreaterThanOrEqual(2);
       expect(body.some((r: any) => r.name === 'test-repo-1')).toBe(true);
+    });
+
+    it('hides repos with no current PRs', async () => {
+      await insertTestRepo(env, { name: 'active-repo' });
+      await insertTestRepo(env, { name: 'empty-repo' });
+      await insertTestRepo(env, { name: 'deleted-pr-repo' });
+      await insertTestPR(env, { id: 1001, repo_name: 'active-repo' });
+      await insertTestPR(env, { id: 1002, repo_name: 'deleted-pr-repo' });
+      await env.DB.prepare(
+        'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE id = ?',
+      ).bind(new Date().toISOString(), 1002).run();
+
+      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.map((repo: any) => repo.name)).toEqual(['active-repo']);
     });
 
     it('includes security headers', async () => {
@@ -74,6 +93,8 @@ describe('Leaderboard endpoints', () => {
     it('supports search by repo name', async () => {
       await insertTestRepo(env, { name: 'python-repo' });
       await insertTestRepo(env, { name: 'go-repo' });
+      await insertTestPR(env, { id: 1001, repo_name: 'python-repo' });
+      await insertTestPR(env, { id: 1002, repo_name: 'go-repo' });
 
       const res = await SELF.fetch(
         new Request('http://localhost/api/leaderboard/repos?q=python'),
@@ -87,6 +108,8 @@ describe('Leaderboard endpoints', () => {
     it('supports sort by various columns', async () => {
       await insertTestRepo(env, { name: 'repo-a', open_prs: 5 });
       await insertTestRepo(env, { name: 'repo-b', open_prs: 2 });
+      await insertTestPR(env, { id: 1001, repo_name: 'repo-a' });
+      await insertTestPR(env, { id: 1002, repo_name: 'repo-b' });
 
       const res = await SELF.fetch(
         new Request('http://localhost/api/leaderboard/repos?sort=open_prs&dir=DESC'),

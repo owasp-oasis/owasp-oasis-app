@@ -51,6 +51,10 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
            (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_reject,
            (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_duplicate
     FROM repos r
+    WHERE EXISTS (
+      SELECT 1 FROM pull_requests current_pr
+      WHERE current_pr.repo_name = r.name AND current_pr.deleted = 0
+    )
     ORDER BY ${col} ${dir}
   `).all();
   let results = rows.results;
