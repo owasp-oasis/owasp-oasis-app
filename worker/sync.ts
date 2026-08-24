@@ -35,6 +35,7 @@ const CHUNK_SIZE = 10;
 // skipReactions = true on manual sync (50-subrequest limit); false on cron (1000 limit).
 async function processPR(
   pr: GitHubPR,
+  repoId: number,
   repoName: string,
   upstreamUrl: string | null,
   db: D1Database,
@@ -211,7 +212,7 @@ async function processPR(
   // If the PR is closed/merged and we don't already have merged_upstream=1,
   // check whether the head commit exists in the upstream (parent) repo.
   // This powers trust_score: contributors who voted 'accept' on an upstream-merged PR earn +10.
-  let mergedUpstream = await getExistingMergedUpstream(db, repoName, pr.number);
+  let mergedUpstream = await getExistingMergedUpstream(db, repoId, pr.number);
   if (mergedUpstream === 0 && pr.merged_at && pr.head?.sha && upstreamUrl) {
     const parsed = parseGitHubUrl(upstreamUrl);
     if (parsed) {
@@ -224,7 +225,7 @@ async function processPR(
   // is managed separately via rebuildDuplicates(), which runs after all PR syncs complete.
   // This allows consensus to be checked and chain resolution to handle transitive updates.
   await upsertPR(
-    db, pr, repoName, comments.length,
+    db, pr, repoId, repoName, comments.length,
     oasisCommentCount, nonOasisCommentCount,
     oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
     mergedUpstream, detectionTool, syncStart,
@@ -260,8 +261,8 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
       const upstreamUrl = detail.parent?.html_url ?? null;
 
       // Get the previous sync timestamp for this repo (or epoch if new)
-      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE name = ?')
-        .bind(repo.name).first<{ synced_at: string | null }>();
+      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE id = ?')
+        .bind(repo.id).first<{ synced_at: string | null }>();
       const repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
 
       await upsertRepo(db, repo, upstreamUrl, syncStart);
@@ -273,11 +274,11 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
 
       for (const pr of prs) {
         stats.prs++;
-        const result = await processPR(pr, repo.name, upstreamUrl, db, token, syncStart, { skipReactions });
+        const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, { skipReactions });
         stats.comments += result.comments;
       }
 
-      await updateRepoPRCount(db, repo.name, syncStart);
+      await updateRepoPRCount(db, repo.id, syncStart);
     }
 
      // Sync user votes from pr_comments before resolving duplicates
@@ -357,15 +358,15 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
       const detail = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
       upstreamUrl  = detail.parent?.html_url ?? null;
       // Get the previous sync timestamp for this repo (or epoch if new)
-      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE name = ?')
-        .bind(repo.name).first<{ synced_at: string | null }>();
+      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE id = ?')
+        .bind(repo.id).first<{ synced_at: string | null }>();
       repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
       await upsertRepo(db, repo, upstreamUrl, repoSince);
       stats.repos++;
     } else {
       // Subsequent chunks: read upstream_url and synced_at from DB (already stored on first chunk)
-      const repoRow = await db.prepare('SELECT upstream_url, synced_at FROM repos WHERE name = ?')
-        .bind(repo.name).first<{ upstream_url: string | null; synced_at: string | null }>();
+      const repoRow = await db.prepare('SELECT upstream_url, synced_at FROM repos WHERE id = ?')
+        .bind(repo.id).first<{ upstream_url: string | null; synced_at: string | null }>();
       upstreamUrl = repoRow?.upstream_url ?? null;
       repoSince = repoRow?.synced_at ?? '1970-01-01T00:00:00Z';
     }
@@ -383,14 +384,14 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     for (const pr of chunk) {
       stats.prs++;
       // Reactions always skipped on manual chunked sync — cron handles them
-      const result = await processPR(pr, repo.name, upstreamUrl, db, token, syncStart, { skipReactions: true });
+      const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, { skipReactions: true });
       stats.comments += result.comments;
     }
 
     // After last chunk for this repo: update open_prs count
     if (!hasMore) {
       const finalSyncedAt = allPRs[0]?.updated_at ?? syncStart;
-      await updateRepoPRCount(db, repo.name, syncStart, finalSyncedAt);
+      await updateRepoPRCount(db, repo.id, syncStart, finalSyncedAt);
     }
 
     // Advance cursor

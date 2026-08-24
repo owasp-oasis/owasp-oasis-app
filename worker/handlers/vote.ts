@@ -97,16 +97,25 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 6. PR existence + must be open
   const pr = await env.DB.prepare(
-    'SELECT id, repo_name, number, state FROM pull_requests WHERE id = ?',
-  ).bind(prId).first<{ id: number; repo_name: string; number: number; state: string }>();
+    `SELECT p.id, p.repo_id, p.repo_name, p.number, p.state
+       FROM pull_requests p JOIN repos r ON r.id = p.repo_id
+      WHERE p.id = ? AND p.deleted = 0 AND r.active = 1`,
+  ).bind(prId).first<{
+    id: number;
+    repo_id: number | null;
+    repo_name: string;
+    number: number;
+    state: string;
+  }>();
   if (!pr) return jsonErr('PR not found', 404, request);
   if (pr.state !== 'open') return jsonErr('Voting is only allowed on open PRs', 409, request);
 
-  // For duplicate votes: resolve parent_pr_number to database ID using same repo_name, then walk chain
+  // Resolve duplicate parents within the same immutable repository identity.
   if (decision === 'duplicate' && parentPrNumber) {
+    if (pr.repo_id === null) return jsonErr('Repository identity is unavailable for this PR', 409, request);
     const parentPr = await env.DB.prepare(
-      'SELECT id, duplicate_of FROM pull_requests WHERE repo_name = ? AND number = ?',
-    ).bind(pr.repo_name, parentPrNumber).first<{ id: number; duplicate_of: number | null }>();
+      'SELECT id, duplicate_of FROM pull_requests WHERE repo_id = ? AND number = ?',
+    ).bind(pr.repo_id, parentPrNumber).first<{ id: number; duplicate_of: number | null }>();
     if (!parentPr) return jsonErr(`Parent PR #${parentPrNumber} not found in ${pr.repo_name}`, 404, request);
 
     parentPrId = parentPr.id;

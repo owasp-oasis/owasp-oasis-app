@@ -136,16 +136,16 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
   }, [])
 
-  const handleNavigateToPRs = useCallback((repoName: string) => {
+  const handleNavigateToPRs = useCallback((repoId: number) => {
     const params = new URLSearchParams(searchParams)
-    params.set('repo', repoName)
+    params.set('repo', String(repoId))
     navigate(`/workspace/pull-requests?${params.toString()}`)
   }, [navigate, searchParams])
 
-  const handleRepoFilterChange = useCallback((repoName: string | null) => {
+  const handleRepoFilterChange = useCallback((repoId: string | null) => {
     const params = new URLSearchParams(searchParams)
-    if (repoName) {
-      params.set('repo', repoName)
+    if (repoId) {
+      params.set('repo', repoId)
     } else {
       params.delete('repo')
     }

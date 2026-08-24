@@ -19,25 +19,25 @@ interface RepositoryReconciliationResult {
   removed: number;
   flagged: number;
   errors: number;
-  repositories: Array<{ repo: string; prs_flagged: number }>;
+  repositories: Array<{ repo_id: number; repo: string; prs_flagged: number }>;
 }
 
 /**
  * Finds tracked repositories that are absent from a complete public fork listing.
  * Kept pure so the safety-critical set comparison can be tested independently.
  */
-export function findRemovedRepositoryNames(
-  publicRepos: Array<Pick<GitHubRepo, 'name' | 'fork'>>,
-  trackedNames: string[],
-): string[] {
-  const currentNames = new Set(
+export function findRemovedRepositoryIds(
+  publicRepos: Array<Pick<GitHubRepo, 'id' | 'name' | 'fork'>>,
+  trackedIds: number[],
+): number[] {
+  const currentIds = new Set(
     publicRepos
       .filter(repo => repo.fork && !META_REPOS.has(repo.name))
-      .map(repo => repo.name),
+      .map(repo => repo.id),
   );
 
-  if (currentNames.size === 0) return [];
-  return trackedNames.filter(name => !currentNames.has(name)).sort();
+  if (currentIds.size === 0) return [];
+  return trackedIds.filter(id => !currentIds.has(id)).sort((a, b) => a - b);
 }
 
 /**
@@ -72,30 +72,34 @@ export async function reconcileRemovedRepositories(env: Env): Promise<Repository
     }
 
     const trackedRows = await env.DB.prepare(
-      'SELECT name FROM repos ORDER BY name',
-    ).all<{ name: string }>();
-    const trackedNames = (trackedRows.results ?? []).map(row => row.name);
-    const removedNames = findRemovedRepositoryNames(publicRepos, trackedNames);
-    result.checked = trackedNames.length;
+      'SELECT id, name FROM repos WHERE active = 1 ORDER BY id',
+    ).all<{ id: number; name: string }>();
+    const trackedRepos = trackedRows.results ?? [];
+    const removedIds = new Set(findRemovedRepositoryIds(
+      publicRepos,
+      trackedRepos.map(repo => repo.id),
+    ));
+    const removedRepos = trackedRepos.filter(repo => removedIds.has(repo.id));
+    result.checked = trackedRepos.length;
 
-    for (const repoName of removedNames) {
+    for (const repo of removedRepos) {
       try {
         const [prDeletion] = await env.DB.batch([
           env.DB.prepare(
-            'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE repo_name = ? AND deleted = 0',
-          ).bind(new Date().toISOString(), repoName),
-          env.DB.prepare('DELETE FROM repos WHERE name = ?').bind(repoName),
+            'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE repo_id = ? AND deleted = 0',
+          ).bind(new Date().toISOString(), repo.id),
+          env.DB.prepare('UPDATE repos SET active = 0 WHERE id = ?').bind(repo.id),
         ]);
         const flagged = prDeletion.meta.changes ?? 0;
 
         result.removed++;
         result.flagged += flagged;
-        result.repositories.push({ repo: repoName, prs_flagged: flagged });
-        console.log(`Repository reconciliation: removed ${repoName} metadata; flagged ${flagged} PR(s)`);
+        result.repositories.push({ repo_id: repo.id, repo: repo.name, prs_flagged: flagged });
+        console.log(`Repository reconciliation: marked ${repo.name} (${repo.id}) inactive; flagged ${flagged} PR(s)`);
       } catch (err) {
         result.errors++;
         console.error(
-          `Repository reconciliation: failed to remove ${repoName}:`,
+          `Repository reconciliation: failed to deactivate ${repo.name} (${repo.id}):`,
           (err as Error)?.message,
         );
       }
@@ -127,9 +131,13 @@ export async function runCleanup(env: Env): Promise<CleanupResult> {
   };
 
   try {
-    // Query all non-deleted PRs: (id, repo_name, number)
+    // Resolve current repository names through immutable repository IDs. Names
+    // are used only because GitHub's REST paths are name-addressed.
     const prsRows = await env.DB.prepare(
-      'SELECT id, repo_name, number FROM pull_requests WHERE deleted = 0 ORDER BY id DESC',
+      `SELECT p.id, r.name AS repo_name, p.number
+         FROM pull_requests p JOIN repos r ON r.id = p.repo_id
+        WHERE p.deleted = 0 AND r.active = 1
+        ORDER BY p.id DESC`,
     ).all<{ id: number; repo_name: string; number: number }>();
 
     const prs = prsRows.results ?? [];

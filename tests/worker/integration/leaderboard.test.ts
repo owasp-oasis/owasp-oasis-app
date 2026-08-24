@@ -77,6 +77,21 @@ describe('Leaderboard endpoints', () => {
       expect(body.map((repo: any) => repo.name)).toEqual(['active-repo']);
     });
 
+    it('does not attach an inactive repo history to a new repo that reuses its name', async () => {
+      await insertTestRepo(env, { id: 101, name: 'reused-name' });
+      await insertTestPR(env, { id: 1001, repo_id: 101, repo_name: 'reused-name' });
+      await env.DB.prepare('UPDATE repos SET active = 0 WHERE id = 101').run();
+      await insertTestRepo(env, { id: 202, name: 'reused-name' });
+      await insertTestPR(env, { id: 1002, repo_id: 202, repo_name: 'reused-name' });
+
+      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ id: 202, name: 'reused-name', total_prs: 1 });
+    });
+
     it('includes security headers', async () => {
       const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
 
@@ -148,6 +163,21 @@ describe('Leaderboard endpoints', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.length).toBeGreaterThan(0);
+    });
+
+    it('returns PRs only from the active repository ID when a name is reused', async () => {
+      await insertTestRepo(env, { id: 101, name: 'reused-name' });
+      await insertTestPR(env, { id: 1001, repo_id: 101, repo_name: 'reused-name', number: 1 });
+      await env.DB.prepare('UPDATE repos SET active = 0 WHERE id = 101').run();
+      await insertTestRepo(env, { id: 202, name: 'reused-name' });
+      await insertTestPR(env, { id: 2002, repo_id: 202, repo_name: 'reused-name', number: 1 });
+
+      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0]).toMatchObject({ id: 2002, repo_id: 202, repo_name: 'reused-name' });
     });
 
     it('returns max 500 PRs', async () => {
@@ -303,12 +333,12 @@ describe('Leaderboard endpoints', () => {
   });
 
   describe('Detailed repo endpoint', () => {
-    it('GET /api/leaderboard/repos/:name returns repo with PRs', async () => {
-      await insertTestRepo(env, { name: 'detail-repo' });
-      await insertTestPR(env, { repo_name: 'detail-repo' });
+    it('GET /api/leaderboard/repos/:id returns repo with PRs', async () => {
+      await insertTestRepo(env, { id: 4242, name: 'detail-repo' });
+      await insertTestPR(env, { repo_id: 4242, repo_name: 'detail-repo' });
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos/detail-repo'),
+        new Request('http://localhost/api/leaderboard/repos/4242'),
       );
 
       expect(res.status).toBe(200);
@@ -320,7 +350,7 @@ describe('Leaderboard endpoints', () => {
 
     it('returns 404 for non-existent repo', async () => {
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos/nonexistent'),
+        new Request('http://localhost/api/leaderboard/repos/999999'),
       );
 
       expect(res.status).toBe(404);

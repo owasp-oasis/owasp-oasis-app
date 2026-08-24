@@ -75,7 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_hubspot_sync_pending
 -- Leaderboard tables
 CREATE TABLE IF NOT EXISTS repos (
   id              INTEGER PRIMARY KEY,
-  name            TEXT NOT NULL UNIQUE,
+  name            TEXT NOT NULL,
   full_name       TEXT NOT NULL,
   description     TEXT,
   language        TEXT,
@@ -83,11 +83,15 @@ CREATE TABLE IF NOT EXISTS repos (
   duplicate_count INTEGER DEFAULT 0,
   stars           INTEGER DEFAULT 0,
   upstream_url    TEXT,
+  active          INTEGER NOT NULL DEFAULT 1,
   synced_at       TEXT
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repos_active_name ON repos(name) WHERE active = 1;
+
 CREATE TABLE IF NOT EXISTS pull_requests (
   id                      INTEGER PRIMARY KEY,
+  repo_id                 INTEGER,
   repo_name               TEXT NOT NULL,
   number                  INTEGER NOT NULL,
   title                   TEXT NOT NULL,
@@ -113,8 +117,11 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   synced_at               TEXT,
   deleted                 INTEGER DEFAULT 0,
   deleted_at              TEXT,
-  UNIQUE(repo_name, number)
+  UNIQUE(repo_id, number),
+  FOREIGN KEY (repo_id) REFERENCES repos(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_pull_requests_repo_current ON pull_requests(repo_id, deleted);
 
 CREATE TABLE IF NOT EXISTS contributors (
   login                  TEXT PRIMARY KEY,
@@ -382,6 +389,7 @@ export async function insertTestPR(
   overrides?: {
     id?: number;
     repo_name?: string;
+    repo_id?: number;
     number?: number;
     title?: string;
     state?: 'open' | 'closed';
@@ -390,6 +398,13 @@ export async function insertTestPR(
   const id = overrides?.id ?? 1001;
   const repo_name = overrides?.repo_name ?? 'test-repo';
   const number = overrides?.number ?? 1;
+  let repoRow = await env.DB.prepare(
+    'SELECT id FROM repos WHERE name = ? AND active = 1 ORDER BY id DESC LIMIT 1',
+  ).bind(repo_name).first<{ id: number }>();
+  if (!repoRow && overrides?.repo_id === undefined) {
+    repoRow = await insertTestRepo(env, { name: repo_name });
+  }
+  const repo_id = overrides?.repo_id ?? repoRow?.id ?? null;
   const title = overrides?.title ?? 'CWE-89 (SQL Injection) High Severity in foo.py';
   const state = overrides?.state ?? 'open';
 
@@ -397,10 +412,11 @@ export async function insertTestPR(
 
   await env.DB.prepare(`
     INSERT INTO pull_requests
-    (id, repo_name, number, title, state, html_url, created_at, updated_at, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, repo_id, repo_name, number, title, state, html_url, created_at, updated_at, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
+    repo_id,
     repo_name,
     number,
     title,

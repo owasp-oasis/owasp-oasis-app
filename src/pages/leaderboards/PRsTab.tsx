@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 
 interface PR {
   id: number
+  repo_id: number
   repo_name: string
   number: number
   title: string
@@ -224,7 +225,7 @@ interface Props {
   initialRepoFilter?: string | null
   initialLanguages?: string[]
   initialSeverities?: string[]
-  onRepoFilterChange?: (repoName: string | null) => void
+  onRepoFilterChange?: (repoId: string | null) => void
 }
 
 export default function PRsTab({
@@ -276,13 +277,16 @@ export default function PRsTab({
   }, [initialRepoFilter])
 
   const projects = useMemo(
-    () => [...new Set(data.map(pr => pr.repo_name))].sort((a, b) => a.localeCompare(b)),
+    () => [...new Map(data.map(pr => [pr.repo_id, {
+      id: pr.repo_id,
+      name: pr.repo_name,
+    }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
     [data],
   )
 
-  const selectProject = useCallback((repoName: string | null) => {
-    setRepoFilter(repoName)
-    onRepoFilterChange?.(repoName)
+  const selectProject = useCallback((repoId: string | null) => {
+    setRepoFilter(repoId)
+    onRepoFilterChange?.(repoId)
   }, [onRepoFilterChange])
 
   // If user signs out while on the needs-my-vote filter, fall back to 'all'
@@ -434,7 +438,7 @@ export default function PRsTab({
     
     // Apply repo filter first
     if (repoFilter) {
-      result = result.filter(pr => pr.repo_name === repoFilter)
+      result = result.filter(pr => String(pr.repo_id) === repoFilter)
     }
     
     // Apply status filter
@@ -475,7 +479,7 @@ export default function PRsTab({
         >
           <option value="">All projects</option>
           {projects.map(project => (
-            <option key={project} value={project}>{project}</option>
+            <option key={project.id} value={project.id}>{project.name}</option>
           ))}
         </select>
       </div>

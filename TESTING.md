@@ -144,7 +144,7 @@ Full handler tests with real workerd + in-memory D1/KV:
 **`leaderboard.test.ts`**
 - GET /api/leaderboard/meta → sync status
 - GET /api/leaderboard/repos → repo list, filtering, sorting
-- GET /api/leaderboard/repos/:name → repo detail with PRs & contributors
+- GET /api/leaderboard/repos/:id → repo detail with PRs & contributors, addressed by immutable GitHub repository ID
 - GET /api/leaderboard/prs → PR list
 - GET /api/leaderboard/contributors → contributor list with scores
 - GET /api/contributors/:login → contributor detail with bonus computation

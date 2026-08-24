@@ -44,16 +44,18 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
   const rows  = await env.DB.prepare(`
     SELECT r.id, r.name, r.full_name, r.description, r.language,
            r.open_prs, r.duplicate_count, r.stars, r.upstream_url, r.synced_at,
-           (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0)                             AS total_prs,
-           (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
-           (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_accept,
-           (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_modify,
-           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_reject,
-           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_duplicate
+           (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_prs,
+           (SELECT COUNT(DISTINCT pp.login)
+              FROM pr_participants pp JOIN pull_requests participant_pr ON participant_pr.id = pp.pr_id
+             WHERE participant_pr.repo_id = r.id AND pp.decision IS NOT NULL) AS contributors,
+           (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_accept,
+           (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_modify,
+           (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_reject,
+           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate
     FROM repos r
-    WHERE EXISTS (
+    WHERE r.active = 1 AND EXISTS (
       SELECT 1 FROM pull_requests current_pr
-      WHERE current_pr.repo_name = r.name AND current_pr.deleted = 0
+      WHERE current_pr.repo_id = r.id AND current_pr.deleted = 0
     )
     ORDER BY ${col} ${dir}
   `).all();
@@ -67,34 +69,36 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
 }
 
 /**
- * GET /api/leaderboard/repos/:name
+ * GET /api/leaderboard/repos/:id
  * Returns detailed project info for the ProjectPanel slide-out:
  *   - repo row (full metadata)
  *   - all PRs for the repo
  *   - top 20 contributors by comment count
  */
-export async function handleRepoDetail(env: Env, req: Request, repoName: string): Promise<Response> {
+export async function handleRepoDetail(env: Env, req: Request, repoId: number): Promise<Response> {
   // Parallelize Q1 (repo) and Q2 (PRs)
   const [repoRow, prsRows] = await Promise.all([
     env.DB.prepare(`
       SELECT id, name, full_name, description, language,
              open_prs, duplicate_count, stars, upstream_url, synced_at,
-             (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0)                             AS total_prs,
-             (SELECT COUNT(DISTINCT pp.login) FROM pr_participants pp WHERE pp.repo_name = r.name AND pp.decision IS NOT NULL) AS contributors,
-             (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_accept,
-             (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_modify,
-             (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_reject,
-             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_name = r.name AND p.deleted = 0) AS total_duplicate
-      FROM repos r WHERE r.name = ?
-    `).bind(repoName).first<Record<string, unknown>>(),
+             (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_prs,
+             (SELECT COUNT(DISTINCT pp.login)
+                FROM pr_participants pp JOIN pull_requests participant_pr ON participant_pr.id = pp.pr_id
+               WHERE participant_pr.repo_id = r.id AND pp.decision IS NOT NULL) AS contributors,
+             (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_accept,
+             (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_modify,
+             (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_reject,
+             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate
+      FROM repos r WHERE r.id = ? AND r.active = 1
+    `).bind(repoId).first<Record<string, unknown>>(),
     env.DB.prepare(`
       SELECT id, number, title, state, author, html_url,
              comment_count, oasis_comment_count, non_oasis_comment_count,
              participants, consensus_accept, consensus_modify, consensus_reject,
              merged_upstream, updated_at
-      FROM pull_requests WHERE repo_name = ? AND deleted = 0
+      FROM pull_requests WHERE repo_id = ? AND deleted = 0
       ORDER BY updated_at DESC
-    `).bind(repoName).all<Record<string, unknown>>(),
+    `).bind(repoId).all<Record<string, unknown>>(),
   ]);
 
   if (!repoRow) {
@@ -112,12 +116,13 @@ export async function handleRepoDetail(env: Env, req: Request, repoName: string)
            SUM(CASE WHEN p.decision='modify' THEN 1 ELSE 0 END) AS modifies,
            SUM(CASE WHEN p.decision='reject' THEN 1 ELSE 0 END) AS rejects
     FROM pr_comments p
+    JOIN pull_requests pr ON pr.id = p.pr_id
     LEFT JOIN contributors c ON c.login = p.login
-    WHERE p.repo_name = ?
+    WHERE pr.repo_id = ?
     GROUP BY p.login
     ORDER BY comment_count DESC
     LIMIT 20
-  `).bind(repoName).all<Record<string, unknown>>();
+  `).bind(repoId).all<Record<string, unknown>>();
 
   return lbResponse({
     ok: true,
@@ -134,7 +139,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
     'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const rows = await env.DB.prepare(`
-    SELECT id, repo_name, number, title, state, author, html_url,
+    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url,
            comment_count,
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,
@@ -142,7 +147,9 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
            duplicate_of, closed_as_duplicate,
            merged_upstream, merged_at, created_at, updated_at
-    FROM pull_requests WHERE deleted = 0 ORDER BY ${col} ${dir} LIMIT 500
+    FROM pull_requests p JOIN repos r ON r.id = p.repo_id
+    WHERE p.deleted = 0 AND r.active = 1
+    ORDER BY ${col} ${dir} LIMIT 500
   `).all();
   let results = rows.results;
   if (q) results = results.filter((r: Record<string, unknown>) =>
@@ -381,9 +388,9 @@ export async function handleMaintainers(env: Env, req: Request, url: URL): Promi
              THEN ROUND(CAST(SUM(p.merged_upstream) AS REAL) / COUNT(*) * 100, 1)
              ELSE 0 END AS merge_rate,
            SUM(p.consensus_accept) AS total_accept_consensus
-    FROM pull_requests p JOIN repos r ON r.name = p.repo_name
-    WHERE p.deleted = 0
-    GROUP BY p.repo_name ORDER BY ${col} ${dir}
+    FROM pull_requests p JOIN repos r ON r.id = p.repo_id
+    WHERE p.deleted = 0 AND r.active = 1
+    GROUP BY r.id, p.repo_name ORDER BY ${col} ${dir}
   `).all();
   let results = rows.results;
   if (q) results = results.filter((r: Record<string, unknown>) =>
@@ -398,7 +405,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
   // ── Fix tools: bot accounts that author PRs ───────────────────
   const fixRows = await env.DB.prepare(`
     SELECT author, COUNT(*) AS total_prs, SUM(merged_upstream) AS accepted_upstream,
-           COUNT(DISTINCT repo_name) AS projects_worked,
+           COUNT(DISTINCT repo_id) AS projects_worked,
            SUM(COALESCE(oasis_comment_count, 0)) AS total_comments,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
@@ -444,7 +451,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
 
   // ── Detect tools: named by "Detected By" field in PR bodies ──
   const detectRows = await env.DB.prepare(`
-    SELECT detection_tool, COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_name) AS projects_worked,
+    SELECT detection_tool, COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_id) AS projects_worked,
            SUM(merged_upstream) AS accepted_upstream,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
@@ -475,11 +482,12 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       const botRows = await env.DB.prepare(`
         SELECT
           COUNT(*)                                                         AS total_comments,
-          COUNT(DISTINCT repo_name)                                        AS projects_worked,
-          SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END)            AS total_accept,
-          SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)            AS total_modify,
-          SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)            AS total_reject
-        FROM pr_comments WHERE login = ?
+          COUNT(DISTINCT pr.repo_id)                                       AS projects_worked,
+          SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END)         AS total_accept,
+          SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END)         AS total_modify,
+          SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END)         AS total_reject
+        FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id
+        WHERE pc.login = ?
       `).bind(botLogin).first<{
         total_comments: number;
         projects_worked: number;
@@ -518,21 +526,21 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
   const humanQuery = allBotLogins.length > 0
     ? `SELECT
          COUNT(*)                                              AS total_comments,
-         COUNT(DISTINCT login)                                 AS validator_count,
-         COUNT(DISTINCT repo_name)                            AS projects_worked,
-         SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
-         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
-         SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
-       FROM pr_comments
-       WHERE login NOT IN (${botPlaceholders})`
+         COUNT(DISTINCT pc.login)                              AS validator_count,
+         COUNT(DISTINCT pr.repo_id)                            AS projects_worked,
+         SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
+         SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
+         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+       FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id
+       WHERE pc.login NOT IN (${botPlaceholders})`
     : `SELECT
          COUNT(*)                                              AS total_comments,
-         COUNT(DISTINCT login)                                 AS validator_count,
-         COUNT(DISTINCT repo_name)                            AS projects_worked,
-         SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
-         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
-         SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
-       FROM pr_comments`;
+         COUNT(DISTINCT pc.login)                              AS validator_count,
+         COUNT(DISTINCT pr.repo_id)                            AS projects_worked,
+         SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
+         SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
+         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+       FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id`;
 
   const humanStmt = allBotLogins.length > 0
     ? env.DB.prepare(humanQuery).bind(...allBotLogins)

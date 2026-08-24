@@ -105,13 +105,53 @@ export async function upsertRepo(
   upstreamUrl: string | null,
   syncStart: string,
 ): Promise<void> {
-  await db.prepare(`
-    INSERT OR REPLACE INTO repos (id, name, full_name, description, language, open_prs, stars, upstream_url, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    repo.id, repo.name, repo.full_name, repo.description ?? null,
-    repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart,
-  ).run();
+  await db.batch([
+    db.prepare(`
+      UPDATE pull_requests
+         SET deleted = 1, deleted_at = ?
+       WHERE deleted = 0
+         AND repo_id IN (
+           SELECT id FROM repos WHERE name = ? AND id <> ? AND active = 1
+         )
+    `).bind(syncStart, repo.name, repo.id),
+    db.prepare(
+      'UPDATE repos SET active = 0 WHERE name = ? AND id <> ? AND active = 1',
+    ).bind(repo.name, repo.id),
+    db.prepare(`
+      INSERT INTO repos (
+        id, name, full_name, description, language, open_prs,
+        stars, upstream_url, active, synced_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        full_name = excluded.full_name,
+        description = excluded.description,
+        language = excluded.language,
+        open_prs = excluded.open_prs,
+        stars = excluded.stars,
+        upstream_url = excluded.upstream_url,
+        active = 1,
+        synced_at = excluded.synced_at
+    `).bind(
+      repo.id, repo.name, repo.full_name, repo.description ?? null,
+      repo.language ?? null, 0, repo.stargazers_count, upstreamUrl, syncStart,
+    ),
+    db.prepare('UPDATE pull_requests SET repo_name = ? WHERE repo_id = ?')
+      .bind(repo.name, repo.id),
+    db.prepare(`
+      UPDATE pr_participants SET repo_name = ?
+       WHERE pr_id IN (SELECT id FROM pull_requests WHERE repo_id = ?)
+    `).bind(repo.name, repo.id),
+    db.prepare(`
+      UPDATE pr_comments SET repo_name = ?
+       WHERE pr_id IN (SELECT id FROM pull_requests WHERE repo_id = ?)
+    `).bind(repo.name, repo.id),
+    db.prepare(`
+      UPDATE user_votes SET repo_name = ?
+       WHERE pr_id IN (SELECT id FROM pull_requests WHERE repo_id = ?)
+    `).bind(repo.name, repo.id),
+  ]);
 }
 
 export async function upsertPR(
@@ -128,6 +168,7 @@ export async function upsertPR(
     updated_at: string;
     user?: { login?: string };
   },
+  repoId: number,
   repoName: string,
   commentCount: number,
   oasisCommentCount: number,
@@ -149,13 +190,13 @@ export async function upsertPR(
 
   await db.prepare(`
     INSERT OR REPLACE INTO pull_requests
-      (id, repo_name, number, title, state, author, html_url, comment_count,
+      (id, repo_id, repo_name, number, title, state, author, html_url, comment_count,
        oasis_comment_count, non_oasis_comment_count,
        participants, consensus_accept, consensus_modify, consensus_reject,
        duplicate_of, closed_as_duplicate, merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    pr.id, repoName, pr.number, pr.title, state,
+    pr.id, repoId, repoName, pr.number, pr.title, state,
     pr.user?.login ?? null, pr.html_url, commentCount,
     oasisCommentCount, nonOasisCommentCount,
     oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
@@ -209,15 +250,15 @@ export async function upsertReactions(db: D1Database, reactions: ReactionData[])
   }
 }
 
-export async function updateRepoPRCount(db: D1Database, repoName: string, syncStart: string, syncedAt?: string): Promise<void> {
+export async function updateRepoPRCount(db: D1Database, repoId: number, syncStart: string, syncedAt?: string): Promise<void> {
   const openCount = await db.prepare(
-    "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND state = 'open'",
-  ).bind(repoName).first<{ c: number }>();
+    "SELECT COUNT(*) as c FROM pull_requests WHERE repo_id = ? AND state = 'open' AND deleted = 0",
+  ).bind(repoId).first<{ c: number }>();
   const duplicateCount = await db.prepare(
-    "SELECT COUNT(*) as c FROM pull_requests WHERE repo_name = ? AND duplicate_of IS NOT NULL",
-  ).bind(repoName).first<{ c: number }>();
-   await db.prepare('UPDATE repos SET open_prs = ?, duplicate_count = ?, synced_at = ? WHERE name = ?')
-     .bind(openCount?.c ?? 0, duplicateCount?.c ?? 0, syncedAt ?? syncStart, repoName).run();
+    "SELECT COUNT(*) as c FROM pull_requests WHERE repo_id = ? AND duplicate_of IS NOT NULL AND deleted = 0",
+  ).bind(repoId).first<{ c: number }>();
+   await db.prepare('UPDATE repos SET open_prs = ?, duplicate_count = ?, synced_at = ? WHERE id = ?')
+     .bind(openCount?.c ?? 0, duplicateCount?.c ?? 0, syncedAt ?? syncStart, repoId).run();
  }
 
 /**
@@ -241,17 +282,20 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       pc.id,
       pc.login,
       pc.pr_id,
+      pr.repo_id,
       pc.repo_name,
       pc.pr_number,
       pc.decision,
       pc.duplicate_of,
       pc.created_at
     FROM pr_comments pc
+    JOIN pull_requests pr ON pr.id = pc.pr_id
     WHERE pc.decision IS NOT NULL
   `).all<{
     id: number;
     login: string;
     pr_id: number;
+    repo_id: number | null;
     repo_name: string;
     pr_number: number;
     decision: string;
@@ -266,10 +310,10 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
 
     // For duplicate votes, resolve the parent PR's database ID
     let parentPrId: number | null = null;
-    if (comment.decision === 'duplicate' && comment.duplicate_of) {
+    if (comment.repo_id !== null && comment.decision === 'duplicate' && comment.duplicate_of) {
       const parentPr = await db.prepare(
-        'SELECT id FROM pull_requests WHERE repo_name = ? AND number = ?',
-      ).bind(comment.repo_name, comment.duplicate_of).first<{ id: number }>();
+        'SELECT id FROM pull_requests WHERE repo_id = ? AND number = ?',
+      ).bind(comment.repo_id, comment.duplicate_of).first<{ id: number }>();
       parentPrId = parentPr?.id ?? null;
     }
 
@@ -413,9 +457,9 @@ export async function rebuildDuplicates(db: D1Database, token: string): Promise<
   return { closed: closedCount };
 }
 
-export async function getExistingMergedUpstream(db: D1Database, repoName: string, prNumber: number): Promise<number> {
-  const row = await db.prepare('SELECT merged_upstream FROM pull_requests WHERE repo_name = ? AND number = ?')
-    .bind(repoName, prNumber).first<{ merged_upstream: number }>();
+export async function getExistingMergedUpstream(db: D1Database, repoId: number, prNumber: number): Promise<number> {
+  const row = await db.prepare('SELECT merged_upstream FROM pull_requests WHERE repo_id = ? AND number = ?')
+    .bind(repoId, prNumber).first<{ merged_upstream: number }>();
   return row?.merged_upstream ?? 0;
 }
 

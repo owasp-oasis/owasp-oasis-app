@@ -207,10 +207,9 @@ export default {
          return await handleRepos(env, request, url);
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
-       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/([^/]+)$/);
+       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/(\d+)$/);
        if (method === 'GET' && repoDetailMatch) {
-         const repoName = decodeURIComponent(repoDetailMatch[1]);
-         return await handleRepoDetail(env, request, repoName);
+         return await handleRepoDetail(env, request, Number(repoDetailMatch[1]));
        }
 
        if (method === 'GET' && url.pathname === '/api/leaderboard/prs')

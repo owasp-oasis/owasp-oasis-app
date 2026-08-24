@@ -60,7 +60,7 @@ interface Props {
   data: Repo[]
   loading: boolean
   myVotes: Map<number, Decision>
-  onNavigateToPRs: (repoName: string) => void
+  onNavigateToPRs: (repoId: number) => void
 }
 
 export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }: Props) {
@@ -170,7 +170,7 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                   className="consensus-labels"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onNavigateToPRs(repo.name)
+                    onNavigateToPRs(repo.id)
                   }}
                 >
                   <span className="cl-accept">✓ {repo.total_accept} Accept</span>
