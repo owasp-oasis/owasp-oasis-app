@@ -139,6 +139,22 @@ test('uses capped exponential retry delays', () => {
   assert.equal(retryAt(100, now), '2026-08-22T12:00:00.000Z');
 });
 
+test('logs a safe reason when required bindings are unavailable', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = message => warnings.push(String(message));
+  try {
+    const result = await processHubSpotQueue({ DB: {}, HUBSPOT_TOKEN: '' });
+    assert.deepEqual(result, { processed: 0, succeeded: 0, failed: 0, skipped: true });
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.deepEqual(warnings, [
+    JSON.stringify({ event: 'hubspot_sync_skipped', reason: 'missing_token' }),
+  ]);
+});
+
 test('marks successful outbox jobs as synced', async () => {
   const db = fakeQueueDb({ id: 7, payload_json: JSON.stringify(submission), attempts: 0 });
   const result = await processHubSpotQueue(
