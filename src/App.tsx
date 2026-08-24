@@ -32,6 +32,8 @@ export default function App() {
             <Route path="/workspace/pull-requests" element={<Leaderboards activeTab="prs" />} />
             <Route path="/workspace/contributors" element={<Leaderboards activeTab="contributors" />} />
             <Route path="/workspace/maintainers" element={<Leaderboards activeTab="maintainers" />} />
+            {/* Intentionally unlisted: available by direct link, but omitted from Workspace navigation. */}
+            <Route path="/workspace/tools" element={<Leaderboards activeTab="tools" />} />
             <Route path="/support" element={<Support />} />
             <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/brand" element={<BrandGuide />} />

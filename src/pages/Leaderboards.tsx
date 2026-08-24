@@ -14,7 +14,6 @@ const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
   { id: 'projects',      label: 'Projects',      path: '/workspace/projects' },
   { id: 'prs',           label: 'Pull Requests', path: '/workspace/pull-requests' },
   { id: 'contributors', label: 'Contributors',  path: '/workspace/contributors' },
-  // { id: 'tools',        label: 'Tools',         path: '/workspace/tools' },
   { id: 'maintainers',  label: 'Maintainers',   path: '/workspace/maintainers' },
 ]
 
