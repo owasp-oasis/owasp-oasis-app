@@ -18,9 +18,8 @@ id      = "00000000000000000000000000000000"
 [env.test.vars]
 ENVIRONMENT          = "test"
 OAUTH_CALLBACK_URL   = "http://localhost/api/auth/callback"
-
-# ── Test secrets (fake values, safe for test environment) ──────────
-[env.test.secrets]
+# Fake test-only bindings. Wrangler does not support a secrets table in config;
+# deployed secrets remain managed outside source control.
 GITHUB_CLIENT_ID     = "test-client-id"
 GITHUB_CLIENT_SECRET = "test-client-secret"
 GITHUB_TOKEN         = "test-github-token"

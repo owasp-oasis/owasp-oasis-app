@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
+import { SELF } from './testWorker.js';
 import { applySchema, cleanDB, createTestSession } from './helpers.js';
 
 // Constant for tests
@@ -22,14 +23,14 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
 
   describe('GET /api/preferences/mine', () => {
     it('returns 401 when unauthenticated', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/preferences/mine'));
+      const res = await SELF.fetch(new Request('http://localhost/api/preferences/mine'));
       expect(res.status).toBe(401);
     });
 
     it('returns default preferences for new user', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           headers: { Cookie: `${sessionCookie}; ${tokenCookie}` },
         }),
@@ -65,7 +66,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
         )
         .run();
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           headers: { Cookie: `${sessionCookie}; ${tokenCookie}` },
         }),
@@ -82,7 +83,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
 
   describe('PUT /api/preferences/mine', () => {
     it('returns 401 when unauthenticated', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -96,7 +97,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
     it('saves languages and severities', async () => {
       const { sessionCookie, tokenCookie, login } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -121,7 +122,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
     it('updates onboarding_version', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -154,7 +155,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
         .run();
 
       // Update preferences
-      await env.SELF.fetch(
+      await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -196,7 +197,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
         .run();
 
       // Update only languages
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -224,7 +225,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
     it('rejects invalid JSON', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -244,7 +245,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
       // Now it should reach the handler (may fail auth, but not 405)
       const { sessionCookie, tokenCookie } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -263,7 +264,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
     it('supports empty arrays for languages/severities', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {
@@ -304,7 +305,7 @@ describe('GET /api/preferences/mine and PUT /api/preferences/mine', () => {
         .run();
 
       // Clear languages
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           headers: {

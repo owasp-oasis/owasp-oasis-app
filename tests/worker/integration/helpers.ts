@@ -244,6 +244,9 @@ export async function cleanDB(env: Env): Promise<void> {
       ('sync_running', '0'),
       ('last_manual_sync', '2020-01-01T00:00:00Z');
   `).run();
+
+  const rateLimitKeys = await env.RATE_KV.list();
+  await Promise.all(rateLimitKeys.keys.map(key => env.RATE_KV.delete(key.name)));
 }
 
 // ─── SETUP MODES ────────────────────────────────────────────────
@@ -337,8 +340,9 @@ export async function insertTestRepo(
     open_prs?: number;
   },
 ): Promise<{ id: number; name: string }> {
-  const id = overrides?.id ?? 1;
   const name = overrides?.name ?? 'test-repo';
+  const derivedId = Array.from(name).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7);
+  const id = overrides?.id ?? derivedId;
   const language = overrides?.language ?? 'Python';
   const open_prs = overrides?.open_prs ?? 0;
 

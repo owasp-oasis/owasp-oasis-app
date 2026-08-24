@@ -103,17 +103,17 @@ describe('github.ts', () => {
 
   describe('parseDuplicateParent()', () => {
     it('parses #123 format', () => {
-      const body = '| parent pr | #123 |';
+      const body = '## Duplicate Report:\n| parent pr | #123 |';
       expect(parseDuplicateParent(body)).toBe(123);
     });
 
     it('parses /pull/123 format', () => {
-      const body = '| parent pr | https://github.com/owasp-oasis/repo/pull/456 |';
+      const body = '## Duplicate Report:\n| parent pr | https://github.com/owasp-oasis/repo/pull/456 |';
       expect(parseDuplicateParent(body)).toBe(456);
     });
 
     it('parses | 123 | table format', () => {
-      const body = '| parent pr | 789 |';
+      const body = '## Duplicate Report:\n| parent pr | 789 |';
       expect(parseDuplicateParent(body)).toBe(789);
     });
 

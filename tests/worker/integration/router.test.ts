@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
+import { SELF } from './testWorker.js';
 import { applySchema, cleanDB } from './helpers.js';
 
 describe('router (worker/index.ts)', () => {
@@ -23,29 +24,29 @@ describe('router (worker/index.ts)', () => {
 
   describe('method validation', () => {
     it('returns 405 for PATCH requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/test', { method: 'PATCH' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/test', { method: 'PATCH' }));
       expect(res.status).toBe(405);
       expect(res.headers.get('Allow')).toBe('GET, POST, OPTIONS, HEAD');
     });
 
     it('returns 405 for DELETE requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/test', { method: 'DELETE' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/test', { method: 'DELETE' }));
       expect(res.status).toBe(405);
     });
 
     it('allows GET requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count', { method: 'GET' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/count', { method: 'GET' }));
       expect(res.status).not.toBe(405);
     });
 
     it('allows POST requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/csrf', { method: 'POST' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/csrf', { method: 'POST' }));
       // Will fail for other reasons but not 405
       expect(res.status).not.toBe(405);
     });
 
     it('allows PUT requests (bug fixed)', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/preferences/mine', {
           method: 'PUT',
           body: '{}',
@@ -57,12 +58,12 @@ describe('router (worker/index.ts)', () => {
     });
 
     it('allows OPTIONS requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/test', { method: 'OPTIONS' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/test', { method: 'OPTIONS' }));
       expect(res.status).toBe(204);
     });
 
     it('allows HEAD requests', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/csrf', { method: 'HEAD' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/csrf', { method: 'HEAD' }));
       // HEAD might work on GET endpoints
       expect(res.status).not.toBe(405);
     });
@@ -70,7 +71,7 @@ describe('router (worker/index.ts)', () => {
 
   describe('GET /api/count', () => {
     it('returns registrations count', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.ok).toBe(true);
@@ -78,19 +79,19 @@ describe('router (worker/index.ts)', () => {
     });
 
     it('returns content as JSON', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.headers.get('Content-Type')).toContain('application/json');
     });
   });
 
   describe('OPTIONS handling', () => {
     it('returns 204 No Content for OPTIONS', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/test', { method: 'OPTIONS' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/test', { method: 'OPTIONS' }));
       expect(res.status).toBe(204);
     });
 
     it('includes CORS headers in OPTIONS response', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/test', {
           method: 'OPTIONS',
           headers: { Origin: 'https://www.owasp-oasis.org' },
@@ -103,29 +104,29 @@ describe('router (worker/index.ts)', () => {
 
   describe('security headers on all responses', () => {
     it('includes X-Frame-Options: DENY', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.headers.get('X-Frame-Options')).toBe('DENY');
     });
 
     it('includes X-Content-Type-Options: nosniff', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     });
 
-    it('includes Strict-Transport-Security', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
-      expect(res.headers.get('Strict-Transport-Security')).toBeTruthy();
+    it('omits Strict-Transport-Security on loopback requests', async () => {
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
+      expect(res.headers.get('Strict-Transport-Security')).toBeNull();
     });
 
     it('includes Content-Security-Policy', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
     });
   });
 
   describe('CORS behavior', () => {
     it('sets Access-Control-Allow-Origin for allowed origins', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/count', {
           headers: { Origin: 'https://www.owasp-oasis.org' },
         }),
@@ -134,7 +135,7 @@ describe('router (worker/index.ts)', () => {
     });
 
     it('sets Access-Control-Allow-Credentials for allowed origins', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/count', {
           headers: { Origin: 'https://preview.owasp-oasis.org' },
         }),
@@ -143,7 +144,7 @@ describe('router (worker/index.ts)', () => {
     });
 
     it('does not set CORS headers for disallowed origins', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/count', {
           headers: { Origin: 'https://malicious.com' },
         }),
@@ -152,12 +153,12 @@ describe('router (worker/index.ts)', () => {
     });
 
     it('does not set CORS headers when origin is missing', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/count'));
+      const res = await SELF.fetch(new Request('http://localhost/api/count'));
       expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     });
 
     it('localhost requests do not get CORS headers (test limitation documented)', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/count', {
           headers: { Origin: 'http://localhost' },
         }),
@@ -170,7 +171,7 @@ describe('router (worker/index.ts)', () => {
 
   describe('unknown routes', () => {
     it('returns response for /api/unknown (handled by ASSETS fallback)', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/unknown'));
+      const res = await SELF.fetch(new Request('http://localhost/api/unknown'));
       // ASSETS binding is not available in test, so this will 404 or fall through
       // Just verify it doesn't crash
       expect(res.status).toBeGreaterThan(0);
@@ -179,7 +180,7 @@ describe('router (worker/index.ts)', () => {
 
   describe('error responses include security headers', () => {
     it('405 response includes security headers', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/test', { method: 'PATCH' }));
+      const res = await SELF.fetch(new Request('http://localhost/api/test', { method: 'PATCH' }));
       expect(res.headers.get('X-Frame-Options')).toBe('DENY');
       expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
     });

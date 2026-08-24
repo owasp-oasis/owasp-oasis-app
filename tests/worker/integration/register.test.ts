@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
+import { SELF } from './testWorker.js';
 import { applySchema, cleanDB, makeCsrf, buildCookieHeader } from './helpers.js';
 
 describe('POST /api/register', () => {
@@ -21,7 +22,7 @@ describe('POST /api/register', () => {
 
   async function register(body: Record<string, unknown>, csrf: string) {
     const cookie = `__csrf=${csrf}`;
-    return await env.SELF.fetch(
+    return await SELF.fetch(
       new Request('http://localhost/api/register', {
         method: 'POST',
         headers: {
@@ -280,7 +281,7 @@ describe('POST /api/register', () => {
 
   describe('CSRF protection', () => {
     it('rejects registration without CSRF token', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/register', {
           method: 'POST',
           headers: {
@@ -297,7 +298,7 @@ describe('POST /api/register', () => {
       const csrf1 = makeCsrf();
       const csrf2 = makeCsrf();
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/register', {
           method: 'POST',
           headers: {
@@ -422,7 +423,7 @@ describe('POST /api/register', () => {
   describe('request validation', () => {
     it('rejects wrong Content-Type', async () => {
       const csrf = makeCsrf();
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/register', {
           method: 'POST',
           headers: {
@@ -439,7 +440,7 @@ describe('POST /api/register', () => {
 
     it('rejects malformed JSON', async () => {
       const csrf = makeCsrf();
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/register', {
           method: 'POST',
           headers: {
@@ -456,7 +457,7 @@ describe('POST /api/register', () => {
 
     it('rejects empty body', async () => {
       const csrf = makeCsrf();
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/register', {
           method: 'POST',
           headers: {

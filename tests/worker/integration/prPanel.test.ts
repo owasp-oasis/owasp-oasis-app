@@ -10,7 +10,8 @@
 
 import { describe, it, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
-import { fetchMock } from 'cloudflare:test';
+import { fetchMock } from './fetchMock.js';
+import { SELF } from './testWorker.js';
 import {
   applySchema,
   cleanDB,
@@ -60,7 +61,7 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/details'),
       );
 
@@ -74,12 +75,12 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/details'),
       );
 
       const body = await res.json();
-      expect(body.cwe_id).toBe(89);
+      expect(body.cwe_id).toBe('CWE-89');
       expect(body.cwe_desc).toBe('SQL Injection');
     });
 
@@ -87,7 +88,7 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/details'),
       );
 
@@ -96,7 +97,7 @@ describe('PR Panel endpoints', () => {
     });
 
     it('returns 404 for non-existent PR', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/99999/details'),
       );
 
@@ -129,32 +130,32 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/files'),
       );
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body[0].filename).toBe('src/foo.py');
+      expect(Array.isArray(body.files)).toBe(true);
+      expect(body.files[0].filename).toBe('src/foo.py');
     });
 
     it('returns file changes with additions/deletions', async () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/files'),
       );
 
       const body = await res.json();
-      expect(body[0].additions).toBe(10);
-      expect(body[0].deletions).toBe(5);
-      expect(body[0].changes).toBe(15);
+      expect(body.files[0].additions).toBe(10);
+      expect(body.files[0].deletions).toBe(5);
+      expect(body.files[0].changes).toBe(15);
     });
 
     it('returns 404 for non-existent PR', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/99999/files'),
       );
 
@@ -185,30 +186,30 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/comments'),
       );
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body[0].decision).toBe('accept');
+      expect(Array.isArray(body.comments)).toBe(true);
+      expect(body.comments[0].oasis_decision).toBe('accept');
     });
 
     it('parses OASIS template comments', async () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/comments'),
       );
 
       const body = await res.json();
-      expect(body[0].body).toContain('validation summary');
+      expect(body.comments[0].body).toContain('validation summary');
     });
 
     it('returns 404 for non-existent PR', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/99999/comments'),
       );
 
@@ -236,11 +237,15 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/react', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ comment_id: 123, content: '+1' }),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': 'a'.repeat(64),
+            Cookie: `__csrf=${'a'.repeat(64)}`,
+          },
+          body: JSON.stringify({ comment_id: 123, reaction: '+1' }),
         }),
       );
 
@@ -253,14 +258,14 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/react', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Cookie: `${sessionCookie}; ${tokenCookie}`,
           },
-          body: JSON.stringify({ comment_id: 123, content: '+1' }),
+          body: JSON.stringify({ comment_id: 123, reaction: '+1' }),
         }),
       );
 
@@ -274,7 +279,7 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/react', {
           method: 'POST',
           headers: {
@@ -282,7 +287,7 @@ describe('PR Panel endpoints', () => {
             'x-csrf-token': csrf,
             Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
           },
-          body: JSON.stringify({ comment_id: 123456, content: '+1' }),
+          body: JSON.stringify({ comment_id: 123456, reaction: '+1' }),
         }),
       );
 
@@ -296,7 +301,7 @@ describe('PR Panel endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/pr-panel/1001/react', {
           method: 'POST',
           headers: {
@@ -304,7 +309,7 @@ describe('PR Panel endpoints', () => {
             'x-csrf-token': csrf,
             Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
           },
-          body: JSON.stringify({ comment_id: 123456, content: 'invalid' }),
+          body: JSON.stringify({ comment_id: 123456, reaction: 'invalid' }),
         }),
       );
 
@@ -315,21 +320,23 @@ describe('PR Panel endpoints', () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const validReactions = ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes'];
 
-      for (const reaction of validReactions) {
+      for (const [index, reaction] of validReactions.entries()) {
         const csrf = makeCsrf();
+        const repoName = `reaction-repo-${index}`;
+        const prId = 2000 + index;
 
-        await insertTestRepo(env, { id: 100 + Math.random() });
-        await insertTestPR(env, { id: 2000 + Math.random() });
+        await insertTestRepo(env, { id: 100 + index, name: repoName });
+        await insertTestPR(env, { id: prId, repo_name: repoName, number: index + 1 });
 
-        const res = await env.SELF.fetch(
-          new Request('http://localhost/api/pr-panel/2000/react', {
+        const res = await SELF.fetch(
+          new Request(`http://localhost/api/pr-panel/${prId}/react`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'x-csrf-token': csrf,
               Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
             },
-            body: JSON.stringify({ comment_id: 123456, content: reaction }),
+            body: JSON.stringify({ comment_id: 123456, reaction }),
           }),
         );
 

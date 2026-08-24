@@ -46,7 +46,7 @@ describe('validation.ts', () => {
 
   describe('vEmail()', () => {
     it('accepts valid email addresses', () => {
-      expect(vEmail('user@example.com')).toEqual({ ok: true, val: 'user@example.com' });
+      expect(vEmail('user@oasis-test.internal')).toEqual({ ok: true, val: 'user@oasis-test.internal' });
       expect(vEmail('john.doe+tag@company.org')).toEqual({
         ok: true,
         val: 'john.doe+tag@company.org',
@@ -54,7 +54,7 @@ describe('validation.ts', () => {
     });
 
     it('normalizes to lowercase', () => {
-      expect(vEmail('User@EXAMPLE.COM')).toEqual({ ok: true, val: 'user@example.com' });
+      expect(vEmail('User@OASIS-TEST.INTERNAL')).toEqual({ ok: true, val: 'user@oasis-test.internal' });
     });
 
     it('rejects empty email', () => {

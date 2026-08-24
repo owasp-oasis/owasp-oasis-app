@@ -9,7 +9,8 @@
 
 import { describe, it, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
-import { fetchMock } from 'cloudflare:test';
+import { fetchMock } from './fetchMock.js';
+import { SELF } from './testWorker.js';
 import {
   applySchema,
   cleanDB,
@@ -57,18 +58,21 @@ describe('POST /api/vote', () => {
     sessionCookie: string,
     tokenCookie: string,
     extraFields?: Record<string, unknown>,
+    cookieCsrf = csrf,
   ) {
-    return await env.SELF.fetch(
+    return await SELF.fetch(
       new Request('http://localhost/api/vote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-csrf-token': csrf,
-          Cookie: `${sessionCookie}; ${tokenCookie}`,
+          Cookie: `__csrf=${cookieCsrf}; ${sessionCookie}; ${tokenCookie}`,
         },
         body: JSON.stringify({
           pr_id: prId,
           decision,
+          confidence: 'High',
+          summary: 'Test validation summary',
           ...extraFields,
         }),
       }),
@@ -78,12 +82,13 @@ describe('POST /api/vote', () => {
   describe('authentication & CSRF', () => {
     it('requires authenticated session', async () => {
       const csrf = makeCsrf();
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/vote', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-csrf-token': csrf,
+            Cookie: `__csrf=${csrf}`,
           },
           body: JSON.stringify({ pr_id: 1, decision: 'accept' }),
         }),
@@ -99,7 +104,7 @@ describe('POST /api/vote', () => {
 
       await insertTestPR(env);
 
-      const res = await vote(1001, 'accept', wrongCsrf, sessionCookie, tokenCookie);
+      const res = await vote(1001, 'accept', wrongCsrf, sessionCookie, tokenCookie, undefined, csrf);
       expect(res.status).toBe(403);
     });
   });
@@ -112,7 +117,7 @@ describe('POST /api/vote', () => {
       await insertTestPR(env);
 
       const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, {
-        confidence: 'high',
+        confidence: 'High',
       });
 
       expect(res.status).toBe(200);
@@ -127,7 +132,7 @@ describe('POST /api/vote', () => {
       await insertTestPR(env);
 
       const res = await vote(1001, 'modify', csrf, sessionCookie, tokenCookie, {
-        confidence: 'medium',
+        confidence: 'Medium',
         next_step_selection: 'security-review',
       });
 
@@ -171,7 +176,7 @@ describe('POST /api/vote', () => {
 
       const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie);
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
     });
 
     it('rejects duplicate vote on same PR', async () => {
@@ -187,7 +192,7 @@ describe('POST /api/vote', () => {
 
       // Second vote (duplicate)
       const res2 = await vote(1001, 'modify', csrf2, sessionCookie, tokenCookie, {
-        confidence: 'medium',
+        confidence: 'Medium',
         next_step_selection: 'security-review',
       });
 

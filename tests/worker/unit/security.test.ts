@@ -50,16 +50,16 @@ describe('security.ts', () => {
       expect(getCookieValue(request, '__csrf')).toBe('abc123');
     });
 
-    it('returns empty string for missing cookie', () => {
+    it('returns null for missing cookie', () => {
       const request = new Request('http://localhost', {
         headers: { Cookie: '__other=value' },
       });
-      expect(getCookieValue(request, '__csrf')).toBe('');
+      expect(getCookieValue(request, '__csrf')).toBeNull();
     });
 
-    it('returns empty string when no Cookie header', () => {
+    it('returns null when no Cookie header', () => {
       const request = new Request('http://localhost');
-      expect(getCookieValue(request, '__csrf')).toBe('');
+      expect(getCookieValue(request, '__csrf')).toBeNull();
     });
 
     it('handles URL-encoded cookie values', () => {

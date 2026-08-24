@@ -2,7 +2,7 @@
  * Integration tests for OAuth authentication flow.
  * Covers: login, callback, session management, logout.
  *
- * GitHub API mocking: fetchMock from cloudflare:test intercepts all outbound fetch calls.
+ * GitHub API mocking: the local fetchMock helper intercepts outbound fetch calls.
  *
  * Coverage gaps (mock fetch limitation):
  * - Real GitHub OAuth token generation/validation
@@ -13,7 +13,8 @@
 
 import { describe, it, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
-import { fetchMock } from 'cloudflare:test';
+import { fetchMock } from './fetchMock.js';
+import { SELF } from './testWorker.js';
 import { applySchema, cleanDB, makeCsrf } from './helpers.js';
 
 describe('Authentication (OAuth)', () => {
@@ -33,7 +34,7 @@ describe('Authentication (OAuth)', () => {
 
   describe('GET /api/auth/login', () => {
     it('redirects to GitHub OAuth URL', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const res = await SELF.fetch(new Request('http://localhost/api/auth/login'));
 
       expect(res.status).toBe(302);
       const location = res.headers.get('Location');
@@ -43,7 +44,7 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('sets __oauth_state cookie', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const res = await SELF.fetch(new Request('http://localhost/api/auth/login'));
 
       const setCookie = res.headers.get('Set-Cookie');
       expect(setCookie).toContain('__oauth_state=');
@@ -52,7 +53,7 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('includes state parameter in redirect URL', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const res = await SELF.fetch(new Request('http://localhost/api/auth/login'));
 
       const location = res.headers.get('Location');
       expect(location).toContain('state=');
@@ -111,13 +112,13 @@ describe('Authentication (OAuth)', () => {
 
     it('completes full OAuth callback flow', async () => {
       // Step 1: Get state from login
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
       // Step 2: Callback with code and state
-      const callbackRes = await env.SELF.fetch(
+      const callbackRes = await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -129,12 +130,12 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('creates user_sessions row', async () => {
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
-      await env.SELF.fetch(
+      await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -150,12 +151,12 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('creates registrations row with validator role', async () => {
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
-      await env.SELF.fetch(
+      await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -171,12 +172,12 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('sets __session and __gh_token cookies', async () => {
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
-      const callbackRes = await env.SELF.fetch(
+      const callbackRes = await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -189,10 +190,10 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('rejects callback with bad state', async () => {
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
 
-      const callbackRes = await env.SELF.fetch(
+      const callbackRes = await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=wrong-state`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -204,12 +205,12 @@ describe('Authentication (OAuth)', () => {
     });
 
     it('rejects callback without code', async () => {
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
-      const callbackRes = await env.SELF.fetch(
+      const callbackRes = await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -223,7 +224,7 @@ describe('Authentication (OAuth)', () => {
 
   describe('GET /api/auth/me', () => {
     it('returns {user: null} when unauthenticated', async () => {
-      const res = await env.SELF.fetch(new Request('http://localhost/api/auth/me'));
+      const res = await SELF.fetch(new Request('http://localhost/api/auth/me'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -263,12 +264,12 @@ describe('Authentication (OAuth)', () => {
         );
 
       // Login and get session
-      const loginRes = await env.SELF.fetch(new Request('http://localhost/api/auth/login'));
+      const loginRes = await SELF.fetch(new Request('http://localhost/api/auth/login'));
       const loginCookie = loginRes.headers.get('Set-Cookie');
       const stateMatch = loginCookie?.match(/__oauth_state=([a-f0-9]+)/);
       const state = stateMatch?.[1] ?? '';
 
-      const callbackRes = await env.SELF.fetch(
+      const callbackRes = await SELF.fetch(
         new Request(`http://localhost/api/auth/callback?code=test-code&state=${state}`, {
           redirect: 'manual',
           headers: { Cookie: loginCookie ?? '' },
@@ -279,7 +280,7 @@ describe('Authentication (OAuth)', () => {
       const sessionCookie = callbackCookies.find((c) => c.includes('__session='));
 
       // Now call /me with the session cookie
-      const meRes = await env.SELF.fetch(
+      const meRes = await SELF.fetch(
         new Request('http://localhost/api/auth/me', {
           headers: { Cookie: sessionCookie ?? '' },
         }),
@@ -304,7 +305,7 @@ describe('Authentication (OAuth)', () => {
         .bind('expired-session-id', 'test-user', null, now, expired)
         .run();
 
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/auth/me', {
           headers: { Cookie: '__session=expired-session-id' },
         }),
@@ -318,7 +319,7 @@ describe('Authentication (OAuth)', () => {
 
   describe('POST /api/auth/logout', () => {
     it('requires valid CSRF token', async () => {
-      const res = await env.SELF.fetch(
+      const res = await SELF.fetch(
         new Request('http://localhost/api/auth/logout', {
           method: 'POST',
           headers: {
@@ -345,13 +346,13 @@ describe('Authentication (OAuth)', () => {
         .run();
 
       // Get CSRF for logout
-      const csrfRes = await env.SELF.fetch(new Request('http://localhost/api/csrf'));
+      const csrfRes = await SELF.fetch(new Request('http://localhost/api/csrf'));
       const csrfData = await csrfRes.json();
-      const csrf = csrfData.csrf;
+      const csrf = csrfData.token;
       const csrfCookie = csrfRes.headers.get('Set-Cookie');
 
       // Logout
-      const logoutRes = await env.SELF.fetch(
+      const logoutRes = await SELF.fetch(
         new Request('http://localhost/api/auth/logout', {
           method: 'POST',
           headers: {
@@ -374,13 +375,13 @@ describe('Authentication (OAuth)', () => {
 
     it('clears session cookie', async () => {
       // Get CSRF
-      const csrfRes = await env.SELF.fetch(new Request('http://localhost/api/csrf'));
+      const csrfRes = await SELF.fetch(new Request('http://localhost/api/csrf'));
       const csrfData = await csrfRes.json();
-      const csrf = csrfData.csrf;
+      const csrf = csrfData.token;
       const csrfCookie = csrfRes.headers.get('Set-Cookie');
 
       // Logout
-      const logoutRes = await env.SELF.fetch(
+      const logoutRes = await SELF.fetch(
         new Request('http://localhost/api/auth/logout', {
           method: 'POST',
           headers: {
