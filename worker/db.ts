@@ -82,6 +82,15 @@ export async function isEmailRegistered(db: D1Database, email: string): Promise<
   } catch { return false; }
 }
 
+export async function isAlreadyApplied(db: D1Database, email: string, role: string): Promise<boolean> {
+  try {
+    const row = await db.prepare(
+      'SELECT id FROM applications WHERE email = ? AND role = ? LIMIT 1',
+    ).bind(email, role).first();
+    return !!row;
+  } catch { return false; }
+}
+
 /* ─── REPO / PR / PARTICIPANT UPSERTS ───────────────────────── */
 export async function upsertRepo(
   db: D1Database,

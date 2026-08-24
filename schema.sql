@@ -31,6 +31,28 @@ CREATE INDEX IF NOT EXISTS idx_registrations_github ON registrations(github);
 CREATE INDEX IF NOT EXISTS idx_applications_email   ON applications(email);
 CREATE INDEX IF NOT EXISTS idx_applications_role    ON applications(role);
 
+-- Durable HubSpot outbox. Form writes and queue writes are committed together;
+-- the production hourly trigger retries pending jobs.
+CREATE TABLE IF NOT EXISTS hubspot_sync_queue (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_type     TEXT NOT NULL CHECK(source_type IN ('registration', 'application')),
+  source_key      TEXT NOT NULL,
+  payload_json    TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending'
+                  CHECK(status IN ('pending', 'processing', 'synced')),
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL,
+  locked_at       TEXT,
+  last_error      TEXT,
+  synced_at       TEXT,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
+  UNIQUE(source_type, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hubspot_sync_pending
+  ON hubspot_sync_queue(status, next_attempt_at);
+
 -- ── Leaderboard tables (preview/production D1 — apply via wrangler d1 execute) ──────────────
 -- These tables are populated by the GitHub sync cron and /leaderboard-refresh endpoint.
 -- Run each CREATE on a fresh DB; use ALTER TABLE for existing DBs.

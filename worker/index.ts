@@ -17,10 +17,7 @@ import {
 } from './security.js';
 import { runSync, runSyncOneRepo } from './sync.js';
 import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
-import {
-  scheduledTaskForCron,
-  syncRegistrationsToSheets,
-} from './sheetsSync.js';
+import { HUBSPOT_SYNC_CRON, processHubSpotQueue } from './hubspot.js';
 import {
   handleMeta,
   handleRepos,
@@ -32,6 +29,7 @@ import {
   handleTools,
 } from './handlers/leaderboard.js';
 import { handleRegister } from './handlers/register.js';
+import { handleApply } from './handlers/apply.js';
 import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
@@ -39,7 +37,7 @@ import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url    = new URL(request.url);
     const method = request.method;
 
@@ -96,7 +94,12 @@ export default {
 
       /* ── POST /api/register ────────────────────────────────────── */
       if (method === 'POST' && url.pathname === '/api/register') {
-        return await handleRegister(request, env);
+        return await handleRegister(request, env, ctx);
+      }
+
+      /* ── POST /api/apply ───────────────────────────────────────── */
+      if (method === 'POST' && url.pathname === '/api/apply') {
+        return await handleApply(request, env, ctx);
       }
 
       /* ── POST /api/feedback ────────────────────────────────────── */
@@ -245,12 +248,11 @@ export default {
 
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const task = scheduledTaskForCron(event.cron);
-    if (task === 'sheets_sync') {
-      await syncRegistrationsToSheets(env);
+    if (event.cron === HUBSPOT_SYNC_CRON) {
+      await processHubSpotQueue(env, { limit: 25 });
       return;
     }
-    if (task === null) {
+    if (event.cron !== '0 */4 * * *') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
     }

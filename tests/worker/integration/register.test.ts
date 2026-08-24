@@ -52,6 +52,27 @@ describe('POST /api/register', () => {
       const body = await res.json();
       expect(body.ok).toBe(true);
       expect(body.message).toContain('successfully');
+
+      const queued = await env.DB.prepare(
+        'SELECT source_type, source_key, payload_json, status FROM hubspot_sync_queue WHERE source_key = ?',
+      ).bind('john@oasis-test.internal').first<{
+        source_type: string;
+        source_key: string;
+        payload_json: string;
+        status: string;
+      }>();
+      expect(queued).toMatchObject({
+        source_type: 'registration',
+        source_key: 'john@oasis-test.internal',
+        status: 'pending',
+      });
+      expect(JSON.parse(queued?.payload_json ?? '{}')).toMatchObject({
+        source: 'registration',
+        name: 'John Doe',
+        email: 'john@oasis-test.internal',
+        github: 'johndoe',
+        role: 'validator',
+      });
     });
 
     it('allows optional github field', async () => {

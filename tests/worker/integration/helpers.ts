@@ -53,6 +53,25 @@ CREATE INDEX IF NOT EXISTS idx_registrations_github ON registrations(github);
 CREATE INDEX IF NOT EXISTS idx_applications_email   ON applications(email);
 CREATE INDEX IF NOT EXISTS idx_applications_role    ON applications(role);
 
+CREATE TABLE IF NOT EXISTS hubspot_sync_queue (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_type     TEXT NOT NULL CHECK(source_type IN ('registration', 'application')),
+  source_key      TEXT NOT NULL,
+  payload_json    TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'synced')),
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL,
+  locked_at       TEXT,
+  last_error      TEXT,
+  synced_at       TEXT,
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
+  UNIQUE(source_type, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hubspot_sync_pending
+  ON hubspot_sync_queue(status, next_attempt_at);
+
 -- Leaderboard tables
 CREATE TABLE IF NOT EXISTS repos (
   id              INTEGER PRIMARY KEY,
@@ -219,6 +238,7 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'hubspot_sync_queue',
     'user_votes',
     'user_preferences',
     'user_sessions',

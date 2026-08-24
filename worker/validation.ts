@@ -50,6 +50,12 @@ export function vGitHub(val: unknown): Result<string> {
   return { ok: true, val: v };
 }
 
+export function vText(val: unknown, max: number, fieldName = 'Field'): Result<string> {
+  const v = sanitize(val);
+  if (v.length > max) return { ok: false, error: `${fieldName} is too long (max ${max} chars)` };
+  return { ok: true, val: v };
+}
+
 export function vRole(val: unknown): Result<string> {
   const v = sanitize(val);
   if (!ALLOWED_ROLES.has(v)) return { ok: false, error: 'Invalid role' };

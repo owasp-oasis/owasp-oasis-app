@@ -6,8 +6,14 @@ import type { Env } from '../types.js';
 import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
 import { vEmail, vName, vGitHub, vRole, parseBody, hashString } from '../validation.js';
 import { isEmailRegistered } from '../db.js';
+import {
+  enqueueHubSpotSync,
+  prepareHubSpotEnqueue,
+  scheduleHubSpotSync,
+  type HubSpotSubmission,
+} from '../hubspot.js';
 
-export async function handleRegister(request: Request, env: Env): Promise<Response> {
+export async function handleRegister(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
@@ -32,17 +38,46 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
   const roleRes = vRole(roleVal);
   if (!roleRes.ok) return jsonErr(roleRes.error, 400, request);
 
+  const submittedAt = new Date().toISOString();
+  const submission: HubSpotSubmission = {
+    source: 'registration',
+    email: emailRes.val,
+    name: nameRes.val,
+    github: ghRes.val,
+    role: roleRes.val,
+    organization: '',
+    submitted_at: submittedAt,
+  };
+
   const isDuplicate = await isEmailRegistered(env.DB, emailRes.val);
-  if (isDuplicate) return jsonOk({ message: "You're already registered. We'll be in touch!" }, request);
+  if (isDuplicate) {
+    try {
+      await enqueueHubSpotSync(env.DB, submission, new Date(submittedAt));
+      scheduleHubSpotSync(ctx, env);
+    } catch {
+      console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
+    }
+    return jsonOk({ message: "You're already registered. We'll be in touch!" }, request);
+  }
 
   if (env.DB) {
     try {
-      await env.DB.prepare(
-        `INSERT INTO registrations (name, email, github, role, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(nameRes.val, emailRes.val, ghRes.val, roleRes.val, await hashString(ip), new Date().toISOString()).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO registrations (name, email, github, role, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(nameRes.val, emailRes.val, ghRes.val, roleRes.val, await hashString(ip), submittedAt),
+        prepareHubSpotEnqueue(env.DB, submission, new Date(submittedAt)),
+      ]);
+      scheduleHubSpotSync(ctx, env);
     } catch (err) {
       const msg = (err as Error)?.message ?? '';
       if (msg.includes('UNIQUE') || msg.includes('constraint')) {
+        try {
+          await enqueueHubSpotSync(env.DB, submission, new Date(submittedAt));
+          scheduleHubSpotSync(ctx, env);
+        } catch {
+          console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
+        }
         return jsonOk({ message: "You're already registered. We'll be in touch!" }, request);
       }
       console.error('DB error (register):', msg);

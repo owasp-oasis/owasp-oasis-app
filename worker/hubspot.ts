@@ -1,11 +1,6 @@
-/**
- * Durable HubSpot contact synchronization.
- *
- * Form handlers store an immutable submission and its outbox job in one D1
- * transaction. Request-path processing is opportunistic; the hourly cron is
- * the durable retry mechanism. Logs and stored errors never contain contact
- * data, access tokens, or HubSpot response bodies.
- */
+/** Durable, privacy-safe HubSpot contact synchronization. */
+
+import type { Env } from './types.js';
 
 const HUBSPOT_CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts';
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -13,36 +8,61 @@ const CLAIM_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_RETRY_DELAY_MS = 24 * 60 * 60 * 1_000;
 const PROPERTY_NAME_RE = /^[a-z][a-z0-9_]{0,99}$/;
 const RESERVED_PROPERTIES = new Set(['email', 'firstname', 'lastname']);
-const MAPPABLE_FIELDS = ['github', 'role', 'source', 'organization', 'submitted_at'];
+const MAPPABLE_FIELDS = ['github', 'role', 'source', 'organization', 'submitted_at'] as const;
+
+export const HUBSPOT_SYNC_CRON = '15 * * * *';
+
+export interface HubSpotSubmission {
+  source: 'registration' | 'application';
+  email: string;
+  name: string;
+  github: string;
+  role: string;
+  organization: string;
+  submitted_at: string;
+}
+
+type HubSpotPropertyMap = Partial<Record<(typeof MAPPABLE_FIELDS)[number], string>>;
+type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+interface QueueRow {
+  id: number;
+  payload_json: string;
+  attempts: number;
+}
+
+interface ProcessQueueOptions {
+  now?: Date | string | number;
+  limit?: number;
+  fetcher?: Fetcher;
+}
 
 export class HubSpotSyncError extends Error {
-  constructor(code, status = null) {
+  constructor(public readonly code: string, public readonly status: number | null = null) {
     super(code);
     this.name = 'HubSpotSyncError';
-    this.code = code;
-    this.status = status;
   }
 }
 
-function toIso(value) {
+function toIso(value: Date | string | number): string {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) throw new Error('Invalid sync timestamp');
   return date.toISOString();
 }
 
-export function submissionKey(submission) {
-  const email = String(submission.email || '').trim().toLowerCase();
+export function submissionKey(submission: HubSpotSubmission): string {
+  const email = submission.email.trim().toLowerCase();
   if (!email) throw new Error('HubSpot submission email is required');
   if (submission.source === 'registration') return email;
-  if (submission.source === 'application') {
-    return `${email}:${String(submission.role || '').trim().toLowerCase()}`;
-  }
-  throw new Error('Unsupported HubSpot submission source');
+  return `${email}:${submission.role.trim().toLowerCase()}`;
 }
 
-export function prepareHubSpotEnqueue(db, submission, now = new Date()) {
+export function prepareHubSpotEnqueue(
+  db: D1Database,
+  submission: HubSpotSubmission,
+  now: Date = new Date(),
+): D1PreparedStatement {
   const timestamp = toIso(now);
-  const sourceKey = submissionKey(submission);
   return db.prepare(`
     INSERT INTO hubspot_sync_queue (
       source_type, source_key, payload_json, status, attempts,
@@ -65,7 +85,7 @@ export function prepareHubSpotEnqueue(db, submission, now = new Date()) {
       updated_at = excluded.updated_at
   `).bind(
     submission.source,
-    sourceKey,
+    submissionKey(submission),
     JSON.stringify(submission),
     timestamp,
     timestamp,
@@ -73,14 +93,17 @@ export function prepareHubSpotEnqueue(db, submission, now = new Date()) {
   );
 }
 
-export async function enqueueHubSpotSync(db, submission, now = new Date()) {
+export async function enqueueHubSpotSync(
+  db: D1Database,
+  submission: HubSpotSubmission,
+  now: Date = new Date(),
+): Promise<void> {
   await prepareHubSpotEnqueue(db, submission, now).run();
 }
 
-export function parsePropertyMap(rawMap) {
-  if (!rawMap || typeof rawMap !== 'string') return {};
-
-  let candidate;
+export function parsePropertyMap(rawMap: string | undefined): HubSpotPropertyMap {
+  if (!rawMap) return {};
+  let candidate: unknown;
   try {
     candidate = JSON.parse(rawMap);
   } catch {
@@ -88,48 +111,46 @@ export function parsePropertyMap(rawMap) {
   }
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return {};
 
-  const result = {};
+  const input = candidate as Record<string, unknown>;
+  const result: HubSpotPropertyMap = {};
   for (const field of MAPPABLE_FIELDS) {
-    const property = candidate[field];
-    if (
-      typeof property === 'string' &&
-      PROPERTY_NAME_RE.test(property) &&
-      !RESERVED_PROPERTIES.has(property)
-    ) {
+    const property = input[field];
+    if (typeof property === 'string' && PROPERTY_NAME_RE.test(property) && !RESERVED_PROPERTIES.has(property)) {
       result[field] = property;
     }
   }
   return result;
 }
 
-export function buildMappedProperties(submission, rawMap) {
+export function buildMappedProperties(
+  submission: HubSpotSubmission,
+  rawMap: string | undefined,
+): Record<string, string> {
   const propertyMap = parsePropertyMap(rawMap);
-  const properties = {};
-
+  const properties: Record<string, string> = {};
   for (const field of MAPPABLE_FIELDS) {
     const property = propertyMap[field];
     const value = submission[field];
-    if (!property || value === null || value === undefined || value === '') continue;
-
+    if (!property || value === '') continue;
     if (field === 'submitted_at') {
       const milliseconds = Date.parse(value);
       if (Number.isFinite(milliseconds)) properties[property] = String(milliseconds);
     } else {
-      properties[property] = String(value);
+      properties[property] = value;
     }
   }
   return properties;
 }
 
-export function splitName(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+export function splitName(name: string): { firstname: string; lastname: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
   return {
-    firstname: parts[0] || '',
+    firstname: parts[0] ?? '',
     lastname: parts.length > 1 ? parts.slice(1).join(' ') : '',
   };
 }
 
-async function hubSpotRequest(url, options, fetcher) {
+async function hubSpotRequest(url: string, options: RequestInit, fetcher: Fetcher): Promise<number> {
   const response = await fetcher(url, {
     ...options,
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -139,74 +160,64 @@ async function hubSpotRequest(url, options, fetcher) {
     try {
       await response.body.cancel();
     } catch {
-      // Response cleanup must not turn a completed HubSpot request into a
-      // retry. The response body is intentionally never read or logged.
+      // Never turn response-body cleanup into a retry or expose the body.
     }
   }
   return status;
 }
 
-function authHeaders(token) {
-  return {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
+function authHeaders(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-async function patchExistingContact(email, properties, token, fetcher) {
+async function patchExistingContact(
+  email: string,
+  properties: Record<string, string>,
+  token: string,
+  fetcher: Fetcher,
+): Promise<void> {
   if (Object.keys(properties).length === 0) return;
   const status = await hubSpotRequest(
     `${HUBSPOT_CONTACTS_URL}/${encodeURIComponent(email)}?idProperty=email`,
-    {
-      method: 'PATCH',
-      headers: authHeaders(token),
-      body: JSON.stringify({ properties }),
-    },
+    { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ properties }) },
     fetcher,
   );
   if (status < 200 || status >= 300) throw new HubSpotSyncError(`http_${status}`, status);
 }
 
-export async function syncHubSpotContact(submission, token, rawPropertyMap = '', fetcher = fetch) {
+export async function syncHubSpotContact(
+  submission: HubSpotSubmission,
+  token: string,
+  rawPropertyMap = '',
+  fetcher: Fetcher = fetch,
+): Promise<{ created: boolean }> {
   if (!token) throw new HubSpotSyncError('token_missing');
-
-  const email = String(submission.email || '').trim().toLowerCase();
+  const email = submission.email.trim().toLowerCase();
   if (!email) throw new HubSpotSyncError('email_missing');
 
-  const headers = authHeaders(token);
   const lookupStatus = await hubSpotRequest(
     `${HUBSPOT_CONTACTS_URL}/${encodeURIComponent(email)}?idProperty=email`,
-    { method: 'GET', headers },
+    { method: 'GET', headers: authHeaders(token) },
     fetcher,
   );
   const mappedProperties = buildMappedProperties(submission, rawPropertyMap);
-
   if (lookupStatus >= 200 && lookupStatus < 300) {
-    // Existing HubSpot names may have been curated by the team. Only update
-    // explicitly configured OASIS-owned custom properties.
     await patchExistingContact(email, mappedProperties, token, fetcher);
     return { created: false };
   }
   if (lookupStatus !== 404) throw new HubSpotSyncError(`http_${lookupStatus}`, lookupStatus);
 
   const { firstname, lastname } = splitName(submission.name);
-  const createProperties = { email, ...mappedProperties };
+  const createProperties: Record<string, string> = { email, ...mappedProperties };
   if (firstname) createProperties.firstname = firstname;
   if (lastname) createProperties.lastname = lastname;
 
   const createStatus = await hubSpotRequest(
     HUBSPOT_CONTACTS_URL,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ properties: createProperties }),
-    },
+    { method: 'POST', headers: authHeaders(token), body: JSON.stringify({ properties: createProperties }) },
     fetcher,
   );
   if (createStatus >= 200 && createStatus < 300) return { created: true };
-
-  // Another request may have created the contact after our lookup. Treat that
-  // race as an update without overwriting HubSpot-owned name fields.
   if (createStatus === 409) {
     await patchExistingContact(email, mappedProperties, token, fetcher);
     return { created: false };
@@ -214,40 +225,42 @@ export async function syncHubSpotContact(submission, token, rawPropertyMap = '',
   throw new HubSpotSyncError(`http_${createStatus}`, createStatus);
 }
 
-export function retryAt(attempt, now = new Date()) {
+export function retryAt(attempt: number, now: Date = new Date()): string {
   const exponent = Math.max(0, Math.min(Number(attempt) - 1, 20));
   const delay = Math.min(60_000 * (2 ** exponent), MAX_RETRY_DELAY_MS);
   return new Date(now.getTime() + delay).toISOString();
 }
 
-function safeErrorCode(error) {
+function safeErrorCode(error: unknown): string {
   if (error instanceof HubSpotSyncError) return error.code;
-  if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'timeout';
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'timeout';
   return 'network_error';
 }
 
-async function claimJob(db, row, now, staleBefore) {
+async function claimJob(db: D1Database, row: QueueRow, now: string, staleBefore: string): Promise<boolean> {
   const result = await db.prepare(`
     UPDATE hubspot_sync_queue
        SET status = 'processing', locked_at = ?, updated_at = ?
      WHERE id = ?
        AND (
          (status = 'pending' AND next_attempt_at <= ?)
-         OR
-         (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
+         OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
        )
   `).bind(now, now, row.id, now, staleBefore).run();
-  return Number(result?.meta?.changes || 0) === 1;
+  return Number(result.meta.changes ?? 0) === 1;
 }
 
-export async function processHubSpotQueue(env, options = {}) {
+export async function processHubSpotQueue(
+  env: Pick<Env, 'DB' | 'HUBSPOT_TOKEN' | 'HUBSPOT_PROPERTY_MAP'>,
+  options: ProcessQueueOptions = {},
+): Promise<{ processed: number; succeeded: number; failed: number; skipped: boolean }> {
   if (!env.DB || !env.HUBSPOT_TOKEN) return { processed: 0, succeeded: 0, failed: 0, skipped: true };
 
-  const nowDate = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
+  const nowDate = options.now instanceof Date ? options.now : new Date(options.now ?? Date.now());
   const now = toIso(nowDate);
   const staleBefore = new Date(nowDate.getTime() - CLAIM_TIMEOUT_MS).toISOString();
   const limit = Math.max(1, Math.min(Number(options.limit) || 25, 100));
-  const fetcher = options.fetcher || fetch;
+  const fetcher = options.fetcher ?? fetch;
   const rows = await env.DB.prepare(`
     SELECT id, payload_json, attempts
       FROM hubspot_sync_queue
@@ -255,24 +268,17 @@ export async function processHubSpotQueue(env, options = {}) {
         OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
      ORDER BY created_at ASC, id ASC
      LIMIT ?
-  `).bind(now, staleBefore, limit).all();
+  `).bind(now, staleBefore, limit).all<QueueRow>();
 
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
-
-  for (const row of rows.results || []) {
+  for (const row of rows.results) {
     if (!await claimJob(env.DB, row, now, staleBefore)) continue;
     processed += 1;
-
     try {
-      const submission = JSON.parse(row.payload_json);
-      await syncHubSpotContact(
-        submission,
-        env.HUBSPOT_TOKEN,
-        env.HUBSPOT_PROPERTY_MAP || '',
-        fetcher,
-      );
+      const submission = JSON.parse(row.payload_json) as HubSpotSubmission;
+      await syncHubSpotContact(submission, env.HUBSPOT_TOKEN, env.HUBSPOT_PROPERTY_MAP ?? '', fetcher);
       await env.DB.prepare(`
         UPDATE hubspot_sync_queue
            SET status = 'synced', synced_at = ?, locked_at = NULL,
@@ -292,23 +298,13 @@ export async function processHubSpotQueue(env, options = {}) {
     }
   }
 
-  console.log(JSON.stringify({
-    event: 'hubspot_sync_batch',
-    processed,
-    succeeded,
-    failed,
-  }));
+  console.log(JSON.stringify({ event: 'hubspot_sync_batch', processed, succeeded, failed }));
   return { processed, succeeded, failed, skipped: false };
 }
 
-export function scheduleHubSpotSync(ctx, env, limit = 1) {
-  if (!ctx || !env.DB || !env.HUBSPOT_TOKEN) return;
-  ctx.waitUntil(
-    processHubSpotQueue(env, { limit }).catch(error => {
-      console.error(JSON.stringify({
-        event: 'hubspot_sync_background_failed',
-        reason: safeErrorCode(error),
-      }));
-    }),
-  );
+export function scheduleHubSpotSync(ctx: ExecutionContext, env: Env, limit = 1): void {
+  if (!env.DB || !env.HUBSPOT_TOKEN) return;
+  ctx.waitUntil(processHubSpotQueue(env, { limit }).catch(error => {
+    console.error(JSON.stringify({ event: 'hubspot_sync_background_failed', reason: safeErrorCode(error) }));
+  }));
 }
