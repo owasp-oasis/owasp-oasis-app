@@ -56,6 +56,7 @@ describe('feedback reporter handling', () => {
     expect(containsCredentialLikeSecret('Contact me at reporter@example.org')).toBe(false);
     const tokenFixture = ['token: ghp', '1234567890abcdefghijkl'].join('_');
     expect(containsCredentialLikeSecret(tokenFixture)).toBe(true);
-    expect(containsCredentialLikeSecret('-----BEGIN PRIVATE KEY-----')).toBe(true);
+    const privateKeyFixture = ['-----BEGIN', 'PRIVATE', 'KEY-----'].join(' ');
+    expect(containsCredentialLikeSecret(privateKeyFixture)).toBe(true);
   });
 });
