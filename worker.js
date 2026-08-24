@@ -135,6 +135,23 @@ function validateCSRF(request) {
   return diff === 0;
 }
 
+function constantTimeStringEqual(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string' || !left || !right) return false;
+  const maxLength = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+  for (let index = 0; index < maxLength; index++) {
+    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return diff === 0;
+}
+
+function isAdminRequest(request, env) {
+  return constantTimeStringEqual(
+    request.headers.get('X-Admin-Secret') || '',
+    env.ADMIN_SECRET || '',
+  );
+}
+
 /* ─── RATE LIMITING ──────────────────────────────────────────── */
 async function checkRateLimit(env, ip) {
   if (!env.RATE_KV) return { allowed: true }; // skip if KV not bound
@@ -348,9 +365,7 @@ export default {
 
       /* GET /api/admin/registrations — protected registration export */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
-        const secret = request.headers.get('X-Admin-Secret');
-        const envSecret = env.ADMIN_SECRET || '';
-        if (!secret || !envSecret || secret !== envSecret) {
+        if (!isAdminRequest(request, env)) {
           return jsonErr('Unauthorised', 401, request);
         }
         try {
@@ -361,6 +376,23 @@ export default {
         } catch (err) {
           console.error('DB error (admin):', err?.message);
           return jsonErr('Failed to fetch registrations', 500, request);
+        }
+      }
+
+      /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
+      if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
+        if (!isAdminRequest(request, env)) {
+          return jsonErr('Unauthorised', 401, request);
+        }
+        try {
+          const result = await processHubSpotQueue(env, { limit: 25 });
+          return jsonOk(result, request, env);
+        } catch {
+          console.error(JSON.stringify({
+            event: 'hubspot_sync_manual_failed',
+            reason: 'processor_error',
+          }));
+          return jsonErr('HubSpot sync failed', 500, request, env);
         }
       }
 
