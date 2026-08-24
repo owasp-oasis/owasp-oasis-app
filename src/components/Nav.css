@@ -79,8 +79,8 @@ body.lb-tabs-docked .nav {
 .nav-auth {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex-shrink: 0;
+  position: relative;
 }
 
 .nav-auth-avatar {
@@ -90,74 +90,103 @@ body.lb-tabs-docked .nav {
   background: var(--gray-200);
 }
 
-.nav-auth-login {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--blue-dark);
-  white-space: nowrap;
-}
-
-.nav-auth-btn {
+.nav-account-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 6px 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 9px 4px 5px;
   color: var(--blue-dark);
-  background: linear-gradient(180deg, var(--white), var(--blue-soft));
-  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(11, 79, 138, .08);
+  box-shadow: 0 2px 8px rgba(11, 79, 138, .06);
   font-family: var(--font);
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
-.nav-auth-btn:hover {
+.nav-account-trigger:hover,
+.nav-account-trigger[aria-expanded="true"] {
   color: var(--blue);
-  border-color: var(--blue);
-  box-shadow: 0 5px 14px rgba(11, 79, 138, .15);
-  transform: translateY(-1px);
+  background: var(--white);
+  border-color: var(--line-strong);
+  box-shadow: 0 5px 16px rgba(11, 79, 138, .13);
 }
 
-.nav-auth-btn:active {
-  box-shadow: 0 2px 6px rgba(11, 79, 138, .1);
-  transform: translateY(0);
-}
-
-.nav-auth-btn:focus-visible {
+.nav-account-trigger:focus-visible {
   outline: 3px solid rgba(15, 111, 207, .22);
   outline-offset: 2px;
 }
 
-.nav-auth-btn-icon {
+.nav-account-login {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nav-account-chevron {
   flex-shrink: 0;
   stroke: currentColor;
   stroke-width: 1.5;
   stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
 }
 
-.nav-auth-signout {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--gray-200);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
+.nav-account-trigger[aria-expanded="true"] .nav-account-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 110;
+  width: 184px;
+  padding: 6px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(11, 79, 138, .18);
+}
+
+.nav-account-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
   font-family: var(--font);
-  transition: color 0.15s, border-color 0.15s;
-  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  transition: color 0.15s, background 0.15s;
 }
 
-.nav-auth-signout:hover {
+.nav-account-action:hover,
+.nav-account-action:focus-visible {
   color: var(--blue);
-  border-color: var(--blue);
+  background: var(--blue-soft);
+  outline: none;
+}
+
+.nav-account-action svg {
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-account-action--signout {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-200);
+  border-radius: 0 0 7px 7px;
 }
 
 .nav-auth-signin {
@@ -226,28 +255,15 @@ body.lb-tabs-docked .nav {
   transform: translateY(-7px) rotate(-45deg);
 }
 
-/* ── Tablet: hide auth login text ── */
+/* ── Tablet: show only the avatar in the account trigger ── */
 @media (max-width: 900px) {
-  .nav-auth-login {
+  .nav-account-login {
     display: none;
   }
 
-  .nav-auth-btn {
-    width: 34px;
-    padding: 6px;
-    border-radius: 9px;
-  }
-
-  .nav-auth-btn-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+  .nav-account-trigger {
+    gap: 5px;
+    padding-right: 7px;
   }
 }
 

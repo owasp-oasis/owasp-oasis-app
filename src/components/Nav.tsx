@@ -18,33 +18,39 @@ interface NavProps {
 
 export default function Nav({ onOpenOnboarding }: NavProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   const navRef = useRef<HTMLElement>(null)
   const { user, loading, logout } = useAuth()
 
-  // Close menu on outside click
+  // Close open navigation surfaces on outside click.
   useEffect(() => {
-    if (!menuOpen) return
+    if (!menuOpen && !accountOpen) return
     function handleClick(e: MouseEvent) {
       if (navRef.current && !navRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
+        setAccountOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [menuOpen])
+  }, [menuOpen, accountOpen])
 
-  // Close menu on Escape
+  // Close open navigation surfaces on Escape.
   useEffect(() => {
-    if (!menuOpen) return
+    if (!menuOpen && !accountOpen) return
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOpen(false)
+      if (e.key === 'Escape') {
+        setMenuOpen(false)
+        setAccountOpen(false)
+      }
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [menuOpen])
+  }, [menuOpen, accountOpen])
 
   function closeMenu() {
     setMenuOpen(false)
+    setAccountOpen(false)
   }
 
   return (
@@ -77,39 +83,63 @@ export default function Nav({ onOpenOnboarding }: NavProps) {
         {!loading && (
           user ? (
             <div className="nav-auth">
-              <img
-                src={user.avatar_url ?? `https://github.com/${user.login}.png?size=28`}
-                alt={user.login}
-                className="nav-auth-avatar"
-                width={28}
-                height={28}
-              />
-              <span className="nav-auth-login">@{user.login}</span>
               <button
                 type="button"
-                className="nav-auth-btn"
-                onClick={() => { onOpenOnboarding?.(); closeMenu() }}
-                title="Update your preferences"
-                aria-label="Update Workspace preferences"
+                className="nav-account-trigger"
+                onClick={() => {
+                  setAccountOpen(open => !open)
+                  setMenuOpen(false)
+                }}
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-controls="nav-account-menu"
               >
+                <img
+                  src={user.avatar_url ?? `https://github.com/${user.login}.png?size=28`}
+                  alt=""
+                  className="nav-auth-avatar"
+                  width={28}
+                  height={28}
+                />
+                <span className="nav-account-login">@{user.login}</span>
                 <svg
-                  className="nav-auth-btn-icon"
+                  className="nav-account-chevron"
                   aria-hidden="true"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
                   fill="none"
                 >
-                  <path d="M2 4h4m4 0h4M8 2v4M2 8h7m4 0h1m-3-2v4M2 12h2m4 0h6M6 10v4" />
+                  <path d="m3 4.5 3 3 3-3" />
                 </svg>
-                <span className="nav-auth-btn-label">Preferences</span>
               </button>
-              <button
-                className="nav-auth-signout"
-                onClick={() => { logout(); closeMenu() }}
-              >
-                Sign out
-              </button>
+
+              {accountOpen && (
+                <div id="nav-account-menu" className="nav-account-menu" role="menu">
+                  <button
+                    type="button"
+                    className="nav-account-action"
+                    role="menuitem"
+                    onClick={() => { onOpenOnboarding?.(); closeMenu() }}
+                  >
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M2 4h4m4 0h4M8 2v4M2 8h7m4 0h1m-3-2v4M2 12h2m4 0h6M6 10v4" />
+                    </svg>
+                    Preferences
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-account-action nav-account-action--signout"
+                    role="menuitem"
+                    onClick={() => { void logout(); closeMenu() }}
+                  >
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M6 3H3v10h3M10 5l3 3-3 3M13 8H6" />
+                    </svg>
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <a href="/api/auth/login" className="nav-auth nav-auth-signin">
@@ -129,7 +159,10 @@ export default function Nav({ onOpenOnboarding }: NavProps) {
 
         <button
           className={`nav-hamburger${menuOpen ? ' nav-hamburger--open' : ''}`}
-          onClick={() => setMenuOpen(o => !o)}
+          onClick={() => {
+            setMenuOpen(open => !open)
+            setAccountOpen(false)
+          }}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={menuOpen}
           aria-controls="nav-links"
