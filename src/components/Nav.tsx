@@ -86,11 +86,23 @@ export default function Nav({ onOpenOnboarding }: NavProps) {
               />
               <span className="nav-auth-login">@{user.login}</span>
               <button
+                type="button"
                 className="nav-auth-btn"
                 onClick={() => { onOpenOnboarding?.(); closeMenu() }}
                 title="Update your preferences"
+                aria-label="Update Workspace preferences"
               >
-                Preferences
+                <svg
+                  className="nav-auth-btn-icon"
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                >
+                  <path d="M2 4h4m4 0h4M8 2v4M2 8h7m4 0h1m-3-2v4M2 12h2m4 0h6M6 10v4" />
+                </svg>
+                <span className="nav-auth-btn-label">Preferences</span>
               </button>
               <button
                 className="nav-auth-signout"

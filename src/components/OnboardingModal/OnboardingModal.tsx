@@ -2,7 +2,7 @@
  * OnboardingModal - Multi-step validator onboarding and "What's New" modal
  *
  * Features:
- * - Displays on first login OR when user has zero votes
+ * - Displays whenever its parent opens it, including from the Preferences control
  * - 6 steps: Welcome, Languages, Severity, Experience, Ready, WhatsNew
  * - Dismiss button on WhatsNew marks onboarding_version as seen without navigation
  * - "Get Started" button navigates to the Workspace pull-request queue with URL filters
@@ -32,10 +32,9 @@ interface OnboardingState {
 interface OnboardingModalProps {
   isOpen: boolean
   onClose: () => void
-  forceShow?: boolean // Force showing the modal (e.g., from Nav "Update Preferences")
 }
 
-export default function OnboardingModal({ isOpen, onClose, forceShow = false }: OnboardingModalProps) {
+export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
   const { user, preferences, current_version, updatePreferences } = useAuth()
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>('welcome')
@@ -44,12 +43,6 @@ export default function OnboardingModal({ isOpen, onClose, forceShow = false }: 
     severities: preferences?.severities ?? [],
     experience: preferences?.experience ?? null,
   })
-
-  // Auto-open modal on first login or zero votes (detected by onboarding_version being null/different)
-  const shouldAutoOpen = user && current_version && (
-    preferences?.onboarding_version !== current_version ||
-    !preferences?.onboarding_version
-  )
 
   useEffect(() => {
     // Sync state with preferences when they load
@@ -111,11 +104,6 @@ export default function OnboardingModal({ isOpen, onClose, forceShow = false }: 
   }
 
   if (!isOpen || !user) return null
-
-  // Only show if: forceShow is true (from Nav), OR (modal should auto-open AND not already dismissed)
-  const shouldShow = forceShow || (shouldAutoOpen && !preferences?.onboarding_version)
-
-  if (!shouldShow && !forceShow) return null
 
   const progressSteps: Step[] = ['welcome', 'languages', 'severity', 'experience', 'ready', 'whatsnew']
   const progressIndex = progressSteps.indexOf(step)

@@ -97,6 +97,50 @@ body.lb-tabs-docked .nav {
   white-space: nowrap;
 }
 
+.nav-auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  color: var(--blue-dark);
+  background: linear-gradient(180deg, var(--white), var(--blue-soft));
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(11, 79, 138, .08);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.nav-auth-btn:hover {
+  color: var(--blue);
+  border-color: var(--blue);
+  box-shadow: 0 5px 14px rgba(11, 79, 138, .15);
+  transform: translateY(-1px);
+}
+
+.nav-auth-btn:active {
+  box-shadow: 0 2px 6px rgba(11, 79, 138, .1);
+  transform: translateY(0);
+}
+
+.nav-auth-btn:focus-visible {
+  outline: 3px solid rgba(15, 111, 207, .22);
+  outline-offset: 2px;
+}
+
+.nav-auth-btn-icon {
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
 .nav-auth-signout {
   font-size: 0.82rem;
   font-weight: 600;
@@ -186,6 +230,24 @@ body.lb-tabs-docked .nav {
 @media (max-width: 900px) {
   .nav-auth-login {
     display: none;
+  }
+
+  .nav-auth-btn {
+    width: 34px;
+    padding: 6px;
+    border-radius: 9px;
+  }
+
+  .nav-auth-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }
 
