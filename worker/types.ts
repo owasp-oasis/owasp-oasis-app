@@ -10,8 +10,6 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   ADMIN_SECRET: string;
-  GOOGLE_SHEETS_WEBHOOK: string;
-  SHEETS_SYNC_SECRET: string;
   HUBSPOT_TOKEN?: string;
   HUBSPOT_PROPERTY_MAP?: string;
   TOKEN_ENCRYPTION_KEY: string;

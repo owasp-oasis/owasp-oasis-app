@@ -84,7 +84,7 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   db.ts                    ← D1 database helpers (upsert, getSyncState, rebuildContributors)
   github.ts                ← GitHub API client, comment/PR body parsers, bot detection
   sync.ts                  ← GitHub sync engine (cron full sync + chunked manual sync)
-  sheetsSync.ts            ← Production-only hourly registration export to Google Sheets
+  hubspot.ts               ← Durable registration and application contact sync
   handlers/
     leaderboard.ts         ← /api/leaderboard/* endpoint handlers
     register.ts            ← POST /api/register
@@ -161,7 +161,7 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `db.ts` | All D1 read/write operations: upsert repos, PRs, participants, contributors; sync state key/value store; `rebuildContributors` aggregation |
 | `github.ts` | GitHub REST API client (`ghFetch`, `ghFetchAll` with pagination); parses OASIS decision comments (`accept`/`modify`/`reject`); detects SAST tool from PR body; filters automated/bot accounts |
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
-| `sheetsSync.ts` | Reads registrations directly from D1 on the production hourly cron, signs the exact JSON payload with HMAC-SHA256, and posts it to the Apps Script web app without logging registration data or credentials |
+| `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
 | `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
 | `handlers/register.ts` | `POST /api/register` — CSRF validation, rate limiting, input validation, duplicate check, D1 insert |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
@@ -405,7 +405,7 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 
 ## Secrets
 
-Secrets are set per-worker. Authentication secrets are required in both environments. The Google Sheets export secrets are production-only because preview does not install the hourly export cron.
+Secrets are set per-worker and are not shared between preview and production.
 
 ```bash
 # Set secrets on the preview worker
@@ -426,8 +426,6 @@ wrangler secret list --name owasp-oasis-app-preview
 | `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Send via `X-Admin-Secret` header. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
-| `GOOGLE_SHEETS_WEBHOOK` | Production-only Apps Script `/exec` deployment URL. Stored as a Worker secret so the endpoint is not published in the repository. |
-| `SHEETS_SYNC_SECRET` | Production-only shared key used to HMAC-sign registration exports. Configure the identical value as an Apps Script property; it is never sent in the request. |
 
 The `GITHUB_TOKEN` must have `public_repo` scope and belong to a member of the `owasp-oasis` GitHub org.
 

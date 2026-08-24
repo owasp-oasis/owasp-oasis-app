@@ -130,7 +130,7 @@ The `deploy:preview` script runs `npm run build && wrangler deploy`, so it alway
 
 ## Secrets management
 
-Secrets are configured per-worker and are not shared between preview and production. Authentication secrets are required in both environments. The Sheets export secrets are production-only because only production installs its hourly export cron.
+Secrets are configured per-worker and are not shared between preview and production.
 
 ```bash
 # Preview worker
@@ -140,8 +140,6 @@ wrangler secret put ADMIN_SECRET  --name owasp-oasis-app-preview
 # Production worker
 wrangler secret put GITHUB_TOKEN --name owasp-oasis
 wrangler secret put ADMIN_SECRET  --name owasp-oasis
-wrangler secret put GOOGLE_SHEETS_WEBHOOK --name owasp-oasis
-wrangler secret put SHEETS_SYNC_SECRET    --name owasp-oasis
 
 # List secrets on a worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -155,8 +153,6 @@ wrangler secret list --name owasp-oasis-app-preview
 | `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Sent via `X-Admin-Secret` header. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in (vote, react). |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
-| `GOOGLE_SHEETS_WEBHOOK` | Production-only Apps Script `/exec` deployment URL. Keep it in Worker secrets rather than source control. |
-| `SHEETS_SYNC_SECRET` | Production-only HMAC key shared with the Apps Script `SHEETS_SYNC_SECRET` script property. Generate a strong random value and never commit or log it. |
 
 The OAuth App must be configured separately per environment:
 
@@ -228,18 +224,6 @@ The leaderboard is populated by syncing pull requests, comments, and reactions f
 GitHub schedule: `0 */4 * * *` — every 4 hours.
 
 The cron sync runs `runSync()` which uses the Worker's 1000 subrequest limit. It fetches all repos, PRs, comments, and reactions (including `+1` reactions on OASIS-template comments, which contribute to reputation scores).
-
-Production also runs the registration export at `15 * * * *` — 15 minutes after every hour. The Worker reads registrations directly from D1, HMAC-signs the exact serialized payload, and posts it to the Apps Script web app. Preview does not install this cron.
-
-### Google Sheets registration export
-
-1. Copy `google-sheets-sync.js` into the Apps Script project attached to the registration spreadsheet.
-2. In **Project Settings → Script Properties**, add `SHEETS_SYNC_SECRET` with a newly generated high-entropy value.
-3. Deploy the script as a web app and copy its `/exec` URL.
-4. Store that URL in the production Worker as `GOOGLE_SHEETS_WEBHOOK`, and store the identical HMAC key as `SHEETS_SYNC_SECRET`.
-5. Deploy the production Worker, then verify `sheets_sync_last_success`, `sheets_sync_last_count`, and `sheets_sync_status` in D1 after the next hourly run.
-
-The endpoint rejects invalid signatures, payloads older than five minutes, and unsupported payload versions. Worker and Apps Script logs contain only status, row counts, and timing; they must not contain registration rows, webhook URLs, signatures, or secret values. Once this path is confirmed, remove the obsolete GitHub Actions `ADMIN_SECRET` and `GOOGLE_SHEETS_WEBHOOK` secrets if no remaining workflow references them.
 
 ### Manual sync trigger
 
