@@ -125,18 +125,16 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
             </div>
           </div>
 
-          {/* Dismiss button — occupies its own header slot to avoid the progress UI */}
-          {step !== 'whatsnew' && (
-            <button
-              type="button"
-              className="onboarding-close-btn"
-              onClick={onClose}
-              aria-label="Close onboarding modal"
-              title="Skip onboarding"
-            >
-              ✕
-            </button>
-          )}
+          {/* Close is always available, including when reopening on the final step. */}
+          <button
+            type="button"
+            className="onboarding-close-btn"
+            onClick={onClose}
+            aria-label="Close onboarding modal"
+            title="Close preferences"
+          >
+            ✕
+          </button>
         </div>
 
         {/* Content */}
@@ -179,6 +177,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
             <WhatsNewStep
               onDismiss={handleDismiss}
               onGetStarted={handleComplete}
+              onPrev={handlePrev}
             />
           )}
         </div>

@@ -1,9 +1,10 @@
 interface WhatsNewStepProps {
   onDismiss: () => void
   onGetStarted: () => void
+  onPrev: () => void
 }
 
-export default function WhatsNewStep({ onDismiss, onGetStarted }: WhatsNewStepProps) {
+export default function WhatsNewStep({ onDismiss, onGetStarted, onPrev }: WhatsNewStepProps) {
   return (
     <div className="onboarding-step whatsnew-step">
       <div className="onboarding-step-icon" aria-hidden="true">🎉</div>
@@ -44,10 +45,13 @@ export default function WhatsNewStep({ onDismiss, onGetStarted }: WhatsNewStepPr
       </div>
 
       <div className="onboarding-step-buttons">
-        <button className="btn btn-secondary" onClick={onDismiss}>
+        <button type="button" className="btn btn-secondary" onClick={onPrev}>
+          &larr; Back
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onDismiss}>
           Dismiss
         </button>
-        <button className="btn btn-primary" onClick={onGetStarted}>
+        <button type="button" className="btn btn-primary" onClick={onGetStarted}>
           Get started &rarr;
         </button>
       </div>
