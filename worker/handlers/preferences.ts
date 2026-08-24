@@ -78,11 +78,28 @@ export async function handlePutPreferences(request: Request, env: Env): Promise<
 
   const now = new Date().toISOString()
 
-  // Serialize arrays to JSON strings for storage
-  const languages = body.languages ? JSON.stringify(body.languages) : null
-  const severities = body.severities ? JSON.stringify(body.severities) : null
-  const experience = body.experience ?? null
-  const onboarding_version = body.onboarding_version ?? CURRENT_ONBOARDING_VERSION
+  const existing = await env.DB.prepare(
+    `SELECT languages, severities, experience, onboarding_version
+     FROM user_preferences WHERE github_login = ?`
+  ).bind(session.github_login).first<{
+    languages: string | null
+    severities: string | null
+    experience: string | null
+    onboarding_version: string | null
+  }>()
+
+  const has = (key: keyof UserPreferences) => Object.prototype.hasOwnProperty.call(body, key)
+  const serializeList = (value: string[] | null | undefined) =>
+    value === null || value === undefined ? null : JSON.stringify(value)
+
+  // Omitted fields retain their existing values; explicit null still clears a
+  // preference. This makes the documented partial-update contract real.
+  const languages = has('languages') ? serializeList(body.languages) : existing?.languages ?? null
+  const severities = has('severities') ? serializeList(body.severities) : existing?.severities ?? null
+  const experience = has('experience') ? body.experience ?? null : existing?.experience ?? null
+  const onboarding_version = has('onboarding_version')
+    ? body.onboarding_version ?? CURRENT_ONBOARDING_VERSION
+    : existing?.onboarding_version ?? CURRENT_ONBOARDING_VERSION
 
   // Upsert using INSERT OR REPLACE
   await env.DB.prepare(
@@ -103,8 +120,8 @@ export async function handlePutPreferences(request: Request, env: Env): Promise<
   return jsonOk({
     success: true,
     preferences: {
-      languages: body.languages ?? null,
-      severities: body.severities ?? null,
+      languages: languages ? JSON.parse(languages) : null,
+      severities: severities ? JSON.parse(severities) : null,
       experience,
       onboarding_version,
     },
