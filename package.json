@@ -2,11 +2,16 @@
   "name": "owasp-oasis",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev":    "wrangler dev --var ENVIRONMENT:development",
-    "deploy": "wrangler deploy"
+    "build": "npm run check",
+    "deploy": "wrangler deploy --env production",
+    "deploy:preview": "wrangler deploy --env=\"\"",
+    "test": "node --test",
+    "check": "node --check worker.js && node --check hubspot.js && node --test"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.125.0"
   }
 }

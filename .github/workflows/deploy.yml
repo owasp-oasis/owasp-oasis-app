@@ -37,7 +37,7 @@ jobs:
         run: test -f wrangler.toml && echo "✅ wrangler.toml found"
 
       - name: Validate worker.js syntax
-        run: node --check worker.js && echo "✅ worker.js syntax OK" || echo "⚠️ worker.js has syntax issues"
+        run: npm run check
 
   # ── Deploy to production — only on push to main ───────────────
   deploy:
@@ -59,12 +59,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply oasis-db --remote --env production
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --env production
 
       - name: Deployment summary
         run: |
