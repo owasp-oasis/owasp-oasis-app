@@ -121,8 +121,8 @@ export default function Home() {
               <span className="line-fix">Team OASIS fixes it.</span>
             </h1>
             <p className="home-lede">
-              OASIS mobilizes the AppSec community to deliver community-validated vulnerability fixes
-              for the open source software that runs the world.
+              OASIS (Open Automated Security Initiative for Software) mobilizes the AppSec community to
+              deliver community-validated vulnerability fixes for the open source software that runs the world.
             </p>
             <div className="home-actions">
               <a className="btn btn-secondary" href="#register-form">
