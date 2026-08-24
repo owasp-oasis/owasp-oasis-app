@@ -254,7 +254,13 @@ export async function processHubSpotQueue(
   env: Pick<Env, 'DB' | 'HUBSPOT_TOKEN' | 'HUBSPOT_PROPERTY_MAP'>,
   options: ProcessQueueOptions = {},
 ): Promise<{ processed: number; succeeded: number; failed: number; skipped: boolean }> {
-  if (!env.DB || !env.HUBSPOT_TOKEN) return { processed: 0, succeeded: 0, failed: 0, skipped: true };
+  if (!env.DB || !env.HUBSPOT_TOKEN) {
+    console.warn(JSON.stringify({
+      event: 'hubspot_sync_skipped',
+      reason: !env.DB ? 'missing_db' : 'missing_token',
+    }));
+    return { processed: 0, succeeded: 0, failed: 0, skipped: true };
+  }
 
   const nowDate = options.now instanceof Date ? options.now : new Date(options.now ?? Date.now());
   const now = toIso(nowDate);

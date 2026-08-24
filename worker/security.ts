@@ -133,6 +133,23 @@ export function validateCSRF(request: Request): boolean {
   return diff === 0;
 }
 
+export function constantTimeStringEqual(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  const maxLength = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+  for (let index = 0; index < maxLength; index++) {
+    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+  return diff === 0;
+}
+
+export function isAdminRequest(request: Request, env: Pick<Env, 'ADMIN_SECRET'>): boolean {
+  return constantTimeStringEqual(
+    request.headers.get('X-Admin-Secret') ?? '',
+    env.ADMIN_SECRET ?? '',
+  );
+}
+
 /* ─── GITHUB TOKEN ENCRYPTION ───────────────────────────────── */
 // AES-GCM using a 256-bit key derived from TOKEN_ENCRYPTION_KEY (env secret).
 // The cookie value is base64url(iv [12 bytes] || ciphertext).

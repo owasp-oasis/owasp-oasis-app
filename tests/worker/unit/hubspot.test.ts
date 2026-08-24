@@ -138,6 +138,25 @@ describe('HubSpot contact mapping', () => {
 });
 
 describe('HubSpot durable queue', () => {
+  it('logs a safe reason when required bindings are unavailable', async () => {
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message?: unknown) => warnings.push(String(message));
+    try {
+      await expect(processHubSpotQueue({
+        DB: {} as D1Database,
+        HUBSPOT_TOKEN: undefined,
+        HUBSPOT_PROPERTY_MAP: undefined,
+      })).resolves.toEqual({ processed: 0, succeeded: 0, failed: 0, skipped: true });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings).toEqual([
+      JSON.stringify({ event: 'hubspot_sync_skipped', reason: 'missing_token' }),
+    ]);
+  });
+
   it('uses capped exponential retry delays', () => {
     const now = new Date('2026-08-21T12:00:00.000Z');
     expect(retryAt(1, now)).toBe('2026-08-21T12:01:00.000Z');

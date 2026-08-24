@@ -12,6 +12,7 @@ import {
   handleOptions,
   generateCSRF,
   isLoopbackRequest,
+  isAdminRequest,
   jsonOk,
   jsonErr,
 } from './security.js';
@@ -135,9 +136,7 @@ export default {
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
-        const secret    = request.headers.get('X-Admin-Secret');
-        const envSecret = env.ADMIN_SECRET ?? '';
-        if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
+        if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
         try {
           const rows = await env.DB.prepare(
             'SELECT id, name, email, github, role, created_at FROM registrations ORDER BY created_at DESC',
@@ -162,9 +161,7 @@ export default {
         * Protected by X-Admin-Secret header (same as /api/admin/registrations).
         * ──────────────────────────────────────────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/full-sync') {
-         const secret    = request.headers.get('X-Admin-Secret');
-         const envSecret = env.ADMIN_SECRET ?? '';
-         if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          if (!env.DB) return jsonErr('DB not available', 503, request);
          await env.DB.prepare(
            "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
@@ -181,9 +178,7 @@ export default {
         * Protected by X-Admin-Secret header (same as other admin endpoints).
         * ──────────────────────────────────────────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/run-cleanup') {
-         const secret    = request.headers.get('X-Admin-Secret');
-         const envSecret = env.ADMIN_SECRET ?? '';
-         if (!secret || !envSecret || secret !== envSecret) return jsonErr('Unauthorised', 401, request);
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          if (!env.DB) return jsonErr('DB not available', 503, request);
          const repositories = await reconcileRemovedRepositories(env);
          const pullRequests = await runCleanup(env);
@@ -191,6 +186,21 @@ export default {
        }
 
        /* ── Leaderboard API ───────────────────────────────────────── */
+       /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
+       if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         try {
+           const result = await processHubSpotQueue(env, { limit: 25 });
+           return jsonOk(result, request);
+         } catch {
+           console.error(JSON.stringify({
+             event: 'hubspot_sync_manual_failed',
+             reason: 'processor_error',
+           }));
+           return jsonErr('HubSpot sync failed', 500, request);
+         }
+       }
+
        if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
          return await handleMeta(env, request);
        if (method === 'GET' && url.pathname === '/api/leaderboard/repos')

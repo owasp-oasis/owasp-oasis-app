@@ -102,6 +102,37 @@ describe('router (worker/index.ts)', () => {
     });
   });
 
+  describe('POST /api/admin/run-hubspot-sync', () => {
+    it('rejects a missing or incorrect admin secret', async () => {
+      const missing = await SELF.fetch(new Request('http://localhost/api/admin/run-hubspot-sync', {
+        method: 'POST',
+      }));
+      const incorrect = await SELF.fetch(new Request('http://localhost/api/admin/run-hubspot-sync', {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': 'incorrect' },
+      }));
+
+      expect(missing.status).toBe(401);
+      expect(incorrect.status).toBe(401);
+    });
+
+    it('returns aggregate processor state to an authorised request', async () => {
+      const res = await SELF.fetch(new Request('http://localhost/api/admin/run-hubspot-sync', {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': 'test-admin-secret' },
+      }));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: true,
+      });
+    });
+  });
+
   describe('security headers on all responses', () => {
     it('includes X-Frame-Options: DENY', async () => {
       const res = await SELF.fetch(new Request('http://localhost/api/count'));
