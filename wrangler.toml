@@ -1,7 +1,23 @@
 name               = "owasp-oasis-app-preview"
 main               = "dist-worker/index.js"
-compatibility_date = "2025-05-01"
+compatibility_date = "2026-08-24"
 workers_dev        = false
+
+# Persist privacy-safe Worker logs and invocation metadata. Traces remain disabled.
+[observability]
+enabled            = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled            = true
+head_sampling_rate = 1
+persist            = true
+invocation_logs    = true
+
+[observability.traces]
+enabled            = false
+persist            = true
+head_sampling_rate = 1
 
 # ── Static assets (React SPA) ──
 [assets]
@@ -20,6 +36,7 @@ zone_name = "owasp-oasis.org"
 binding       = "DB"
 database_name = "oasis-db"
 database_id   = "d14003aa-36a7-42f3-8374-7cd060b56333"
+migrations_dir = "migrations"
 
 # ── KV Namespace (rate limiting) ──
 [[kv_namespaces]]
@@ -61,6 +78,7 @@ zone_name = "owasp-oasis.com"
 binding       = "DB"
 database_name = "oasis-db"
 database_id   = "d14003aa-36a7-42f3-8374-7cd060b56333"
+migrations_dir = "migrations"
 
 # ── KV Namespace (rate limiting) ──
 [[env.production.kv_namespaces]]

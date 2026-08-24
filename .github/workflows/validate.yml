@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - preview
   pull_request:
     branches:
       - main
+      - preview
 
 jobs:
   validate:
@@ -26,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Check required files
-        run: test -f index.html && test -f worker.js && test -f wrangler.toml
+        run: test -f index.html && test -f worker/index.ts && test -f wrangler.toml && test -d migrations
 
       - name: Run checks
         run: npm run check

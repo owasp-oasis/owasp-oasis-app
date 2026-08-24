@@ -15,7 +15,7 @@ main      ← production  — auto-deploys to www.owasp-oasis.org on push
 preview   ← staging     — auto-deploys to preview.owasp-oasis.org on push
 ```
 
-Deployment is handled by **Cloudflare Git integration** — pushing to either branch triggers a build and deploy automatically. There are no GitHub Actions involved.
+Deployment is handled by **Cloudflare Git integration**. GitHub Actions validates pushes and pull requests but has no Cloudflare credentials and never deploys.
 
 ### Recommended workflow
 
@@ -70,6 +70,9 @@ Opens `http://localhost:8787`. The worker and React SPA both run locally via Min
 | `npm run build:worker` | Compiles `worker/` TypeScript → `dist-worker/` |
 | `npm run build:frontend` | Bundles React SPA → `dist/` via Vite |
 | `npm run build` | Runs both of the above (full build) |
+| `npm run check` | Runs the complete test suite and production build |
+| `npm run deploy:preview` | Applies pending D1 migrations, then deploys the preview Worker |
+| `npm run deploy` | Applies pending D1 migrations, then deploys the production Worker |
 
 ---
 
@@ -88,6 +91,7 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   handlers/
     leaderboard.ts         ← /api/leaderboard/* endpoint handlers
     register.ts            ← POST /api/register
+    apply.ts               ← POST /api/apply
     feedback.ts            ← POST /api/feedback — creates GitHub issue from preview banner form
     auth.ts                ← GitHub OAuth: login, callback, me, logout; session management
     vote.ts                ← POST /api/vote, GET /api/votes/mine
@@ -129,6 +133,7 @@ src/                       ← React SPA (frontend)
     VoteModal.tsx          ← Sign-in prompt modal for unauthenticated users
 
 schema.sql                 ← D1 database schema (apply once on fresh DB)
+migrations/                ← Ordered D1 migrations applied before deployment
 wrangler.toml              ← Cloudflare Worker config (routes, bindings, cron)
 tsconfig.worker.json       ← TypeScript config for the worker (targets @cloudflare/workers-types)
 tsconfig.app.json          ← TypeScript config for the React frontend
@@ -163,7 +168,8 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
 | `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
 | `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
-| `handlers/register.ts` | `POST /api/register` — CSRF validation, rate limiting, input validation, duplicate check, D1 insert |
+| `handlers/register.ts` | `POST /api/register` — validates and atomically queues registration contact data for HubSpot |
+| `handlers/apply.ts` | `POST /api/apply` — stores role applications and queues contact fields for HubSpot while keeping narrative text in D1 |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
 | `handlers/auth.ts` | GitHub OAuth flow: `GET /api/auth/login`, `GET /api/auth/callback`, `GET /api/auth/me`, `POST /api/auth/logout` — session management via D1 `user_sessions` table |
 | `handlers/vote.ts` | `POST /api/vote` — submit an OASIS validation vote (accept/modify/reject) as a GitHub comment; `GET /api/votes/mine` — return all votes cast by the current user |
@@ -405,7 +411,7 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 
 ## Secrets
 
-Secrets are set per-worker and are not shared between preview and production.
+Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured.
 
 ```bash
 # Set secrets on the preview worker
@@ -413,6 +419,7 @@ wrangler secret put GITHUB_TOKEN        --name owasp-oasis-app-preview
 wrangler secret put ADMIN_SECRET        --name owasp-oasis-app-preview
 wrangler secret put GITHUB_CLIENT_ID    --name owasp-oasis-app-preview
 wrangler secret put GITHUB_CLIENT_SECRET --name owasp-oasis-app-preview
+wrangler secret put HUBSPOT_TOKEN         --name owasp-oasis-app-preview
 
 # List secrets on the preview worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -426,6 +433,9 @@ wrangler secret list --name owasp-oasis-app-preview
 | `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Send via `X-Admin-Secret` header. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
+| `HUBSPOT_TOKEN` | HubSpot private-app token. Requires only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+
+`HUBSPOT_PROPERTY_MAP` is a non-secret JSON environment variable that maps OASIS fields to existing HubSpot custom-property internal names. Supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`; omitted fields are not sent. For example: `{"github":"oasis_github","role":"oasis_role","source":"oasis_source"}`.
 
 The `GITHUB_TOKEN` must have `public_repo` scope and belong to a member of the `owasp-oasis` GitHub org.
 
@@ -433,17 +443,17 @@ The `GITHUB_TOKEN` must have `public_repo` scope and belong to a member of the `
 
 ## Manual deploy
 
-Cloudflare auto-deploys on push, but if you need to deploy manually (e.g. immediately after a config change without pushing):
+Cloudflare auto-deploys on push, but if you need to deploy manually, build first and then run the environment-specific deploy command:
 
 ```bash
 # Set your Cloudflare account ID
 export CLOUDFLARE_ACCOUNT_ID=<your-account-id>
 
 # Build and deploy the preview worker
-npm run deploy:preview
+npm run build && npm run deploy:preview
 
 # Build and deploy the production environment to owasp-oasis
-npm run deploy
+npm run build && npm run deploy
 ```
 
 ---

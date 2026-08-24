@@ -15,7 +15,7 @@ Two separate Cloudflare Workers serve the two environments:
 
 Both workers share a single D1 database (`oasis-db`) and a single KV namespace (`RATE_KV`).
 
-Deployment is triggered automatically by **Cloudflare Git integration** — pushing to either branch causes Cloudflare to run the configured build command (`npm run build`) and then `wrangler deploy`. No GitHub Actions are used.
+Deployment is triggered automatically by **Cloudflare Git integration**. GitHub Actions runs validation only and has no Cloudflare deployment credentials.
 
 ---
 
@@ -103,8 +103,12 @@ For auto-deploy on push to work, the build command must be set in the Cloudflare
 1. Go to **Workers & Pages** → select the worker (`owasp-oasis-app-preview` or `owasp-oasis`)
 2. **Settings → Build**
 3. Set **Build command**: `npm run build`
-4. Leave **Build output directory** empty (wrangler handles routing to `dist-worker/` and `dist/`)
-5. Set **Node.js version**: `20` or later
+4. Set the preview **Deploy command** to `npm run deploy:preview`
+5. Set the production **Deploy command** to `npm run deploy`
+6. Leave **Build output directory** empty (Wrangler handles `dist-worker/` and `dist/`)
+7. Set **Node.js version** to `24`
+
+The deploy commands apply pending D1 migrations before publishing the Worker. Configure each Cloudflare project to watch only its matching branch.
 
 This only needs to be configured once per worker. After that, every push to the connected branch triggers a full build and deploy automatically.
 
@@ -117,14 +121,14 @@ Use this when you need to deploy immediately without pushing (e.g. after updatin
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=<your-account-id>
 
-# Deploy preview worker
-npm run deploy:preview
+# Build and deploy preview worker
+npm run build && npm run deploy:preview
 
 # Deploy the configured production environment to owasp-oasis
-npm run deploy
+npm run build && npm run deploy
 ```
 
-The `deploy:preview` script runs `npm run build && wrangler deploy`, so it always deploys a fresh build.
+The manual commands mirror Cloudflare Builds: compile first, apply migrations, then deploy the selected Worker.
 
 ---
 
@@ -136,10 +140,12 @@ Secrets are configured per-worker and are not shared between preview and product
 # Preview worker
 wrangler secret put GITHUB_TOKEN --name owasp-oasis-app-preview
 wrangler secret put ADMIN_SECRET  --name owasp-oasis-app-preview
+wrangler secret put HUBSPOT_TOKEN --name owasp-oasis-app-preview
 
 # Production worker
 wrangler secret put GITHUB_TOKEN --name owasp-oasis
 wrangler secret put ADMIN_SECRET  --name owasp-oasis
+wrangler secret put HUBSPOT_TOKEN --name owasp-oasis
 
 # List secrets on a worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -153,6 +159,9 @@ wrangler secret list --name owasp-oasis-app-preview
 | `ADMIN_SECRET` | Shared secret for `GET /api/admin/registrations`. Sent via `X-Admin-Secret` header. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in (vote, react). |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
+| `HUBSPOT_TOKEN` | HubSpot private-app token used to create and update contacts. Grant only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+
+Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 
 The OAuth App must be configured separately per environment:
 
@@ -192,8 +201,11 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="SELECT github_login, pr_id, decision, voted_at FROM user_votes ORDER BY voted_at DESC"
 
-# Apply schema (fresh DB or adding new tables)
+# Apply schema to a brand-new database only
 wrangler d1 execute oasis-db --remote --file=schema.sql
+
+# Apply ordered migrations to the existing shared database
+wrangler d1 migrations apply oasis-db --remote --env production
 
 # Export registrations to CSV
 node export-db.js
@@ -205,6 +217,7 @@ node export-db.js
 |---|---|
 | `registrations` | Email sign-ups from the registration form |
 | `applications` | Extended sign-up form data (org, why, role) |
+| `hubspot_sync_queue` | Durable registration/application contact outbox with retry state |
 | `repos` | GitHub repos in the `owasp-oasis` org, synced by cron |
 | `pull_requests` | All PRs from synced repos, with consensus vote counts |
 | `contributors` | Aggregated per-user validation stats (prs_worked, accepts, modifies, rejects, reactions_received) |
@@ -224,6 +237,14 @@ The leaderboard is populated by syncing pull requests, comments, and reactions f
 GitHub schedule: `0 */4 * * *` — every 4 hours.
 
 The cron sync runs `runSync()` which uses the Worker's 1000 subrequest limit. It fetches all repos, PRs, comments, and reactions (including `+1` reactions on OASIS-template comments, which contribute to reputation scores).
+
+Production also processes the HubSpot queue at `15 * * * *`. Form submissions are written to D1 together with their outbox job, so a temporary HubSpot failure cannot lose the contact. Failed jobs return to `pending` with capped exponential backoff; stale processing claims are recovered automatically. Logs contain batch counts and safe error codes, never contact payloads or API response bodies.
+
+Before enabling HubSpot, create any custom contact properties referenced by `HUBSPOT_PROPERTY_MAP`, set the token on the target Worker, apply `migrations/0001_hubspot_sync_outbox.sql`, and submit a test registration. Confirm the queue row reaches `synced` in D1 and the contact appears with only the expected properties.
+
+## Observability
+
+Wrangler enables persisted Worker logs and invocation logs at full head sampling. Distributed traces remain disabled. Runtime code emits structured operational events and must not include registration records, application narratives, OAuth values, authorization headers, or external API response bodies.
 
 ### Manual sync trigger
 
