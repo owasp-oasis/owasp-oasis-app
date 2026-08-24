@@ -18,9 +18,7 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
   if (!parsed.ok) return jsonErr(parsed.error, 400, request);
   const body = parsed.val;
 
-  // name is optional for the React form (project-website style)
-  const nameRaw = body['name'] ? body['name'] : (body['email'] ? String(body['email']).split('@')[0] : '');
-  const nameRes = vName(nameRaw);
+  const nameRes = vName(body['name']);
   if (!nameRes.ok) return jsonErr(nameRes.error, 400, request);
 
   const emailRes = vEmail(body['email']);

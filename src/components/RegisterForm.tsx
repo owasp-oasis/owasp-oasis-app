@@ -24,6 +24,7 @@ export default function RegisterForm({
   type,
   successMessage = "You're in. Together we'll secure open source's future.",
 }: Props) {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [github, setGithub] = useState('')
   const [state, setState] = useState<FormState>('idle')
@@ -45,7 +46,7 @@ export default function RegisterForm({
           'Content-Type': 'application/json',
           'X-CSRF-Token': csrfToken,
         },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), github: github.trim(), type, role: type }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), github: github.trim(), type, role: type }),
       })
 
       const data = await res.json() as { ok?: boolean; error?: string; message?: string }
@@ -79,6 +80,23 @@ export default function RegisterForm({
 
   return (
     <form className="register-form" onSubmit={handleSubmit} noValidate>
+      <div className="register-field">
+        <label htmlFor={`name-${type}`}>
+          Name <span className="required" aria-label="required">*</span>
+        </label>
+        <input
+          id={`name-${type}`}
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="your name"
+          required
+          maxLength={100}
+          autoComplete="name"
+          disabled={state === 'loading'}
+        />
+      </div>
+
       <div className="register-field">
         <label htmlFor={`email-${type}`}>
           Email address <span className="required" aria-label="required">*</span>
@@ -123,7 +141,8 @@ export default function RegisterForm({
       </button>
 
       <p className="register-note">
-        You'll receive occasional updates about OASIS. Unsubscribe any time.
+        No commitment. You'll receive update emails at the address you provide.<br />
+        Thank you for your support.
       </p>
     </form>
   )

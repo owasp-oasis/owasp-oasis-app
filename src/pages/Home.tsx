@@ -114,7 +114,7 @@ export default function Home() {
         <div className="wrap home-hero-grid">
           {/* Left: headline + actions + ethos strip */}
           <div className="home-hero-left">
-            <div className="home-kicker">An officially accepted OWASP project — open now</div>
+            <div className="home-kicker">Official OWASP Project!</div>
             <h1 className="home-headline">
               <span className="line-open">Open source powers the world.</span>
               <span className="line-threat">Vibe hacking exploits it.</span>
@@ -149,8 +149,8 @@ export default function Home() {
             <div className="home-register-head">
               <ShieldSVG />
               <div>
-                <h2 id="register-title">Register</h2>
-                <p>Join the OASIS mailing list. Be the first to know about project updates and community events.</p>
+                <h2 id="register-title">Sign Up Now!</h2>
+                <p>Help make OWASP-OASIS a reality.</p>
               </div>
             </div>
             <RegisterForm type="validator" />
@@ -220,7 +220,7 @@ export default function Home() {
           <div className="home-section-head">
             <div>
               <div className="home-eyebrow">Why join</div>
-              <h2>Turn AppSec expertise into upstream security.</h2>
+              <h2>Help turn AppSec expertise into upstream security.</h2>
             </div>
             <p className="home-section-intro">
               OASIS gives security practitioners a practical way to help secure the software their
@@ -245,7 +245,7 @@ export default function Home() {
           <div className="home-final-box">
             <div>
               <h2>Take 5 minutes. Help secure the software that runs the world.</h2>
-              <p>Get started now.</p>
+              <p>OASIS is ready for contributors now.</p>
             </div>
             <a className="btn btn-secondary" href="#register-form">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="btn-icon"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>

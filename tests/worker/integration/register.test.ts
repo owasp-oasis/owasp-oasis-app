@@ -29,7 +29,7 @@ describe('POST /api/register', () => {
           'x-csrf-token': csrf,
           Cookie: cookie,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ name: 'Test User', ...body }),
       }),
     );
   }
@@ -66,17 +66,19 @@ describe('POST /api/register', () => {
       expect(res.status).toBe(200);
     });
 
-    it('defaults name from email if not provided', async () => {
+    it('requires a submitted name instead of deriving one from email', async () => {
       const csrf = makeCsrf();
       const res = await register(
         {
+          name: '',
           email: 'jane@oasis-test.internal',
           role: 'validator',
         },
         csrf,
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ ok: false, error: 'Name is required' });
     });
   });
 

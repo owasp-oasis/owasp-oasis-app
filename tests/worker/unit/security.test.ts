@@ -17,6 +17,7 @@ import {
   CSRF_COOKIE,
   CSRF_HEADER,
   SESSION_COOKIE,
+  isLoopbackRequest,
 } from '../../../worker/security.js';
 
 describe('security.ts', () => {
@@ -226,6 +227,13 @@ describe('security.ts', () => {
       expect(result.headers.get('Strict-Transport-Security')).toBeTruthy();
     });
 
+    it('omits HSTS for loopback development requests', () => {
+      const result = secHeaders(new Response('test'), new Request('http://localhost:8787'));
+
+      expect(result.headers.get('Strict-Transport-Security')).toBeNull();
+      expect(isLoopbackRequest(new Request('http://127.0.0.1:8787'))).toBe(true);
+    });
+
     it('adds CORS headers for allowed origins', () => {
       const response = new Response('test');
       const request = new Request('http://localhost', {
@@ -236,6 +244,15 @@ describe('security.ts', () => {
 
       expect(result.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGINS[0]);
       expect(result.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    });
+
+    it('allows the Wrangler localhost origin', () => {
+      const request = new Request('http://localhost:8787', {
+        headers: { Origin: 'http://localhost:8787' },
+      });
+
+      const result = secHeaders(new Response('test'), request);
+      expect(result.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:8787');
     });
 
     it('does not add CORS headers for disallowed origins', () => {

@@ -33,7 +33,7 @@ export default function Footer() {
       </div>
       <div className="footer-bottom">
         <div className="container">
-          <span>OASIS — An officially accepted OWASP project. &copy; {new Date().getFullYear()}</span>
+          <span>OASIS | Official OWASP project &copy; {new Date().getFullYear()}</span>
           <span className="footer-legal">Vendor-neutral. Community-driven. Open source.</span>
           <span className="footer-version">v2026.07.005</span>
         </div>

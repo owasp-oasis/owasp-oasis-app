@@ -11,6 +11,7 @@ import {
   secHeaders,
   handleOptions,
   generateCSRF,
+  isLoopbackRequest,
   jsonOk,
   jsonErr,
 } from './security.js';
@@ -76,8 +77,9 @@ export default {
         const csrf = generateCSRF();
         const res = Response.json({ token: csrf }, { status: 200 });
         const r   = secHeaders(res, request);
+        const secure = isLoopbackRequest(request) ? '' : 'Secure; ';
         r.headers.set('Set-Cookie',
-          `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; Secure; HttpOnly; Max-Age=3600`);
+          `${CSRF_COOKIE}=${csrf}; Path=/; SameSite=Strict; ${secure}HttpOnly; Max-Age=3600`);
         r.headers.set('Cache-Control', 'no-store');
         return r;
       }

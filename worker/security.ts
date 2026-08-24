@@ -46,13 +46,24 @@ export const ALLOWED_ORIGINS = [
   'https://www.owasp-oasis.org',
   'https://owasp-oasis.org',
   'https://preview.owasp-oasis.org',
+  'http://localhost:8787',
+  'http://127.0.0.1:8787',
 ];
 
 export const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'OPTIONS', 'HEAD']);
 
+export function isLoopbackRequest(request: Request): boolean {
+  const { hostname } = new URL(request.url);
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
 export function secHeaders(res: Response, request?: Request): Response {
   const r = new Response(res.body, res);
-  for (const [k, v] of Object.entries(SEC_HEADERS)) r.headers.set(k, v);
+  const isLoopback = request ? isLoopbackRequest(request) : false;
+  for (const [k, v] of Object.entries(SEC_HEADERS)) {
+    if (isLoopback && k === 'Strict-Transport-Security') continue;
+    r.headers.set(k, v);
+  }
   if (request) {
     const origin = request.headers.get('Origin') ?? '';
     if (ALLOWED_ORIGINS.includes(origin)) {
