@@ -111,17 +111,32 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
   return (
     <div className="onboarding-modal-overlay">
       <div className="onboarding-modal">
-        {/* Progress bar */}
-        <div className="onboarding-progress">
-          <div className="onboarding-progress-bar">
-            <div
-              className="onboarding-progress-fill"
-              style={{ width: `${((progressIndex + 1) / progressSteps.length) * 100}%` }}
-            />
+        <div className="onboarding-header">
+          {/* Progress bar */}
+          <div className="onboarding-progress">
+            <div className="onboarding-progress-bar">
+              <div
+                className="onboarding-progress-fill"
+                style={{ width: `${((progressIndex + 1) / progressSteps.length) * 100}%` }}
+              />
+            </div>
+            <div className="onboarding-progress-text">
+              Step {progressIndex + 1} of {progressSteps.length}
+            </div>
           </div>
-          <div className="onboarding-progress-text">
-            Step {progressIndex + 1} of {progressSteps.length}
-          </div>
+
+          {/* Dismiss button — occupies its own header slot to avoid the progress UI */}
+          {step !== 'whatsnew' && (
+            <button
+              type="button"
+              className="onboarding-close-btn"
+              onClick={onClose}
+              aria-label="Close onboarding modal"
+              title="Skip onboarding"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -168,17 +183,6 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
           )}
         </div>
 
-        {/* Dismiss button (top-right, always visible) */}
-        {step !== 'whatsnew' && (
-          <button
-            className="onboarding-close-btn"
-            onClick={onClose}
-            aria-label="Close onboarding modal"
-            title="Skip onboarding"
-          >
-            ✕
-          </button>
-        )}
       </div>
     </div>
   )
