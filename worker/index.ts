@@ -18,7 +18,8 @@ import {
 } from './security.js';
 import { runSync, runSyncOneRepo } from './sync.js';
 import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
-import { HUBSPOT_SYNC_CRON, processHubSpotQueue } from './hubspot.js';
+import { HUBSPOT_SYNC_CRON } from './hubspot.js';
+import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
 import {
   handleMeta,
   handleRepos,
@@ -200,7 +201,7 @@ export default {
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          try {
-           const result = await processHubSpotQueue(env, { limit: 25 });
+           const result = await runTrackedHubSpot(env, 'manual');
            return jsonOk(result, request);
          } catch {
            console.error(JSON.stringify({
@@ -268,7 +269,7 @@ export default {
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (event.cron === HUBSPOT_SYNC_CRON) {
-      await processHubSpotQueue(env, { limit: 25 });
+      await runTrackedHubSpot(env, 'scheduled');
       return;
     }
     if (event.cron !== '0 */4 * * *') {
@@ -276,25 +277,7 @@ export default {
       return;
     }
 
-    // Reconcile removed repositories before the full sync consumes its GitHub
-    // request/runtime budget. A failed full sync must not block this cleanup.
-    console.log('Starting removed repository reconciliation...');
-    const repositoryCleanup = await reconcileRemovedRepositories(env);
-    console.log('Repository reconciliation result:', JSON.stringify(repositoryCleanup));
-
-    console.log('Starting scheduled GitHub sync...');
-    if (env.DB) {
-      await env.DB.prepare(
-        "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-      ).run();
-    }
-    const result = await runSync(env);
-    console.log('Sync result:', JSON.stringify(result));
-
-    // Run cleanup after sync completes
-    console.log('Starting cleanup task...');
-    const cleanupResult = await runCleanup(env);
-    console.log('Cleanup result:', JSON.stringify(cleanupResult));
+    await runTrackedLegacySync(env);
   },
 };
 
