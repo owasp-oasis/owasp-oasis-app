@@ -21,6 +21,16 @@ export interface SyncJobDefinition {
   criticalForWorkspace: boolean;
 }
 
+export interface StartSyncJobOptions {
+  jobKey: string;
+  pipelineRunId?: string | null;
+  workflowInstanceId?: string | null;
+  trigger: SyncJobTrigger;
+  mode: SyncJobMode;
+  status?: 'queued' | 'running';
+  expectedItems?: number;
+}
+
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
   { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
   { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'After each legacy sync', criticalForWorkspace: false },
@@ -65,15 +75,7 @@ export function sanitizeMetrics(metrics: Record<string, unknown>): Record<string
 
 export async function startSyncJob(
   db: D1Database,
-  options: {
-    jobKey: string;
-    pipelineRunId?: string | null;
-    workflowInstanceId?: string | null;
-    trigger: SyncJobTrigger;
-    mode: SyncJobMode;
-    status?: 'queued' | 'running';
-    expectedItems?: number;
-  },
+  options: StartSyncJobOptions,
 ): Promise<string> {
   const definition = JOB_BY_KEY.get(options.jobKey);
   if (!definition) throw new Error(`Unknown sync job: ${options.jobKey}`);
@@ -99,6 +101,28 @@ export async function startSyncJob(
     startedAt,
   ).run();
   return id;
+}
+
+export async function getOrStartSyncJob(
+  db: D1Database,
+  options: StartSyncJobOptions & { pipelineRunId: string },
+): Promise<string> {
+  const existing = await db.prepare(`
+    SELECT id FROM sync_job_runs
+     WHERE pipeline_run_id = ? AND job_key = ? AND mode = ?
+     ORDER BY created_at LIMIT 1
+  `).bind(options.pipelineRunId, options.jobKey, options.mode).first<{ id: string }>();
+  return existing?.id ?? startSyncJob(db, options);
+}
+
+export async function resumeSyncJob(db: D1Database, jobRunId: string): Promise<void> {
+  await db.prepare(`
+    UPDATE sync_job_runs
+       SET status = 'running', finished_at = NULL, duration_ms = NULL,
+           completed_items = 0, failed_items = 0, metrics_json = '{}',
+           error_code = NULL, error_summary = NULL
+     WHERE id = ?
+  `).bind(jobRunId).run();
 }
 
 export async function finishSyncJob(

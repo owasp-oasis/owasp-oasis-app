@@ -9,6 +9,8 @@ interface PublicRun {
   id: string
   pipeline_run_id: string | null
   workflow_instance_id: string | null
+  job_key: string
+  label: string
   status: RunStatus
   mode: 'legacy' | 'shadow' | 'live'
   started_at: string
@@ -304,10 +306,10 @@ export default function SyncStatus() {
               <div className="sync-run-table" role="table" aria-label="Incomplete sync runs">
                 {payload.incomplete_runs.length === 0 && <p>No incomplete runs have been recorded.</p>}
                 {payload.incomplete_runs.map(run => (
-                  <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row">
+                  <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row sync-run-row--archive">
                     <StatusPill status={run.status} />
+                    <span className="sync-run-identity"><strong>{run.label}</strong><small>{run.mode} mode</small></span>
                     <span>{dateTime(run.started_at)}</span>
-                    <span>{run.mode}</span>
                     <span>Details →</span>
                   </Link>
                 ))}
