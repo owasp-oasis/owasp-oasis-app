@@ -89,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_shadow_entities_type
 
 CREATE TABLE IF NOT EXISTS sync_parity_runs (
   pipeline_run_id        TEXT PRIMARY KEY,
+  canonical_pipeline_run_id TEXT NOT NULL,
   canonical_cutoff_at    TEXT NOT NULL,
   status                 TEXT NOT NULL CHECK(status IN ('pending', 'match', 'mismatch', 'incomplete')),
   comparable_entities    INTEGER NOT NULL DEFAULT 0,
