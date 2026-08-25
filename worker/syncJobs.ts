@@ -345,7 +345,7 @@ function publicRun(row: JobRunRow): Record<string, unknown> {
   };
 }
 
-export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> {
+async function getSyncStatusWithObservability(env: Env): Promise<Record<string, unknown>> {
   const db = env.DB;
   const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
   const [stateRows, runRows, incompleteRows, parity, budgets, budgetHistory, hubspot] = await Promise.all([
@@ -417,6 +417,7 @@ export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> 
 
   return {
     generated_at: nowIso(),
+    observability_ready: true,
     overall: {
       status: overallStatus,
       sync_running: running,
@@ -449,6 +450,93 @@ export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> 
     },
     jobs,
   };
+}
+
+const OBSERVABILITY_TABLES = [
+  'sync_job_runs',
+  'sync_job_events',
+  'sync_work_items',
+  'sync_shadow_entities',
+  'sync_parity_runs',
+  'sync_parity_differences',
+  'sync_daily_budgets',
+] as const;
+
+export function isMissingSyncObservabilityTableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return OBSERVABILITY_TABLES.some(table => (
+    new RegExp(`no such table:\\s*(?:main\\.)?${table}\\b`, 'i').test(message)
+  ));
+}
+
+async function getPreMigrationSyncStatus(env: Env): Promise<Record<string, unknown>> {
+  const stateRows = await env.DB.prepare(
+    "SELECT key, value FROM sync_state WHERE key IN ('last_synced_at', 'sync_running')",
+  ).all<{ key: string; value: string }>();
+  const hubspot = await env.DB.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
+      SUM(CASE WHEN status = 'synced' THEN 1 ELSE 0 END) AS synced
+    FROM hubspot_sync_queue
+  `).first<Record<string, number | null>>().catch(() => null);
+  const state = new Map((stateRows.results ?? []).map(row => [row.key, row.value]));
+  const lastSuccessAt = state.get('last_synced_at') ?? null;
+  const running = state.get('sync_running') === '1';
+  const ageMs = lastSuccessAt ? Date.now() - Date.parse(lastSuccessAt) : Number.POSITIVE_INFINITY;
+  const overallStatus = running
+    ? 'running'
+    : lastSuccessAt && ageMs > 8 * 3_600_000
+      ? 'stale'
+      : lastSuccessAt
+        ? 'healthy'
+        : 'unknown';
+
+  return {
+    generated_at: nowIso(),
+    observability_ready: false,
+    overall: {
+      status: overallStatus,
+      sync_running: running,
+      last_success_at: lastSuccessAt,
+      last_attempt_at: null,
+      stale_after_hours: 8,
+    },
+    shadow: null,
+    budgets: [],
+    budget_history: [],
+    incomplete_runs: [],
+    integrations: {
+      hubspot_queue: {
+        pending: hubspot?.pending ?? 0,
+        processing: hubspot?.processing ?? 0,
+        synced: hubspot?.synced ?? 0,
+      },
+    },
+    jobs: SYNC_JOBS.map(definition => ({
+      key: definition.key,
+      label: definition.label,
+      category: definition.category,
+      schedule: definition.schedule,
+      critical_for_workspace: definition.criticalForWorkspace,
+      status: 'unknown',
+      latest_run: null,
+      recent_runs: [],
+    })),
+  };
+}
+
+export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> {
+  try {
+    return await getSyncStatusWithObservability(env);
+  } catch (error) {
+    if (!isMissingSyncObservabilityTableError(error)) throw error;
+    console.warn(JSON.stringify({
+      event: 'sync_status_observability_schema_unavailable',
+      action: 'apply_d1_migrations',
+    }));
+    return getPreMigrationSyncStatus(env);
+  }
 }
 
 export async function getSyncRunDetail(env: Env, runId: string): Promise<Record<string, unknown> | null> {

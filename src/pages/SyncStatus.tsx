@@ -33,6 +33,7 @@ interface PublicJob {
 
 interface SyncStatusPayload {
   generated_at: string
+  observability_ready: boolean
   overall: {
     status: OverallStatus
     sync_running: boolean
@@ -236,6 +237,11 @@ export default function SyncStatus() {
         {!payload && !error && <p>Loading synchronization status…</p>}
         {payload && (
           <>
+            {!payload.observability_ready && (
+              <p className="sync-schema-warning" role="status">
+                Detailed job history is temporarily unavailable while the synchronization schema is being initialized.
+              </p>
+            )}
             <article className="sync-summary-card">
               <div className="sync-summary-heading">
                 <div><span className="sync-card-kicker">Canonical Workspace data</span><h2>Workspace sync</h2></div>

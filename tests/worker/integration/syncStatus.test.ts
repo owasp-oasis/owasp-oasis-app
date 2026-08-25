@@ -21,12 +21,34 @@ describe('public sync status', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toContain('max-age=15');
     const body = await response.json<Record<string, unknown>>() as {
+      observability_ready: boolean;
       overall: { last_success_at: string };
       jobs: Array<{ key: string }>;
     };
+    expect(body.observability_ready).toBe(true);
     expect(body.overall.last_success_at).toBe('2020-01-01T00:00:00Z');
     expect(body.jobs.some(job => job.key === 'repository_inventory')).toBe(true);
     expect(body.jobs.some(job => job.key === 'hubspot_contacts')).toBe(true);
+  });
+
+  it('returns baseline health instead of 500 while the observability migration is pending', async () => {
+    await env.DB.prepare('DROP TABLE sync_parity_runs').run();
+    try {
+      const response = await SELF.fetch(new Request('http://localhost/api/sync/status'));
+      expect(response.status).toBe(200);
+      const body = await response.json() as {
+        observability_ready: boolean;
+        overall: { last_success_at: string };
+        shadow: null;
+        jobs: Array<{ status: string }>;
+      };
+      expect(body.observability_ready).toBe(false);
+      expect(body.overall.last_success_at).toBe('2020-01-01T00:00:00Z');
+      expect(body.shadow).toBeNull();
+      expect(body.jobs.every(job => job.status === 'unknown')).toBe(true);
+    } finally {
+      await applySchema(env);
+    }
   });
 
   it('shows a completed run and exposes its sanitized detail', async () => {
