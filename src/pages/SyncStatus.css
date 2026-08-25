@@ -40,6 +40,14 @@
 .sync-budget-card span, .sync-budget-card small { color: var(--muted); }
 .sync-budget-track { height: 7px; margin: 12px 0 8px; border-radius: 9px; overflow: hidden; background: var(--gray-200); }
 .sync-budget-track span { display: block; height: 100%; background: var(--blue); }
+.sync-history-card { margin-top: 14px; overflow: hidden; background: var(--white); border: 1px solid var(--line); border-radius: 12px; }
+.sync-history-card > summary { padding: 14px 16px; cursor: pointer; font-weight: 700; }
+.sync-history-card[open] > summary { border-bottom: 1px solid var(--line); }
+.sync-history-description { margin: 14px 16px 0; color: var(--muted); }
+.sync-history-card > .sync-run-table { margin: 8px; }
+.sync-history-table { max-height: 520px; overflow: auto; }
+.sync-history-row { display: grid; grid-template-columns: 110px minmax(220px, 1fr) 145px 120px 90px; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: .82rem; }
+.sync-history-row--heading { position: sticky; top: 0; z-index: 1; background: var(--gray-100); color: var(--muted); font-weight: 700; }
 
 .sync-job-list, .sync-event-list { display: grid; gap: 10px; }
 .sync-job-card { overflow: hidden; }
@@ -62,4 +70,6 @@
   .sync-run-row { grid-template-columns: 100px 1fr; }
   .sync-run-row span:nth-child(3) { display: none; }
   .sync-page-actions { align-items: flex-start; gap: 12px; }
+  .sync-history-row { grid-template-columns: 90px 1fr 100px; }
+  .sync-history-row span:nth-child(4), .sync-history-row span:nth-child(5) { display: none; }
 }

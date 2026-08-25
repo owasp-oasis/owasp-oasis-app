@@ -50,6 +50,7 @@ interface SyncStatusPayload {
     compared_at: string | null
   }
   budgets: Array<{
+    budget_date?: string
     budget_key: string
     label: string
     unit: string
@@ -60,6 +61,19 @@ interface SyncStatusPayload {
     remaining: number | null
     reset_at: string | null
   }>
+  budget_history: Array<{
+    budget_date: string
+    budget_key: string
+    label: string
+    unit: string
+    configured_limit: number | null
+    consumed: number
+    reserved: number
+    deferred: number
+    remaining: number | null
+    reset_at: string | null
+  }>
+  incomplete_runs: PublicRun[]
   jobs: PublicJob[]
 }
 
@@ -264,6 +278,41 @@ export default function SyncStatus() {
                 )
               })}
             </div>
+
+            <details className="sync-history-card">
+              <summary>100-day operation budget history</summary>
+              <div className="sync-history-table" role="table" aria-label="Operation budget history">
+                <div className="sync-history-row sync-history-row--heading" role="row">
+                  <span>Date</span><span>Budget</span><span>Consumed</span><span>Limit</span><span>Deferred</span>
+                </div>
+                {payload.budget_history.length === 0 && <p>No historical budget observations have been recorded.</p>}
+                {payload.budget_history.map(budget => (
+                  <div className="sync-history-row" role="row" key={`${budget.budget_date}-${budget.budget_key}`}>
+                    <time>{budget.budget_date}</time>
+                    <span>{budget.label}</span>
+                    <span>{budget.consumed} {budget.unit}</span>
+                    <span>{budget.configured_limit ?? 'Observed only'}</span>
+                    <span>{budget.deferred}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <details className="sync-history-card">
+              <summary>Incomplete run archive ({payload.incomplete_runs.length})</summary>
+              <p className="sync-history-description">The newest 100 incomplete jobs remain directly inspectable beyond each job's ten-run summary.</p>
+              <div className="sync-run-table" role="table" aria-label="Incomplete sync runs">
+                {payload.incomplete_runs.length === 0 && <p>No incomplete runs have been recorded.</p>}
+                {payload.incomplete_runs.map(run => (
+                  <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row">
+                    <StatusPill status={run.status} />
+                    <span>{dateTime(run.started_at)}</span>
+                    <span>{run.mode}</span>
+                    <span>Details →</span>
+                  </Link>
+                ))}
+              </div>
+            </details>
 
             {([['Workspace jobs', groups.workspace], ['Integrations', groups.integration]] as const).map(([title, jobs]) => (
               <section key={title}>

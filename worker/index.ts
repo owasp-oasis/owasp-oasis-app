@@ -20,6 +20,7 @@ import { runSync, runSyncOneRepo } from './sync.js';
 import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
 import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
+import { startShadowSync } from './shadowSync.js';
 import {
   handleMeta,
   handleRepos,
@@ -277,9 +278,23 @@ export default {
       return;
     }
 
-    await runTrackedLegacySync(env);
+    const legacy = await runTrackedLegacySync(env);
+    const canonicalCutoff = await env.DB.prepare(
+      "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
+    ).first<{ value: string }>();
+    const shadowInstanceId = await startShadowSync(
+      env,
+      legacy.pipelineRunId,
+      canonicalCutoff?.value ?? new Date(event.scheduledTime).toISOString(),
+    );
+    console.log(JSON.stringify({
+      event: 'shadow_sync_enqueued',
+      legacy_pipeline_run_id: legacy.pipelineRunId,
+      workflow_instance_id: shadowInstanceId,
+    }));
   },
 };
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
+export { ShadowSyncWorkflow } from './shadowSync.js';

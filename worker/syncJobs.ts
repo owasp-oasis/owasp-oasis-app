@@ -23,6 +23,7 @@ export interface SyncJobDefinition {
 
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
   { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
+  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'After each legacy sync', criticalForWorkspace: false },
   { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
   { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
   { key: 'upstream_merge_status', label: 'Upstream merge status', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
@@ -134,6 +135,27 @@ export async function finishSyncJob(
   ).run();
 }
 
+export async function markSyncJobRunning(db: D1Database, jobRunId: string, expectedItems = 0): Promise<void> {
+  await db.prepare(`
+    UPDATE sync_job_runs
+       SET status = 'running', expected_items = ?, started_at = ?
+     WHERE id = ? AND status = 'queued'
+  `).bind(expectedItems, nowIso(), jobRunId).run();
+}
+
+export async function incrementSyncJobProgress(
+  db: D1Database,
+  jobRunId: string,
+  completedDelta: number,
+  failedDelta = 0,
+): Promise<void> {
+  await db.prepare(`
+    UPDATE sync_job_runs
+       SET completed_items = completed_items + ?, failed_items = failed_items + ?
+     WHERE id = ?
+  `).bind(completedDelta, failedDelta, jobRunId).run();
+}
+
 export async function recordSyncJobEvent(
   db: D1Database,
   jobRunId: string,
@@ -178,6 +200,7 @@ export async function interruptExpiredSyncJobs(db: D1Database, olderThanHours = 
 
 export async function pruneSyncJobHistory(db: D1Database): Promise<void> {
   const successfulCutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
   await db.prepare("DELETE FROM sync_job_runs WHERE status = 'succeeded' AND started_at < ?")
     .bind(successfulCutoff).run();
 
@@ -195,6 +218,8 @@ export async function pruneSyncJobHistory(db: D1Database): Promise<void> {
        WHERE position > 100
      )
   `).run();
+  await db.prepare('DELETE FROM sync_daily_budgets WHERE budget_date < ?')
+    .bind(budgetCutoff).run();
 }
 
 export async function recordDailyBudget(
@@ -205,6 +230,7 @@ export async function recordDailyBudget(
     unit: string;
     limit?: number | null;
     consumedDelta?: number;
+    consumedMaximum?: number;
     reservedDelta?: number;
     deferredDelta?: number;
     remaining?: number | null;
@@ -221,7 +247,10 @@ export async function recordDailyBudget(
       label = excluded.label,
       unit = excluded.unit,
       configured_limit = COALESCE(excluded.configured_limit, sync_daily_budgets.configured_limit),
-      consumed = sync_daily_budgets.consumed + excluded.consumed,
+      consumed = CASE
+        WHEN ? = 1 THEN MAX(sync_daily_budgets.consumed, excluded.consumed)
+        ELSE sync_daily_budgets.consumed + excluded.consumed
+      END,
       reserved = sync_daily_budgets.reserved + excluded.reserved,
       deferred = sync_daily_budgets.deferred + excluded.deferred,
       remaining = COALESCE(excluded.remaining, sync_daily_budgets.remaining),
@@ -233,12 +262,13 @@ export async function recordDailyBudget(
     input.label,
     input.unit,
     input.limit ?? null,
-    input.consumedDelta ?? 0,
+    input.consumedMaximum ?? input.consumedDelta ?? 0,
     input.reservedDelta ?? 0,
     input.deferredDelta ?? 0,
     input.remaining ?? null,
     input.resetAt ?? null,
     nowIso(),
+    input.consumedMaximum === undefined ? 0 : 1,
   ).run();
 }
 
@@ -293,7 +323,8 @@ function publicRun(row: JobRunRow): Record<string, unknown> {
 
 export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> {
   const db = env.DB;
-  const [stateRows, runRows, parity, budgets, hubspot] = await Promise.all([
+  const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
+  const [stateRows, runRows, incompleteRows, parity, budgets, budgetHistory, hubspot] = await Promise.all([
     db.prepare("SELECT key, value FROM sync_state WHERE key IN ('last_synced_at', 'sync_running')")
       .all<{ key: string; value: string }>(),
     db.prepare(`
@@ -306,9 +337,19 @@ export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> 
        )
        ORDER BY started_at DESC
     `).all<JobRunRow>(),
+    db.prepare(`
+      SELECT * FROM sync_job_runs
+       WHERE status IN ('failed', 'skipped', 'deferred', 'interrupted')
+       ORDER BY started_at DESC LIMIT 100
+    `).all<JobRunRow>(),
     db.prepare('SELECT * FROM sync_parity_runs ORDER BY created_at DESC LIMIT 1').first<Record<string, unknown>>(),
     db.prepare('SELECT * FROM sync_daily_budgets WHERE budget_date = ? ORDER BY budget_key')
       .bind(nowIso().slice(0, 10)).all<Record<string, unknown>>(),
+    db.prepare(`
+      SELECT * FROM sync_daily_budgets
+       WHERE budget_date >= ?
+       ORDER BY budget_date DESC, budget_key
+    `).bind(budgetCutoff).all<Record<string, unknown>>(),
     db.prepare(`
       SELECT
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
@@ -361,6 +402,7 @@ export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> 
     },
     shadow: parity ? {
       pipeline_run_id: parity['pipeline_run_id'],
+      canonical_pipeline_run_id: parity['canonical_pipeline_run_id'],
       status: parity['status'],
       comparable_entities: parity['comparable_entities'],
       matched_entities: parity['matched_entities'],
@@ -372,6 +414,8 @@ export async function getSyncStatus(env: Env): Promise<Record<string, unknown>> 
       compared_at: parity['compared_at'],
     } : null,
     budgets: budgets.results ?? [],
+    budget_history: budgetHistory.results ?? [],
+    incomplete_runs: (incompleteRows.results ?? []).map(publicRun),
     integrations: {
       hubspot_queue: {
         pending: hubspot?.pending ?? 0,

@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
 import { SELF } from './testWorker.js';
 import { applySchema, cleanDB } from './helpers.js';
-import { finishSyncJob, pruneSyncJobHistory, recordSyncJobEvent, startSyncJob } from '../../../worker/syncJobs.js';
+import { finishSyncJob, pruneSyncJobHistory, recordDailyBudget, recordSyncJobEvent, startSyncJob } from '../../../worker/syncJobs.js';
 
 describe('public sync status', () => {
   beforeAll(async () => applySchema(env));
@@ -60,5 +60,44 @@ describe('public sync status', () => {
       "SELECT COUNT(*) AS count FROM sync_job_runs WHERE job_key = 'orphan_cleanup' AND status = 'failed'",
     ).first<{ count: number }>();
     expect(row?.count).toBe(100);
+  });
+
+  it('exposes incomplete runs beyond the ten-run summary and 100 days of budgets', async () => {
+    for (let index = 0; index < 12; index++) {
+      const id = await startSyncJob(env.DB, {
+        jobKey: 'orphan_cleanup',
+        trigger: 'scheduled',
+        mode: 'shadow',
+      });
+      await finishSyncJob(env.DB, id, 'failed', { errorCode: 'test_failure', error: `Failure ${index}` });
+    }
+    await recordDailyBudget(env.DB, {
+      key: 'workflow_steps', label: 'OASIS Workflow steps', unit: 'steps', limit: 2_000, consumedDelta: 12,
+    });
+
+    const response = await SELF.fetch(new Request('http://localhost/api/sync/status'));
+    const body = await response.json() as {
+      jobs: Array<{ key: string; recent_runs: unknown[] }>;
+      incomplete_runs: unknown[];
+      budget_history: Array<{ budget_key: string; consumed: number }>;
+    };
+    expect(body.jobs.find(job => job.key === 'orphan_cleanup')?.recent_runs).toHaveLength(10);
+    expect(body.incomplete_runs).toHaveLength(12);
+    expect(body.budget_history).toContainEqual(expect.objectContaining({ budget_key: 'workflow_steps', consumed: 12 }));
+  });
+
+  it('records the peak per-instance request count without summing instance ceilings', async () => {
+    await recordDailyBudget(env.DB, {
+      key: 'workflow_external_request_limit', label: 'Peak Workflow instance requests',
+      unit: 'requests per instance', limit: 50, consumedMaximum: 17,
+    });
+    await recordDailyBudget(env.DB, {
+      key: 'workflow_external_request_limit', label: 'Peak Workflow instance requests',
+      unit: 'requests per instance', limit: 50, consumedMaximum: 9,
+    });
+    const row = await env.DB.prepare(`
+      SELECT consumed FROM sync_daily_budgets WHERE budget_key = 'workflow_external_request_limit'
+    `).first<{ consumed: number }>();
+    expect(row?.consumed).toBe(17);
   });
 });
