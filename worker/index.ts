@@ -18,7 +18,9 @@ import {
 } from './security.js';
 import { runSync, runSyncOneRepo } from './sync.js';
 import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
-import { HUBSPOT_SYNC_CRON, processHubSpotQueue } from './hubspot.js';
+import { HUBSPOT_SYNC_CRON } from './hubspot.js';
+import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
+import { startShadowSync } from './shadowSync.js';
 import {
   handleMeta,
   handleRepos,
@@ -36,6 +38,7 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -134,6 +137,15 @@ export default {
         return jsonErr('Method not allowed for this PR panel action', 405, request);
       }
 
+      /* ── Public, sanitized synchronization status ───────────────── */
+      if (method === 'GET' && url.pathname === '/api/sync/status') {
+        return await handleSyncStatus(request, env);
+      }
+      const syncRunMatch = url.pathname.match(/^\/api\/sync\/status\/runs\/([^/]+)$/);
+      if (method === 'GET' && syncRunMatch) {
+        return await handleSyncRunDetail(request, env, syncRunMatch[1]);
+      }
+
       /* ── GET /api/admin/registrations ──────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
@@ -190,7 +202,7 @@ export default {
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          try {
-           const result = await processHubSpotQueue(env, { limit: 25 });
+           const result = await runTrackedHubSpot(env, 'manual');
            return jsonOk(result, request);
          } catch {
            console.error(JSON.stringify({
@@ -258,7 +270,7 @@ export default {
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (event.cron === HUBSPOT_SYNC_CRON) {
-      await processHubSpotQueue(env, { limit: 25 });
+      await runTrackedHubSpot(env, 'scheduled');
       return;
     }
     if (event.cron !== '0 */4 * * *') {
@@ -266,27 +278,23 @@ export default {
       return;
     }
 
-    // Reconcile removed repositories before the full sync consumes its GitHub
-    // request/runtime budget. A failed full sync must not block this cleanup.
-    console.log('Starting removed repository reconciliation...');
-    const repositoryCleanup = await reconcileRemovedRepositories(env);
-    console.log('Repository reconciliation result:', JSON.stringify(repositoryCleanup));
-
-    console.log('Starting scheduled GitHub sync...');
-    if (env.DB) {
-      await env.DB.prepare(
-        "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-      ).run();
-    }
-    const result = await runSync(env);
-    console.log('Sync result:', JSON.stringify(result));
-
-    // Run cleanup after sync completes
-    console.log('Starting cleanup task...');
-    const cleanupResult = await runCleanup(env);
-    console.log('Cleanup result:', JSON.stringify(cleanupResult));
+    const legacy = await runTrackedLegacySync(env);
+    const canonicalCutoff = await env.DB.prepare(
+      "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
+    ).first<{ value: string }>();
+    const shadowInstanceId = await startShadowSync(
+      env,
+      legacy.pipelineRunId,
+      canonicalCutoff?.value ?? new Date(event.scheduledTime).toISOString(),
+    );
+    console.log(JSON.stringify({
+      event: 'shadow_sync_enqueued',
+      legacy_pipeline_run_id: legacy.pipelineRunId,
+      workflow_instance_id: shadowInstanceId,
+    }));
   },
 };
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
+export { ShadowSyncWorkflow } from './shadowSync.js';

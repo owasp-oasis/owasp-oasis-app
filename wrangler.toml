@@ -91,3 +91,10 @@ OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
 
 [env.production.triggers]
 crons = ["0 */4 * * *", "15 * * * *"]
+
+# Shadow sync is production-only and read-only with respect to canonical
+# Workspace tables. The legacy cron remains the authoritative writer.
+[[env.production.workflows]]
+name       = "oasis-shadow-sync"
+binding    = "SHADOW_SYNC_WORKFLOW"
+class_name = "ShadowSyncWorkflow"
