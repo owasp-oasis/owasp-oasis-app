@@ -2,7 +2,15 @@ import { beforeAll, afterEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
 import { SELF } from './testWorker.js';
 import { applySchema, cleanDB } from './helpers.js';
-import { finishSyncJob, pruneSyncJobHistory, recordDailyBudget, recordSyncJobEvent, startSyncJob } from '../../../worker/syncJobs.js';
+import {
+  finishSyncJob,
+  getOrStartSyncJob,
+  pruneSyncJobHistory,
+  recordDailyBudget,
+  recordSyncJobEvent,
+  resumeSyncJob,
+  startSyncJob,
+} from '../../../worker/syncJobs.js';
 
 describe('public sync status', () => {
   beforeAll(async () => applySchema(env));
@@ -62,6 +70,40 @@ describe('public sync status', () => {
     expect(row?.count).toBe(100);
   });
 
+  it('reuses and resets a shadow job record when a Workflow step retries', async () => {
+    const pipelineRunId = 'shadow-11111111-1111-4111-8111-111111111111';
+    const options = {
+      jobKey: 'repository_inventory',
+      trigger: 'workflow' as const,
+      mode: 'shadow' as const,
+      pipelineRunId,
+    };
+    const firstId = await getOrStartSyncJob(env.DB, options);
+    await finishSyncJob(env.DB, firstId, 'failed', {
+      errorCode: 'github_request_failed',
+      error: 'First attempt failed',
+    });
+
+    const retryId = await getOrStartSyncJob(env.DB, options);
+    await resumeSyncJob(env.DB, retryId);
+
+    expect(retryId).toBe(firstId);
+    const rows = await env.DB.prepare(`
+      SELECT status, finished_at, error_code
+        FROM sync_job_runs
+       WHERE pipeline_run_id = ? AND job_key = ? AND mode = ?
+    `).bind(pipelineRunId, options.jobKey, options.mode).all<{
+      status: string;
+      finished_at: string | null;
+      error_code: string | null;
+    }>();
+    expect(rows.results).toEqual([{
+      status: 'running',
+      finished_at: null,
+      error_code: null,
+    }]);
+  });
+
   it('exposes incomplete runs beyond the ten-run summary and 100 days of budgets', async () => {
     for (let index = 0; index < 12; index++) {
       const id = await startSyncJob(env.DB, {
@@ -78,11 +120,15 @@ describe('public sync status', () => {
     const response = await SELF.fetch(new Request('http://localhost/api/sync/status'));
     const body = await response.json() as {
       jobs: Array<{ key: string; recent_runs: unknown[] }>;
-      incomplete_runs: unknown[];
+      incomplete_runs: Array<{ label: string; mode: string }>;
       budget_history: Array<{ budget_key: string; consumed: number }>;
     };
     expect(body.jobs.find(job => job.key === 'orphan_cleanup')?.recent_runs).toHaveLength(10);
     expect(body.incomplete_runs).toHaveLength(12);
+    expect(body.incomplete_runs[0]).toEqual(expect.objectContaining({
+      label: 'Orphan cleanup',
+      mode: 'shadow',
+    }));
     expect(body.budget_history).toContainEqual(expect.objectContaining({ budget_key: 'workflow_steps', consumed: 12 }));
   });
 

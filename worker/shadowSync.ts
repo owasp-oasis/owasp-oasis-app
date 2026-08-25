@@ -1,4 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
+import { NonRetryableError } from 'cloudflare:workflows';
 import type { Env, ShadowSyncParams } from './types.js';
 import {
   META_REPOS,
@@ -17,15 +18,25 @@ import {
 } from './github.js';
 import {
   finishSyncJob,
+  getOrStartSyncJob,
   incrementSyncJobProgress,
   markSyncJobRunning,
   recordDailyBudget,
   recordSyncJobEvent,
+  resumeSyncJob,
   startSyncJob,
 } from './syncJobs.js';
 
 const WORKFLOW_STEP_LIMIT = 2_000;
 const INSTANCE_EXTERNAL_REQUEST_LIMIT = 40;
+const WORKFLOW_RETRY_LIMIT = 3;
+
+class ShadowGitHubRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`GitHub shadow request failed with HTTP ${status}`);
+    this.name = 'ShadowGitHubRequestError';
+  }
+}
 
 interface GitHubRequestBudget {
   requests: number;
@@ -122,7 +133,7 @@ async function shadowGitHubFetch<T>(path: string, token: string, budget: GitHubR
     },
   });
   updateRateBudget(response, budget);
-  if (!response.ok) throw new Error(`GitHub shadow request failed with HTTP ${response.status}`);
+  if (!response.ok) throw new ShadowGitHubRequestError(response.status);
   return response.json() as Promise<T>;
 }
 
@@ -445,53 +456,129 @@ async function collectShadowPR(
   };
 }
 
-async function processInventory(env: Env, event: WorkflowEvent<ShadowSyncParams>): Promise<Record<string, number>> {
+export function shadowPipelineRunId(legacyPipelineRunId: string): string {
+  return `shadow-${legacyPipelineRunId}`;
+}
+
+export function shadowWorkflowInstanceId(legacyPipelineRunId: string): string {
+  return `shadow-start-${legacyPipelineRunId}`.slice(0, 100);
+}
+
+const SHADOW_PIPELINE_JOB_KEYS = [
+  'pull_request_catalog',
+  'upstream_merge_status',
+  'pull_request_comments',
+  'comment_reactions',
+  'vote_projection',
+  'duplicate_resolution',
+  'contributor_scores',
+  'orphan_cleanup',
+] as const;
+
+async function skipBlockedShadowJobs(db: D1Database, pipelineRunId: string, error: unknown): Promise<void> {
+  for (const jobKey of SHADOW_PIPELINE_JOB_KEYS) {
+    const id = await jobRunId(db, pipelineRunId, jobKey);
+    await finishSyncJob(db, id, 'skipped', {
+      errorCode: 'blocked_by_inventory_failure',
+      error,
+    });
+  }
+}
+
+async function processInventory(
+  env: Env,
+  event: WorkflowEvent<ShadowSyncParams>,
+  attempt: number,
+): Promise<Record<string, number>> {
   const params = event.payload;
   if (params.action !== 'start') throw new Error('Inventory requires a start payload');
-  const runId = crypto.randomUUID();
+  const runId = shadowPipelineRunId(params.legacyPipelineRunId);
   const cutoff = params.canonicalCutoffAt;
   await env.DB.prepare(`
-    INSERT INTO sync_parity_runs (
+    INSERT OR IGNORE INTO sync_parity_runs (
       pipeline_run_id, canonical_pipeline_run_id, canonical_cutoff_at, status, created_at
     ) VALUES (?, ?, ?, 'pending', ?)
   `).bind(runId, params.legacyPipelineRunId, cutoff, isoNow()).run();
+  await env.DB.prepare(`
+    UPDATE sync_parity_runs
+       SET status = 'pending', compared_at = NULL
+     WHERE pipeline_run_id = ?
+  `).bind(runId).run();
 
-  const inventoryRunId = await startSyncJob(env.DB, {
+  const inventoryRunId = await getOrStartSyncJob(env.DB, {
     jobKey: 'repository_inventory', pipelineRunId: runId, workflowInstanceId: event.instanceId,
     trigger: 'scheduled', mode: 'shadow',
   });
-  const catalogRunId = await startSyncJob(env.DB, {
+  await resumeSyncJob(env.DB, inventoryRunId);
+  const catalogRunId = await getOrStartSyncJob(env.DB, {
     jobKey: 'pull_request_catalog', pipelineRunId: runId, trigger: 'continuation', mode: 'shadow', status: 'queued',
   });
-  for (const key of ['upstream_merge_status', 'pull_request_comments', 'comment_reactions', 'vote_projection', 'duplicate_resolution', 'contributor_scores', 'orphan_cleanup']) {
-    await startSyncJob(env.DB, { jobKey: key, pipelineRunId: runId, trigger: 'continuation', mode: 'shadow', status: 'queued' });
+  for (const key of SHADOW_PIPELINE_JOB_KEYS.slice(1)) {
+    await getOrStartSyncJob(env.DB, {
+      jobKey: key, pipelineRunId: runId, trigger: 'continuation', mode: 'shadow', status: 'queued',
+    });
   }
+  await env.DB.prepare(`
+    UPDATE sync_job_runs
+       SET status = 'queued', finished_at = NULL, duration_ms = NULL,
+           error_code = NULL, error_summary = NULL
+     WHERE pipeline_run_id = ? AND mode = 'shadow' AND job_key <> 'repository_inventory'
+       AND status IN ('skipped', 'deferred', 'interrupted')
+  `).bind(runId).run();
 
   const budget = createBudget();
-  const allRepos = await shadowGitHubFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, env.GITHUB_TOKEN, budget);
-  const repos = allRepos.filter(repo => repo.fork && !META_REPOS.has(repo.name));
-  for (const repo of repos) {
-    const payload = {
-      id: repo.id,
-      name: repo.name,
-      full_name: repo.full_name,
-      description: repo.description ?? null,
-      language: repo.language ?? null,
-      stars: repo.stargazers_count,
-      upstream_url: null,
-      active: 1,
-    };
-    await putShadowEntity(env.DB, runId, 'repository', repo.id, payload, repo.id, null);
-    await seedWorkItem(env.DB, runId, catalogRunId, 'pull_request_catalog', 'repository', repo.id, { id: repo.id, name: repo.name });
+  try {
+    const allRepos = await shadowGitHubFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, env.GITHUB_TOKEN, budget);
+    const repos = allRepos.filter(repo => repo.fork && !META_REPOS.has(repo.name));
+    for (const repo of repos) {
+      const payload = {
+        id: repo.id,
+        name: repo.name,
+        full_name: repo.full_name,
+        description: repo.description ?? null,
+        language: repo.language ?? null,
+        stars: repo.stargazers_count,
+        upstream_url: null,
+        active: 1,
+      };
+      await putShadowEntity(env.DB, runId, 'repository', repo.id, payload, repo.id, null);
+      await seedWorkItem(env.DB, runId, catalogRunId, 'pull_request_catalog', 'repository', repo.id, { id: repo.id, name: repo.name });
+    }
+    await markSyncJobRunning(env.DB, catalogRunId, repos.length);
+    await finishSyncJob(env.DB, inventoryRunId, 'succeeded', {
+      metrics: { repositories: repos.length, github_requests: budget.requests, attempts: attempt },
+      completedItems: repos.length,
+    });
+    await observeBudgets(env.DB, budget);
+    await continueShadow(env, { action: 'repository', pipelineRunId: runId }, 'repo-0');
+    return { repositories: repos.length, github_requests: budget.requests };
+  } catch (error) {
+    const terminal = error instanceof ShadowGitHubRequestError && (error.status === 401 || error.status === 403);
+    const finalAttempt = terminal || attempt > WORKFLOW_RETRY_LIMIT;
+    await finishSyncJob(env.DB, inventoryRunId, 'failed', {
+      metrics: { github_requests: budget.requests, attempts: attempt },
+      failedItems: 1,
+      errorCode: terminal ? 'github_authentication_failed' : 'shadow_inventory_failed',
+      error,
+    });
+    await recordSyncJobEvent(env.DB, inventoryRunId, {
+      type: 'repository_inventory_failed',
+      attempt,
+      responseStatus: error instanceof ShadowGitHubRequestError ? error.status : null,
+      message: error instanceof Error ? error.message : 'Shadow repository inventory failed',
+      details: { final_attempt: finalAttempt, github_requests: budget.requests },
+    });
+    await observeBudgets(env.DB, budget);
+    if (finalAttempt) {
+      await skipBlockedShadowJobs(env.DB, runId, error);
+      await env.DB.prepare(`
+        UPDATE sync_parity_runs SET status = 'incomplete', compared_at = ?
+         WHERE pipeline_run_id = ?
+      `).bind(isoNow(), runId).run();
+    }
+    if (terminal) throw new NonRetryableError(error.message, error.name);
+    throw error;
   }
-  await markSyncJobRunning(env.DB, catalogRunId, repos.length);
-  await finishSyncJob(env.DB, inventoryRunId, 'succeeded', {
-    metrics: { repositories: repos.length, github_requests: budget.requests },
-    completedItems: repos.length,
-  });
-  await observeBudgets(env.DB, budget);
-  await continueShadow(env, { action: 'repository', pipelineRunId: runId }, `repo-0`);
-  return { repositories: repos.length, github_requests: budget.requests };
 }
 
 async function processRepository(env: Env, params: Extract<ShadowSyncParams, { action: 'repository' }>): Promise<Record<string, number>> {
@@ -1057,8 +1144,7 @@ export async function startShadowSync(env: Env, legacyPipelineRunId: string, can
     trigger: 'scheduled',
     mode: 'shadow',
   });
-  const dateKey = canonicalCutoffAt.replace(/[^0-9]/g, '').slice(0, 14);
-  const id = `shadow-start-${dateKey}`;
+  const id = shadowWorkflowInstanceId(legacyPipelineRunId);
   try {
     const instance = await env.SHADOW_SYNC_WORKFLOW.create({
       id,
@@ -1072,6 +1158,15 @@ export async function startShadowSync(env: Env, legacyPipelineRunId: string, can
   } catch (error) {
     try {
       const instance = await env.SHADOW_SYNC_WORKFLOW.get(id);
+      const state = await instance.status();
+      if (state.status === 'errored' || state.status === 'terminated' || state.status === 'unknown') {
+        await finishSyncJob(env.DB, dispatchRunId, 'failed', {
+          metrics: { existing_instance: true },
+          errorCode: 'existing_workflow_unavailable',
+          error: new Error(state.error?.message ?? `Existing Workflow instance is ${state.status}`),
+        });
+        return null;
+      }
       await finishSyncJob(env.DB, dispatchRunId, 'succeeded', {
         metrics: { enqueued: true, existing_instance: true }, completedItems: 1,
       });
@@ -1094,8 +1189,8 @@ export class ShadowSyncWorkflow extends WorkflowEntrypoint<Env, ShadowSyncParams
     return step.do('process bounded shadow sync work', {
       retries: { limit: 3, delay: '10 seconds', backoff: 'exponential' },
       timeout: '15 minutes',
-    }, async () => {
-      if (event.payload.action === 'start') return processInventory(this.env, event);
+    }, async context => {
+      if (event.payload.action === 'start') return processInventory(this.env, event, context.attempt);
       if (event.payload.action === 'repository') return processRepository(this.env, event.payload);
       if (event.payload.action === 'pull_request') return processPullRequest(this.env, event.payload);
       return finalizeShadow(this.env, event.payload);

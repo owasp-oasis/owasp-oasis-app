@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { differingFields } from '../../../worker/shadowSync.js';
+import {
+  differingFields,
+  shadowPipelineRunId,
+  shadowWorkflowInstanceId,
+} from '../../../worker/shadowSync.js';
 
 describe('shadow sync parity comparison', () => {
   it('returns only fields whose values differ', () => {
@@ -16,5 +20,14 @@ describe('shadow sync parity comparison', () => {
   it('reports fields present on only one side when they contain a value', () => {
     expect(differingFields({ id: 42 }, { id: 42, detection_tool: 'Bandit' }))
       .toEqual(['detection_tool']);
+  });
+
+  it('gives every legacy trigger a stable, distinct shadow identity', () => {
+    const firstLegacyRun = '11111111-1111-4111-8111-111111111111';
+    const secondLegacyRun = '22222222-2222-4222-8222-222222222222';
+
+    expect(shadowPipelineRunId(firstLegacyRun)).toBe(`shadow-${firstLegacyRun}`);
+    expect(shadowWorkflowInstanceId(firstLegacyRun)).toBe(`shadow-start-${firstLegacyRun}`);
+    expect(shadowWorkflowInstanceId(firstLegacyRun)).not.toBe(shadowWorkflowInstanceId(secondLegacyRun));
   });
 });
