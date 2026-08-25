@@ -36,6 +36,7 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -132,6 +133,15 @@ export default {
         if (method === 'GET'  && action === 'comments') return await handlePRComments(request, env, prId);
         if (method === 'POST' && action === 'react')    return await handlePRReact(request, env, prId);
         return jsonErr('Method not allowed for this PR panel action', 405, request);
+      }
+
+      /* ── Public, sanitized synchronization status ───────────────── */
+      if (method === 'GET' && url.pathname === '/api/sync/status') {
+        return await handleSyncStatus(request, env);
+      }
+      const syncRunMatch = url.pathname.match(/^\/api\/sync\/status\/runs\/([^/]+)$/);
+      if (method === 'GET' && syncRunMatch) {
+        return await handleSyncRunDetail(request, env, syncRunMatch[1]);
       }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
