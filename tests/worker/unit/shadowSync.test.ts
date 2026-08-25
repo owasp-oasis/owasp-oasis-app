@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   differingFields,
+  nonRetryableShadowError,
   shadowPipelineRunId,
   shadowWorkflowInstanceId,
 } from '../../../worker/shadowSync.js';
@@ -29,5 +30,12 @@ describe('shadow sync parity comparison', () => {
     expect(shadowPipelineRunId(firstLegacyRun)).toBe(`shadow-${firstLegacyRun}`);
     expect(shadowWorkflowInstanceId(firstLegacyRun)).toBe(`shadow-start-${firstLegacyRun}`);
     expect(shadowWorkflowInstanceId(firstLegacyRun)).not.toBe(shadowWorkflowInstanceId(secondLegacyRun));
+  });
+
+  it('preserves the Workflow runtime identity for terminal failures', () => {
+    const error = nonRetryableShadowError('GitHub authentication failed');
+
+    expect(error.name).toBe('NonRetryableError');
+    expect(error.message).toBe('GitHub authentication failed');
   });
 });
