@@ -12,6 +12,7 @@ import Leaderboards from './pages/Leaderboards'
 import Support from './pages/Support'
 import Sponsors from './pages/Sponsors'
 import BrandGuide from './pages/BrandGuide'
+import SyncStatus, { SyncRunDetail } from './pages/SyncStatus'
 
 export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
@@ -34,6 +35,9 @@ export default function App() {
             <Route path="/workspace/maintainers" element={<Leaderboards activeTab="maintainers" />} />
             {/* Intentionally unlisted: available by direct link, but omitted from Workspace navigation. */}
             <Route path="/workspace/tools" element={<Leaderboards activeTab="tools" />} />
+            {/* Intentionally unlisted: linked from the Workspace sync chip. */}
+            <Route path="/workspace/status" element={<SyncStatus />} />
+            <Route path="/workspace/status/runs/:runId" element={<SyncRunDetail />} />
             <Route path="/support" element={<Support />} />
             <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/brand" element={<BrandGuide />} />
