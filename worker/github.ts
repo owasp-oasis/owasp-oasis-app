@@ -178,9 +178,9 @@ export function parseDetectionTool(body: string | null): string | null {
   if (m) return normaliseToolName(m[1]);
   if (/appsecai-diff-hash/i.test(body) || /AppSecAI Vulnerability ID/i.test(body)) return 'AppSecAI';
   if (/[Dd]etected\s+[Bb]y[:\s]+AppSec\s*AI/i.test(body)) return 'AppSecAI';
-  if (/Semgrep\s+OSS/i.test(body)) return 'Semgrep OSS';
+  if (/Semgrep\s+(?:OSS|CE)/i.test(body)) return 'Semgrep CE';
   if (/OpenGrep/i.test(body)) return 'OpenGrep';
-  if (/\b(javascript|python|java|go|ruby)\.[a-z]+\.[a-z]+\.[a-z]/.test(body)) return 'Semgrep OSS';
+  if (/\b(javascript|python|java|go|ruby)\.[a-z]+\.[a-z]+\.[a-z]/.test(body)) return 'Semgrep CE';
   // Legacy OpenGrep reports used this heading without a Detected By field.
   if (/##\s+What\s+SAST\s+Found/i.test(body)) return 'OpenGrep';
   return null;
@@ -190,7 +190,7 @@ export function normaliseToolName(raw: string): string {
   const l = raw.trim().toLowerCase();
   if (l.includes('appsec') || l.includes('fenix')) return 'AppSecAI';
   if (l.includes('opengrep')) return 'OpenGrep';
-  if (l.includes('semgrep')) return 'Semgrep OSS';
+  if (l.includes('semgrep')) return 'Semgrep CE';
   // Bandit findings often include the individual rule in the Detected By
   // value (for example, "Bandit (B602)" or "Bandit (rule B104)"). Rules are
   // findings produced by Bandit, not separate tools.

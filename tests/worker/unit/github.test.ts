@@ -134,9 +134,14 @@ describe('github.ts', () => {
       expect(parseDetectionTool(body)).toBe('AppSecAI');
     });
 
-    it('parses Semgrep OSS', () => {
+    it('parses legacy Semgrep OSS reports as Semgrep CE', () => {
       const body = '**Detected by:** Semgrep OSS';
-      expect(parseDetectionTool(body)).toBe('Semgrep OSS');
+      expect(parseDetectionTool(body)).toBe('Semgrep CE');
+    });
+
+    it('parses Semgrep CE', () => {
+      const body = '**Detected by:** Semgrep CE';
+      expect(parseDetectionTool(body)).toBe('Semgrep CE');
     });
 
     it('parses OpenGrep', () => {
@@ -182,8 +187,9 @@ The scanner detected a non-literal regular expression construction.
     });
 
     it('normalizes Semgrep', () => {
-      expect(normaliseToolName('semgrep')).toBe('Semgrep OSS');
-      expect(normaliseToolName('Semgrep')).toBe('Semgrep OSS');
+      expect(normaliseToolName('semgrep')).toBe('Semgrep CE');
+      expect(normaliseToolName('Semgrep OSS')).toBe('Semgrep CE');
+      expect(normaliseToolName('Semgrep CE')).toBe('Semgrep CE');
     });
 
     it('normalizes Bandit rule labels to the Bandit tool', () => {

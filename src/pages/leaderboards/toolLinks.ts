@@ -6,6 +6,7 @@ const TOOL_URLS: Readonly<Record<string, string>> = {
   metis: 'https://github.com/arm/metis',
   opengrep: 'https://github.com/opengrep/opengrep',
   semgrep: 'https://github.com/semgrep/semgrep',
+  'semgrep ce': 'https://github.com/semgrep/semgrep',
   'semgrep oss': 'https://github.com/semgrep/semgrep',
 }
 
