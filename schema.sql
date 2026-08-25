@@ -254,3 +254,7 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
+
+-- Sync observability and shadow validation tables are introduced by
+-- migrations/0007_sync_job_observability.sql. Apply migrations after this
+-- bootstrap schema when creating a fresh local database.
