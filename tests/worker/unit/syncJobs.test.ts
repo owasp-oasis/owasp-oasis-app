@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { safeErrorSummary, sanitizeMetrics } from '../../../worker/syncJobs.js';
+import {
+  isMissingSyncObservabilityTableError,
+  safeErrorSummary,
+  sanitizeMetrics,
+} from '../../../worker/syncJobs.js';
 
 describe('sync job public-data sanitization', () => {
   it('keeps only numeric, boolean, and null metrics', () => {
@@ -20,5 +24,14 @@ describe('sync job public-data sanitization', () => {
     expect(summary).not.toContain('example-token-value');
     expect(summary).not.toContain('private@example.test');
     expect(summary).not.toContain('ghp_');
+  });
+
+  it('recognizes only missing observability tables as migration gaps', () => {
+    expect(isMissingSyncObservabilityTableError(
+      new Error('D1_ERROR: no such table: sync_parity_runs: SQLITE_ERROR'),
+    )).toBe(true);
+    expect(isMissingSyncObservabilityTableError(
+      new Error('D1_ERROR: no such table: pull_requests: SQLITE_ERROR'),
+    )).toBe(false);
   });
 });

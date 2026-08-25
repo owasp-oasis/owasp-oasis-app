@@ -10,6 +10,7 @@
 .sync-page-actions button { border: 1px solid var(--line-strong); background: var(--white); color: var(--blue-dark); border-radius: 8px; padding: 8px 14px; font-weight: 700; }
 .sync-back-link { font-weight: 700; }
 .sync-error, .sync-run-error { color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; }
+.sync-schema-warning { color: #854d0e; background: #fef9c3; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; }
 
 .sync-summary-card, .sync-job-card, .sync-budget-card, .sync-event {
   background: var(--white);
