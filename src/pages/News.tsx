@@ -61,11 +61,7 @@ export default function News() {
               ? <p>Read the full announcement: <a href={WIRE_LINK} target="_blank" rel="noopener noreferrer">Business Wire</a></p>
               : null
             }
-            <p>
-              Register at{\' \'}
-              <a href="https://owasp-oasis.org">owasp-oasis.org</a>.
-              {\'  \'}Takes 30 seconds.
-            </p>
+            <p>Register at <a href="https://owasp-oasis.org">owasp-oasis.org</a>. Takes 30 seconds.</p>
           </div>
         </div>
       </section>
