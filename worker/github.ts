@@ -181,7 +181,8 @@ export function parseDetectionTool(body: string | null): string | null {
   if (/Semgrep\s+OSS/i.test(body)) return 'Semgrep OSS';
   if (/OpenGrep/i.test(body)) return 'OpenGrep';
   if (/\b(javascript|python|java|go|ruby)\.[a-z]+\.[a-z]+\.[a-z]/.test(body)) return 'Semgrep OSS';
-  if (/##\s+What\s+SAST\s+Found/i.test(body)) return 'SAST (unknown)';
+  // Legacy OpenGrep reports used this heading without a Detected By field.
+  if (/##\s+What\s+SAST\s+Found/i.test(body)) return 'OpenGrep';
   return null;
 }
 

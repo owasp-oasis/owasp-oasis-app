@@ -144,6 +144,15 @@ describe('github.ts', () => {
       expect(parseDetectionTool(body)).toBe('OpenGrep');
     });
 
+    it('attributes the legacy SAST report template to OpenGrep', () => {
+      const body = `
+## What SAST Found
+
+The scanner detected a non-literal regular expression construction.
+      `;
+      expect(parseDetectionTool(body)).toBe('OpenGrep');
+    });
+
     it('parses Bandit rule labels as the Bandit tool', () => {
       const body = '**Detected by:** Bandit (rule B104)';
       expect(parseDetectionTool(body)).toBe('Bandit');

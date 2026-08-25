@@ -8,6 +8,7 @@ describe('Workspace tool links', () => {
     ['Bandit', 'https://github.com/pycqa/bandit'],
     ['DryRun Security', 'https://www.dryrun.security/'],
     ['Metis', 'https://github.com/arm/metis'],
+    ['OpenGrep', 'https://github.com/opengrep/opengrep'],
   ])('links %s to its canonical tool page', (name, expectedUrl) => {
     expect(getToolUrl(name)).toBe(expectedUrl)
   })

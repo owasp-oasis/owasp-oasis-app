@@ -4,6 +4,7 @@ const TOOL_URLS: Readonly<Record<string, string>> = {
   dryrun: 'https://www.dryrun.security/',
   'dryrun security': 'https://www.dryrun.security/',
   metis: 'https://github.com/arm/metis',
+  opengrep: 'https://github.com/opengrep/opengrep',
   semgrep: 'https://github.com/semgrep/semgrep',
   'semgrep oss': 'https://github.com/semgrep/semgrep',
 }
