@@ -451,11 +451,26 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
 
   // ── Detect tools: named by "Detected By" field in PR bodies ──
   const detectRows = await env.DB.prepare(`
-    SELECT detection_tool, COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_id) AS projects_worked,
+    SELECT detection_tool,
+           COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_id) AS projects_worked,
            SUM(merged_upstream) AS accepted_upstream,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
            SUM(consensus_reject) AS total_reject
-    FROM pull_requests WHERE detection_tool IS NOT NULL AND deleted = 0 GROUP BY detection_tool ORDER BY vulnerabilities DESC
+    FROM (
+      SELECT
+        CASE
+          WHEN LOWER(TRIM(detection_tool)) = 'bandit'
+            OR LOWER(TRIM(detection_tool)) LIKE 'bandit %'
+            OR LOWER(TRIM(detection_tool)) LIKE 'bandit(%'
+          THEN 'Bandit'
+          ELSE detection_tool
+        END AS detection_tool,
+        repo_id, merged_upstream, consensus_accept, consensus_modify, consensus_reject
+      FROM pull_requests
+      WHERE detection_tool IS NOT NULL AND deleted = 0
+    ) canonical_detections
+    GROUP BY detection_tool
+    ORDER BY vulnerabilities DESC
   `).all<{
     detection_tool: string;
     vulnerabilities: number;

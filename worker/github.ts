@@ -190,6 +190,10 @@ export function normaliseToolName(raw: string): string {
   if (l.includes('appsec') || l.includes('fenix')) return 'AppSecAI';
   if (l.includes('opengrep')) return 'OpenGrep';
   if (l.includes('semgrep')) return 'Semgrep OSS';
+  // Bandit findings often include the individual rule in the Detected By
+  // value (for example, "Bandit (B602)" or "Bandit (rule B104)"). Rules are
+  // findings produced by Bandit, not separate tools.
+  if (/^bandit(?:\s|\(|$)/.test(l)) return 'Bandit';
   return raw.trim().slice(0, 60) || 'SAST (unknown)';
 }
 

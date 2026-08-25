@@ -144,6 +144,11 @@ describe('github.ts', () => {
       expect(parseDetectionTool(body)).toBe('OpenGrep');
     });
 
+    it('parses Bandit rule labels as the Bandit tool', () => {
+      const body = '**Detected by:** Bandit (rule B104)';
+      expect(parseDetectionTool(body)).toBe('Bandit');
+    });
+
     it('returns null when no detection tool found', () => {
       expect(parseDetectionTool('No tool mentioned')).toBe(null);
     });
@@ -170,6 +175,13 @@ describe('github.ts', () => {
     it('normalizes Semgrep', () => {
       expect(normaliseToolName('semgrep')).toBe('Semgrep OSS');
       expect(normaliseToolName('Semgrep')).toBe('Semgrep OSS');
+    });
+
+    it('normalizes Bandit rule labels to the Bandit tool', () => {
+      expect(normaliseToolName('Bandit')).toBe('Bandit');
+      expect(normaliseToolName('Bandit (B602)')).toBe('Bandit');
+      expect(normaliseToolName('Bandit (rule B104)')).toBe('Bandit');
+      expect(normaliseToolName('Bandit rule B113')).toBe('Bandit');
     });
 
     it('returns truncated name for unknown tools (max 60 chars)', () => {

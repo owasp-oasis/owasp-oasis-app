@@ -330,6 +330,40 @@ describe('Leaderboard endpoints', () => {
       expect(Array.isArray(body)).toBe(true);
       expect(body.every((tool: any) => ['detect', 'fix', 'validate'].includes(tool.role))).toBe(true);
     });
+
+    it('merges Bandit rule labels into one Bandit detection tool', async () => {
+      await insertTestRepo(env, { id: 5150, name: 'bandit-repo' });
+      const variants = ['Bandit', 'Bandit (B602)', 'Bandit (rule B104)', 'Bandit rule B113'];
+
+      for (const [index, detectionTool] of variants.entries()) {
+        const id = 5100 + index;
+        await insertTestPR(env, {
+          id,
+          repo_id: 5150,
+          repo_name: 'bandit-repo',
+          number: index + 1,
+        });
+        await env.DB.prepare(`
+          UPDATE pull_requests
+          SET detection_tool = ?, merged_upstream = 1, consensus_accept = 1
+          WHERE id = ?
+        `).bind(detectionTool, id).run();
+      }
+
+      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/tools'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json<any[]>();
+      const banditTools = body.filter(tool => tool.role === 'detect' && tool.name === 'Bandit');
+      expect(banditTools).toHaveLength(1);
+      expect(banditTools[0]).toMatchObject({
+        card_key: 'detect:Bandit',
+        vulnerabilities: 4,
+        accepted_upstream: 4,
+        projects_worked: 1,
+        total_accept: 4,
+      });
+    });
   });
 
   describe('Detailed repo endpoint', () => {
