@@ -819,6 +819,24 @@ tr:hover .row-chevron {
   color: var(--gray-400);
 }
 
+.tool-site-link {
+  align-self: flex-start;
+  color: var(--blue);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tool-site-link:hover {
+  text-decoration: underline;
+}
+
+.tool-site-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
 .tool-detect-note {
   font-size: 0.82rem;
   color: var(--gray-400);

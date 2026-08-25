@@ -1,4 +1,5 @@
 import './tabs.css'
+import { getToolUrl } from './toolLinks'
 
 type ToolRole = 'detect' | 'fix' | 'validate'
 
@@ -48,6 +49,23 @@ function RoleBadge({ role }: { role: ToolRole }) {
     >
       {ROLE_LABELS[role]}
     </span>
+  )
+}
+
+function ToolWebsiteLink({ name }: { name: string }) {
+  const url = getToolUrl(name)
+  if (!url) return null
+
+  return (
+    <a
+      className="tool-site-link"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Visit ${name} website (opens in a new tab)`}
+    >
+      Visit {name} <span aria-hidden="true">↗</span>
+    </a>
   )
 }
 
@@ -127,6 +145,7 @@ function DetectCard({ tool }: { tool: Tool }) {
           <h3 className="tool-name">{tool.name}</h3>
           <RoleBadge role="detect" />
         </div>
+        <ToolWebsiteLink name={tool.name} />
       </div>
 
       <div className="tool-stats">
@@ -159,6 +178,7 @@ function FixCard({ tool }: { tool: Tool }) {
           <RoleBadge role="fix" />
         </div>
         {tool.login && <span className="tool-login">@{tool.login}</span>}
+        <ToolWebsiteLink name={tool.name} />
       </div>
 
       <div className="tool-stats">
@@ -209,6 +229,7 @@ function ValidateCard({ tool }: { tool: Tool }) {
           <RoleBadge role="validate" />
         </div>
         {tool.login && <span className="tool-login">@{tool.login}</span>}
+        <ToolWebsiteLink name={tool.name} />
       </div>
 
       <div className="tool-stats">
