@@ -12,6 +12,8 @@ import Leaderboards from './pages/Leaderboards'
 import Support from './pages/Support'
 import Sponsors from './pages/Sponsors'
 import BrandGuide from './pages/BrandGuide'
+import News from './pages/News'
+import NewsLaunch from './pages/NewsLaunch'
 
 export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
@@ -37,6 +39,9 @@ export default function App() {
             <Route path="/support" element={<Support />} />
             <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/brand" element={<BrandGuide />} />
+          {/* Intentionally unlisted: not in nav until launch day Aug 26 */}
+          <Route path="/news" element={<News />} />
+              <Route path="/news/launch" element={<NewsLaunch />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
