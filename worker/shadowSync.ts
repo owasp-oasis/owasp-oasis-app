@@ -464,6 +464,12 @@ export function shadowWorkflowInstanceId(legacyPipelineRunId: string): string {
   return `shadow-start-${legacyPipelineRunId}`.slice(0, 100);
 }
 
+export function nonRetryableShadowError(message: string): NonRetryableError {
+  // Workflows recognizes this error by its runtime-provided identity. Keep the
+  // default name instead of replacing it with the upstream error's name.
+  return new NonRetryableError(message);
+}
+
 const SHADOW_PIPELINE_JOB_KEYS = [
   'pull_request_catalog',
   'upstream_merge_status',
@@ -576,7 +582,7 @@ async function processInventory(
          WHERE pipeline_run_id = ?
       `).bind(isoNow(), runId).run();
     }
-    if (terminal) throw new NonRetryableError(error.message, error.name);
+    if (terminal) throw nonRetryableShadowError(error.message);
     throw error;
   }
 }
