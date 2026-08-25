@@ -20,6 +20,7 @@ const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
 interface Meta {
   last_synced_at: string | null
   sync_running: boolean
+  status?: 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown'
 }
 
 function timeAgo(iso: string | null): string {
@@ -65,9 +66,16 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   const [myVotes]           = useState<Map<number, Decision>>(new Map())
 
   useEffect(() => {
-    fetch('/api/leaderboard/meta')
+    fetch('/api/sync/status')
       .then(r => r.json())
-      .then(d => setMeta(d as Meta))
+      .then(d => {
+        const status = d as { overall?: { last_success_at?: string | null; sync_running?: boolean; status?: Meta['status'] } }
+        setMeta({
+          last_synced_at: status.overall?.last_success_at ?? null,
+          sync_running: status.overall?.sync_running ?? false,
+          status: status.overall?.status,
+        })
+      })
       .catch(() => {})
   }, [])
 
@@ -194,9 +202,20 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
               </NavLink>
             ))}
             {/* Sync status chip — right side of tab bar */}
-            <span className="lb-sync-chip" title={meta.last_synced_at ?? undefined}>
-              {meta.sync_running ? '⟳ syncing…' : `↻ ${timeAgo(meta.last_synced_at)}`}
-            </span>
+            <NavLink
+              className={`lb-sync-chip lb-sync-chip--${meta.status ?? 'unknown'}`}
+              title={`${meta.status ?? 'unknown'} — last complete Workspace sync: ${meta.last_synced_at ?? 'not available'}`}
+              to="/workspace/status"
+              aria-label={`View synchronization status. Workspace is ${meta.status ?? 'unknown'}.`}
+            >
+              {meta.sync_running
+                ? '⟳ syncing…'
+                : meta.status === 'degraded'
+                  ? '⚠ degraded'
+                  : meta.status === 'stale'
+                    ? `⚠ stale · ${timeAgo(meta.last_synced_at)}`
+                    : `↻ ${timeAgo(meta.last_synced_at)}`}
+            </NavLink>
           </div>
 
           {/* Tab panels */}
