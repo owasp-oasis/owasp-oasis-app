@@ -11,7 +11,7 @@ export default function NewsLaunch() {
         <div className="container">
           <Link to="/news" className="news-back">&#8592; News &amp; Announcements</Link>
           <span className="badge badge-blue">Press Release</span>
-          <h1>OWASP OASIS Launches Community of Experts</h1>
+          <h1>OWASP OASIS Launches as Official OWASP Community Project</h1>
           <p className="news-article-meta">August 26, 2026 &middot; OWASP Team</p>
         </div>
       </div>
