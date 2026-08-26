@@ -24,11 +24,13 @@ import {
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
 import type { CommentData, ReactionData } from './types.js';
+import { reconcileRepositoryPullRequests } from './cleanup.js';
 
 /* ─── CHUNKED SYNC CONFIG ────────────────────────────────────── */
-// Each /leaderboard-refresh call processes up to CHUNK_SIZE PRs.
+// Each bounded invocation processes one PR so GitHub collection remains well
+// below the Workers Free external-subrequest ceiling.
 // Cursor is stored in sync_state as "repoIndex:prStart".
-const CHUNK_SIZE = 10;
+const CHUNK_SIZE = 1;
 
 /* ─── SHARED PR PROCESSOR ────────────────────────────────────── */
 // Contains the inner loop logic shared between runSync and runSyncOneRepo.
@@ -300,7 +302,7 @@ export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}):
   }
 }
 
-/* ─── CHUNKED MANUAL SYNC (10 PRs per call — 50 subrequest limit) */
+/* ─── CHUNKED CANONICAL SYNC (one PR per invocation) ──────────── */
 // Cursor stored in sync_state as "repoIndex:prStart", e.g. "0:10".
 // Each call processes up to CHUNK_SIZE PRs from the current repo, then advances.
 // When all PRs in a repo are done, moves to next repo.
@@ -374,7 +376,8 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     // Fetch all PRs for this repo (1-2 subrequests, paginated)
     const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
     const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-    const allPRs    = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
+    const repositoryPRs = [...openPRs, ...closedPRs];
+    const allPRs = repositoryPRs.filter(pr => pr.updated_at >= repoSince);
 
     // Slice this chunk
     const chunk   = allPRs.slice(prStart, prStart + CHUNK_SIZE);
@@ -390,7 +393,18 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
     // After last chunk for this repo: update open_prs count
     if (!hasMore) {
-      const finalSyncedAt = allPRs[0]?.updated_at ?? syncStart;
+      const inventoryCleanup = await reconcileRepositoryPullRequests(
+        db,
+        repo.id,
+        repositoryPRs.map(pr => pr.id),
+      );
+      console.log(JSON.stringify({
+        event: 'repository_pull_request_inventory_reconciled',
+        repository_id: repo.id,
+        checked: inventoryCleanup.checked,
+        flagged: inventoryCleanup.flagged,
+      }));
+      const finalSyncedAt = repositoryPRs[0]?.updated_at ?? syncStart;
       await updateRepoPRCount(db, repo.id, syncStart, finalSyncedAt);
     }
 

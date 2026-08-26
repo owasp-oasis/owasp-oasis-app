@@ -1,6 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
-import { reconcileRemovedRepositories } from '../../../worker/cleanup.js';
+import {
+  reconcileRemovedRepositories,
+  reconcileRepositoryPullRequests,
+} from '../../../worker/cleanup.js';
 import { upsertRepo } from '../../../worker/db.js';
 import { fetchMock } from './fetchMock.js';
 import { applySchema, cleanDB, insertTestPR, insertTestRepo } from './helpers.js';
@@ -100,5 +103,49 @@ describe('Repository reconciliation', () => {
       'SELECT repo_id, repo_name FROM pull_requests WHERE id = 2002',
     ).first<{ repo_id: number; repo_name: string }>();
     expect(renamedPr).toEqual({ repo_id: 202, repo_name: 'renamed-fork' });
+  });
+});
+
+describe('Pull request inventory reconciliation', () => {
+  beforeAll(async () => {
+    await applySchema(env);
+  });
+
+  afterEach(async () => {
+    await cleanDB(env);
+  });
+
+  it('flags only PR IDs absent from a complete repository inventory', async () => {
+    await insertTestRepo(env, { id: 101, name: 'current-fork' });
+    await insertTestPR(env, { id: 1001, repo_id: 101, repo_name: 'current-fork', number: 1 });
+    await insertTestPR(env, { id: 1002, repo_id: 101, repo_name: 'current-fork', number: 2 });
+
+    const result = await reconcileRepositoryPullRequests(env.DB, 101, [1002, 1003]);
+
+    expect(result).toEqual({ checked: 2, flagged: 1 });
+    const rows = await env.DB.prepare(
+      'SELECT id, deleted FROM pull_requests WHERE repo_id = ? ORDER BY id',
+    ).bind(101).all<{ id: number; deleted: number }>();
+    expect(rows.results).toEqual([
+      { id: 1001, deleted: 1 },
+      { id: 1002, deleted: 0 },
+    ]);
+  });
+
+  it('uses immutable repository identity when PR numbers overlap', async () => {
+    await insertTestRepo(env, { id: 101, name: 'same-name' });
+    await insertTestRepo(env, { id: 202, name: 'same-name-later' });
+    await insertTestPR(env, { id: 1001, repo_id: 101, repo_name: 'same-name', number: 1 });
+    await insertTestPR(env, { id: 2001, repo_id: 202, repo_name: 'same-name-later', number: 1 });
+
+    await reconcileRepositoryPullRequests(env.DB, 202, []);
+
+    const rows = await env.DB.prepare(
+      'SELECT id, deleted FROM pull_requests ORDER BY id',
+    ).all<{ id: number; deleted: number }>();
+    expect(rows.results).toEqual([
+      { id: 1001, deleted: 0 },
+      { id: 2001, deleted: 1 },
+    ]);
   });
 });

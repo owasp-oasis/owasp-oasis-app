@@ -22,6 +22,11 @@ interface RepositoryReconciliationResult {
   repositories: Array<{ repo_id: number; repo: string; prs_flagged: number }>;
 }
 
+export interface PullRequestInventoryResult {
+  checked: number;
+  flagged: number;
+}
+
 /**
  * Finds tracked repositories that are absent from a complete public fork listing.
  * Kept pure so the safety-critical set comparison can be tested independently.
@@ -110,6 +115,34 @@ export async function reconcileRemovedRepositories(env: Env): Promise<Repository
   }
 
   return result;
+}
+
+/**
+ * Reconciles one repository from a complete, successfully fetched GitHub PR
+ * inventory. GitHub PR IDs are immutable and globally unique, so repository
+ * names and PR numbers are never used as identity for this comparison.
+ */
+export async function reconcileRepositoryPullRequests(
+  db: D1Database,
+  repoId: number,
+  currentPullRequestIds: number[],
+): Promise<PullRequestInventoryResult> {
+  const rows = await db.prepare(
+    'SELECT id FROM pull_requests WHERE repo_id = ? AND deleted = 0 ORDER BY id',
+  ).bind(repoId).all<{ id: number }>();
+  const currentIds = new Set(currentPullRequestIds);
+  const staleIds = (rows.results ?? [])
+    .map(row => row.id)
+    .filter(id => !currentIds.has(id));
+
+  if (staleIds.length > 0) {
+    const deletedAt = new Date().toISOString();
+    await db.batch(staleIds.map(id => db.prepare(
+      'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE id = ? AND repo_id = ? AND deleted = 0',
+    ).bind(deletedAt, id, repoId)));
+  }
+
+  return { checked: rows.results?.length ?? 0, flagged: staleIds.length };
 }
 
 /**
