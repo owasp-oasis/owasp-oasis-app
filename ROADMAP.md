@@ -13,20 +13,24 @@ This file is the durable backlog for work that is planned, partially implemented
 - Administrative engagement metrics must be aggregate-only. Do not provide individual event rows, stable user pseudonyms, or low-cardinality slices that allow an administrator to infer a person's identity.
 - Apply D1 migrations before or with the Worker version that consumes them. Public operational pages must degrade gracefully if code and schema briefly differ during rollout.
 
-## In validation: observable synchronization replacement
+## In implementation: free-tier bounded synchronization replacement
 
 Current state:
 
 - The public Workspace status page, job history, budget history, incomplete-run archive, and shadow parity system are implemented in `preview` and `integration/preview-main`.
 - Migration `0007_sync_job_observability.sql` is applied to the shared remote D1 database.
-- The legacy four-hour sync remains the canonical writer.
-- The Workflow implementation writes only shadow, work-item, parity, and observability data.
+- Feature branch `fix/free-tier-sync-orchestration` introduces the bounded canonical writer while keeping production scheduling disabled in D1 by default.
+- The existing production synchronizer remains the scheduled path until the cutover flag is explicitly enabled and remains available as the first rollback path.
+- Preview is shadow-only and runs one daily comparison against the shared canonical tables.
+- Canonical collection is split into one-PR, one-comment-reaction, and one-duplicate-close Workflow instances; Wrangler also enforces the 50-subrequest ceiling.
+- A renewable D1 lease prevents overlapping canonical runs, and the public status page exposes the phase, lease, schedule gate, job history, and budgets.
+- Production scheduling cannot be enabled until the latest shadow result records at least three consecutive matches and cutover eligibility.
 - GitHub authentication failures terminate the shadow inventory and mark blocked downstream jobs instead of leaving them running indefinitely.
 
 Exit criteria before cutover review:
 
 - Complete repeated production shadow runs without unhandled errors.
-- Reach the configured consecutive parity-match threshold.
+- Reach three consecutive parity matches.
 - Inspect every mismatch category and document any intentional difference.
 - Confirm Workflow step, request, D1, and GitHub API budgets remain below their limits over the retained history.
 - Prove orphan cleanup, duplicate projection, contributor scoring, comment/reaction processing, and upstream merge detection match the legacy results.

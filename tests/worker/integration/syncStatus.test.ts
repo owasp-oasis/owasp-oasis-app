@@ -11,6 +11,7 @@ import {
   resumeSyncJob,
   startSyncJob,
 } from '../../../worker/syncJobs.js';
+import { canonicalCutoverEligible } from '../../../worker/canonicalSync.js';
 
 describe('public sync status', () => {
   beforeAll(async () => applySchema(env));
@@ -23,12 +24,37 @@ describe('public sync status', () => {
     const body = await response.json<Record<string, unknown>>() as {
       observability_ready: boolean;
       overall: { last_success_at: string };
+      canonical: { schedule_enabled: boolean; phase: string; lock: null };
       jobs: Array<{ key: string }>;
     };
     expect(body.observability_ready).toBe(true);
     expect(body.overall.last_success_at).toBe('2020-01-01T00:00:00Z');
+    expect(body.canonical).toEqual(expect.objectContaining({
+      schedule_enabled: false,
+      phase: 'idle',
+      lock: null,
+    }));
+    expect(body.jobs.some(job => job.key === 'canonical_workspace_sync')).toBe(true);
     expect(body.jobs.some(job => job.key === 'repository_inventory')).toBe(true);
     expect(body.jobs.some(job => job.key === 'hubspot_contacts')).toBe(true);
+  });
+
+  it('requires three consecutive matching parity runs before scheduled cutover', async () => {
+    await env.DB.prepare(`
+      INSERT INTO sync_parity_runs (
+        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
+        eligible_for_cutover, created_at
+      ) VALUES ('parity-2', ?, 'match', 2, 1, ?)
+    `).bind(new Date().toISOString(), new Date().toISOString()).run();
+    expect(await canonicalCutoverEligible(env.DB)).toBe(false);
+
+    await env.DB.prepare(`
+      INSERT INTO sync_parity_runs (
+        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
+        eligible_for_cutover, created_at
+      ) VALUES ('parity-3', ?, 'match', 3, 1, ?)
+    `).bind(new Date().toISOString(), new Date(Date.now() + 1_000).toISOString()).run();
+    expect(await canonicalCutoverEligible(env.DB)).toBe(true);
   });
 
   it('returns baseline health instead of 500 while the observability migration is pending', async () => {

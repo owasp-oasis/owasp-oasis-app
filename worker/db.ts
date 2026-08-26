@@ -340,7 +340,11 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
  * to point to the canonical root (in case parent's duplicate_of changed since votes were cast).
  * Also handles auto-closing PRs when consensus + merged parent.
  */
-export async function rebuildDuplicates(db: D1Database, token: string): Promise<{ closed: number }> {
+export async function rebuildDuplicates(
+  db: D1Database,
+  token: string,
+  options: { skipGitHubMutations?: boolean } = {},
+): Promise<{ closed: number }> {
   let closedCount = 0;
 
   // Get all PRs with duplicate votes
@@ -409,7 +413,7 @@ export async function rebuildDuplicates(db: D1Database, token: string): Promise<
 
     if (parent && (parent.merged_at || parent.state === 'closed')) {
       // Only close if PR is still open
-      if (pr.state === 'open') {
+      if (pr.state === 'open' && !options.skipGitHubMutations) {
         try {
           // Post a comment to GitHub
           const commentBody = `This PR has been classified as a duplicate of #${parent.id} which has been merged upstream. Closing as duplicate.`;
@@ -455,6 +459,51 @@ export async function rebuildDuplicates(db: D1Database, token: string): Promise<
   }
 
   return { closed: closedCount };
+}
+
+/** Closes at most one already-resolved duplicate PR, bounding GitHub writes to two requests. */
+export async function closeOneResolvedDuplicate(
+  db: D1Database,
+  token: string,
+): Promise<{ done: boolean; closed: number }> {
+  const pr = await db.prepare(`
+    SELECT child.id, child.repo_name, child.number, parent.id AS parent_id
+      FROM pull_requests child
+      JOIN pull_requests parent ON parent.id = child.duplicate_of
+     WHERE child.state = 'open'
+       AND child.closed_as_duplicate = 0
+       AND (parent.merged_at IS NOT NULL OR parent.state = 'closed')
+     ORDER BY child.id
+     LIMIT 1
+  `).first<{ id: number; repo_name: string; number: number; parent_id: number }>();
+  if (!pr) return { done: true, closed: 0 };
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+    'User-Agent': 'oasis-worker-sync/1.0',
+  };
+  const commentResponse = await fetch(
+    `https://api.github.com/repos/owasp-oasis/${pr.repo_name}/issues/${pr.number}/comments`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        body: `This PR has been classified as a duplicate of #${pr.parent_id} which has been merged upstream. Closing as duplicate.`,
+      }),
+    },
+  );
+  if (!commentResponse.ok) throw new Error(`GitHub duplicate comment failed with HTTP ${commentResponse.status}`);
+  const closeResponse = await fetch(
+    `https://api.github.com/repos/owasp-oasis/${pr.repo_name}/pulls/${pr.number}`,
+    { method: 'PATCH', headers, body: JSON.stringify({ state: 'closed' }) },
+  );
+  if (!closeResponse.ok) throw new Error(`GitHub duplicate close failed with HTTP ${closeResponse.status}`);
+  await db.prepare(
+    "UPDATE pull_requests SET closed_as_duplicate = 1, state = 'closed' WHERE id = ?",
+  ).bind(pr.id).run();
+  return { done: false, closed: 1 };
 }
 
 export async function getExistingMergedUpstream(db: D1Database, repoId: number, prNumber: number): Promise<number> {
