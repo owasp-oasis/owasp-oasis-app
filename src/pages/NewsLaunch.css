@@ -11,8 +11,8 @@
 }
 
 .news-back {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
   text-decoration: none;
   font-family: var(--mono);
   width: fit-content;
@@ -29,8 +29,8 @@
 }
 
 .news-article-meta {
-  font-size: 0.88rem;
-  opacity: 0.65;
+  font-size: 0.85rem;
+  opacity: 0.6;
   color: var(--white);
 }
 
@@ -41,23 +41,180 @@
 
 .news-article-body p {
   font-size: 1.05rem;
-  line-height: 1.85;
+  line-height: 1.82;
   color: var(--gray-600);
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .news-article-body h2 {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--blue-dark);
-  margin: 40px 0 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 44px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── FOR IMMEDIATE RELEASE ── */
+.pr-release {
+  font-family: var(--mono);
+  font-size: 0.72rem !important;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted) !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--gray-200);
+  margin-bottom: 28px !important;
+}
+
+/* ── PR Headline ── */
+.pr-headline {
+  font-family: var(--serif);
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem) !important;
+  line-height: 1.35 !important;
+  color: var(--ink) !important;
+  margin-bottom: 14px !important;
+}
+
+/* ── Sub-headline ── */
+.pr-subhead {
+  font-size: 1rem !important;
+  font-style: italic;
+  line-height: 1.7 !important;
+  color: var(--muted) !important;
+  margin-bottom: 32px !important;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+/* ── Callout bullets ── */
+.pr-bullets {
+  border-left: 3px solid var(--blue);
+  padding: 6px 0 6px 24px;
+  margin-bottom: 36px;
+}
+
+.pr-bullets ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pr-bullets li {
+  font-size: 0.97rem;
+  line-height: 1.72;
+  color: var(--gray-600);
+}
+
+.pr-bullets li strong {
+  color: var(--ink-soft);
+}
+
+/* ── Dateline ── */
+.pr-dateline strong {
+  color: var(--ink);
+}
+
+/* ── Pull quotes ── */
+.pr-quote {
+  margin: 32px 0;
+  padding: 20px 0 20px 24px;
+  border-left: 3px solid var(--green);
+}
+
+.pr-quote p {
+  font-family: var(--serif);
+  font-size: 1.08rem !important;
+  font-style: italic;
+  line-height: 1.78 !important;
+  color: var(--ink-soft) !important;
+  margin-bottom: 10px !important;
+}
+
+.pr-quote cite {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  display: block;
+}
+
+/* ── Three-part process ── */
+.pr-process {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 28px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pr-process li {
+  font-size: 1.02rem;
+  line-height: 1.78;
+  color: var(--gray-600);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.pr-process li:first-child {
+  border-top: 1px solid var(--gray-200);
+}
+
+.pr-process li strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--blue-dark);
+  margin-bottom: 4px;
+}
+
+/* ── Roles list ── */
+.pr-roles {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pr-roles li {
+  font-size: 1rem;
+  line-height: 1.72;
+  color: var(--gray-600);
+  padding-left: 16px;
+  position: relative;
+}
+
+.pr-roles li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.pr-roles li strong {
+  color: var(--ink-soft);
 }
 
 /* ── CTA block ── */
 .news-article-cta {
   margin-top: 48px;
-  padding: 28px 32px;
-  background: var(--gray-100);
+  padding: 24px 28px;
+  background: var(--green-soft);
   border-radius: 10px;
   border-left: 4px solid var(--green);
   display: flex;
@@ -66,16 +223,80 @@
 }
 
 .news-article-cta p {
-  margin-bottom: 0;
-  font-size: 1rem;
+  margin-bottom: 0 !important;
+  font-size: 1rem !important;
+  color: var(--ink-soft) !important;
 }
 
 .news-article-cta a {
-  color: var(--blue);
+  color: var(--blue-dark);
+  font-weight: 700;
   text-decoration: none;
-  font-weight: 600;
 }
 
 .news-article-cta a:hover {
-  color: var(--blue-dark);
+  text-decoration: underline;
+}
+
+/* ── Divider ── */
+.pr-divider {
+  border: none;
+  border-top: 1px solid var(--gray-200);
+  margin: 52px 0 36px;
+}
+
+/* ── Boilerplate ── */
+.pr-boilerplate-title {
+  font-family: var(--mono);
+  font-size: 0.7rem !important;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted) !important;
+  margin-bottom: 10px !important;
+  margin-top: 28px !important;
+}
+
+.pr-boilerplate {
+  font-size: 0.9rem !important;
+  line-height: 1.75 !important;
+  color: var(--muted) !important;
+}
+
+.pr-disclaimer {
+  font-size: 0.82rem !important;
+  font-style: italic;
+  color: var(--gray-400) !important;
+  margin-top: -4px !important;
+}
+
+/* ── Media Contact ── */
+.pr-contact {
+  margin-top: 8px;
+}
+
+.pr-contact-label {
+  font-family: var(--mono);
+  font-size: 0.7rem !important;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted) !important;
+  margin-bottom: 10px !important;
+}
+
+.pr-contact p {
+  font-size: 0.95rem !important;
+  line-height: 1.9 !important;
+  color: var(--gray-600) !important;
+}
+
+/* ── End mark ── */
+.pr-end {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.85rem !important;
+  letter-spacing: 0.1em;
+  color: var(--gray-400) !important;
+  margin-top: 48px !important;
 }
