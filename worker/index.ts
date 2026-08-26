@@ -16,11 +16,17 @@ import {
   jsonOk,
   jsonErr,
 } from './security.js';
-import { runSync, runSyncOneRepo } from './sync.js';
-import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
+import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
 import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
 import { startShadowSync } from './shadowSync.js';
+import {
+  CanonicalSyncWorkflow,
+  canonicalCutoverEligible,
+  canonicalScheduleEnabled,
+  setCanonicalScheduleEnabled,
+  startCanonicalSync,
+} from './canonicalSync.js';
 import {
   handleMeta,
   handleRepos,
@@ -160,41 +166,49 @@ export default {
         }
       }
 
-       /* ── GET /api/admin/full-sync ───────────────────────────────
-        * Triggers a full cron-style sync (reactions enabled, all PRs).
-        * Unlike /leaderboard-refresh which uses the chunked manual sync
-        * (skipReactions=true), this calls runSync() directly — the same
-        * path the scheduled cron uses — so all comment_reactions rows
-        * are fetched and written.
-        *
-        * Use this after resetting last_synced_at to epoch to force a
-        * complete re-ingestion of all PR comment and reaction data.
-        *
-        * Protected by X-Admin-Secret header (same as /api/admin/registrations).
-        * ──────────────────────────────────────────────────────────── */
+       /* ── Retired monolithic sync endpoint ─────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/full-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
-         if (!env.DB) return jsonErr('DB not available', 503, request);
-         await env.DB.prepare(
-           "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-         ).run();
-         const result = await runSync(env);
-         return secHeaders(Response.json(result), request);
+         return jsonErr('The monolithic sync is retired. Use POST /api/admin/sync/canonical/run.', 410, request);
        }
 
        /* ── GET /api/admin/run-cleanup ───────────────────────────────
-        * Triggers both cleanup passes manually (without waiting for cron).
-        * First reconciles removed repositories from the complete public
-        * organization listing, then checks remaining PRs individually.
+        * Reconciles repositories from a complete public organization listing.
+        * Pull requests are reconciled from each repository's complete catalog
+        * by the bounded canonical Workflow.
         *
         * Protected by X-Admin-Secret header (same as other admin endpoints).
         * ──────────────────────────────────────────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/run-cleanup') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         if (env.ENVIRONMENT !== 'production') return jsonErr('Canonical cleanup is production-only.', 409, request);
          if (!env.DB) return jsonErr('DB not available', 503, request);
          const repositories = await reconcileRemovedRepositories(env);
-         const pullRequests = await runCleanup(env);
-         return secHeaders(Response.json({ repositories, pull_requests: pullRequests }), request);
+         return secHeaders(Response.json({ repositories, pull_requests: { deferred_to_canonical_sync: true } }), request);
+       }
+
+       /* ── Bounded canonical sync canary and schedule controls ──── */
+       if (method === 'POST' && url.pathname === '/api/admin/sync/canonical/run') {
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         const result = await startCanonicalSync(env, 'manual');
+         return secHeaders(Response.json(result, { status: result.started ? 202 : 409 }), request);
+       }
+
+       if (method === 'POST' && url.pathname === '/api/admin/sync/canonical/schedule') {
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         if (env.ENVIRONMENT !== 'production') return jsonErr('Canonical scheduling is production-only.', 409, request);
+         let body: { enabled?: unknown };
+         try {
+           body = await request.json<{ enabled?: unknown }>();
+         } catch {
+           return jsonErr('Request body must be valid JSON.', 400, request);
+         }
+         if (typeof body.enabled !== 'boolean') return jsonErr('enabled must be a boolean', 400, request);
+         if (body.enabled && !await canonicalCutoverEligible(env.DB)) {
+           return jsonErr('Canonical scheduling requires three consecutive matching shadow parity runs.', 409, request);
+         }
+         await setCanonicalScheduleEnabled(env.DB, body.enabled);
+         return jsonOk({ enabled: body.enabled }, request);
        }
 
        /* ── Leaderboard API ───────────────────────────────────────── */
@@ -241,17 +255,9 @@ export default {
       if (method === 'GET' && url.pathname === '/api/leaderboard/tools')
         return await handleTools(env, request, url);
 
-      /* ── Manual sync trigger — chunked one repo per call ───────── */
+      /* ── Retired public sync trigger ───────────────────────────── */
       if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
-        if (!env.DB) return jsonErr('DB not available', 503, request);
-        await env.DB.prepare(
-          "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-        ).run();
-        await env.DB.prepare(
-          "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)",
-        ).bind(new Date().toISOString()).run();
-        const result = await runSyncOneRepo(env);
-        return secHeaders(Response.json(result), request);
+        return jsonErr('This public sync trigger is retired. Use the authenticated canonical sync endpoint.', 410, request);
       }
 
       /* ── React SPA fallback via ASSETS ─────────────────────────── */
@@ -273,28 +279,29 @@ export default {
       await runTrackedHubSpot(env, 'scheduled');
       return;
     }
-    if (event.cron !== '0 */4 * * *') {
+    if (event.cron === '30 2 * * *' && env.ENVIRONMENT === 'preview') {
+      const cutoff = await env.DB.prepare(
+        "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
+      ).first<{ value: string }>();
+      const reference = `preview-${new Date(event.scheduledTime).toISOString()}`;
+      await startShadowSync(env, reference, cutoff?.value ?? new Date(event.scheduledTime).toISOString());
+      return;
+    }
+    if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
     }
-
-    const legacy = await runTrackedLegacySync(env);
-    const canonicalCutoff = await env.DB.prepare(
-      "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
-    ).first<{ value: string }>();
-    const shadowInstanceId = await startShadowSync(
-      env,
-      legacy.pipelineRunId,
-      canonicalCutoff?.value ?? new Date(event.scheduledTime).toISOString(),
-    );
-    console.log(JSON.stringify({
-      event: 'shadow_sync_enqueued',
-      legacy_pipeline_run_id: legacy.pipelineRunId,
-      workflow_instance_id: shadowInstanceId,
-    }));
+    if (!await canonicalScheduleEnabled(env.DB)) {
+      console.log(JSON.stringify({ event: 'canonical_sync_schedule_disabled_legacy_retained' }));
+      await runTrackedLegacySync(env);
+      return;
+    }
+    const dispatch = await startCanonicalSync(env, 'scheduled');
+    console.log(JSON.stringify({ event: 'canonical_sync_dispatched', ...dispatch }));
   },
 };
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
 export { ShadowSyncWorkflow } from './shadowSync.js';
+export { CanonicalSyncWorkflow };

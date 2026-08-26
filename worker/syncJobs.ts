@@ -33,7 +33,8 @@ export interface StartSyncJobOptions {
 
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
   { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'After each legacy sync', criticalForWorkspace: false },
+  { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Manual canary; every 4 hours after activation', criticalForWorkspace: true },
+  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'Daily in preview', criticalForWorkspace: false },
   { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
   { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
   { key: 'upstream_merge_status', label: 'Upstream merge status', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
@@ -348,8 +349,11 @@ function publicRun(row: JobRunRow): Record<string, unknown> {
 async function getSyncStatusWithObservability(env: Env): Promise<Record<string, unknown>> {
   const db = env.DB;
   const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
-  const [stateRows, runRows, incompleteRows, parity, budgets, budgetHistory, hubspot] = await Promise.all([
-    db.prepare("SELECT key, value FROM sync_state WHERE key IN ('last_synced_at', 'sync_running')")
+  const [stateRows, runRows, incompleteRows, parity, budgets, budgetHistory, hubspot, canonicalLock] = await Promise.all([
+    db.prepare(`SELECT key, value FROM sync_state WHERE key IN (
+      'last_synced_at', 'sync_running', 'canonical_sync_enabled',
+      'canonical_pipeline_run_id', 'canonical_pipeline_phase', 'canonical_pipeline_updated_at'
+    )`)
       .all<{ key: string; value: string }>(),
     db.prepare(`
       SELECT * FROM sync_job_runs
@@ -381,6 +385,10 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
         SUM(CASE WHEN status = 'synced' THEN 1 ELSE 0 END) AS synced
       FROM hubspot_sync_queue
     `).first<Record<string, number | null>>(),
+    db.prepare(`
+      SELECT pipeline_run_id, acquired_at, lease_expires_at
+        FROM sync_pipeline_locks WHERE lock_key = 'canonical_workspace_sync'
+    `).first<Record<string, unknown>>(),
   ]);
 
   const state = new Map((stateRows.results ?? []).map(row => [row.key, row.value]));
@@ -388,9 +396,11 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
   const running = state.get('sync_running') === '1';
   const ageMs = lastSuccessAt ? Date.now() - Date.parse(lastSuccessAt) : Number.POSITIVE_INFINITY;
   const latestLegacy = (runRows.results ?? []).find(row => row.job_key === 'legacy_workspace_sync');
+  const latestCanonical = (runRows.results ?? []).find(row => row.job_key === 'canonical_workspace_sync');
+  const latestWorkspace = latestCanonical ?? latestLegacy;
   let overallStatus: 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown' = 'unknown';
   if (running) overallStatus = 'running';
-  else if (latestLegacy?.status === 'failed') overallStatus = 'degraded';
+  else if (latestWorkspace?.status === 'failed') overallStatus = 'degraded';
   else if (lastSuccessAt && ageMs > 8 * 3_600_000) overallStatus = 'stale';
   else if (lastSuccessAt) overallStatus = 'healthy';
 
@@ -422,8 +432,19 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
       status: overallStatus,
       sync_running: running,
       last_success_at: lastSuccessAt,
-      last_attempt_at: latestLegacy?.started_at ?? null,
+      last_attempt_at: latestWorkspace?.started_at ?? null,
       stale_after_hours: 8,
+    },
+    canonical: {
+      schedule_enabled: state.get('canonical_sync_enabled') === '1',
+      pipeline_run_id: state.get('canonical_pipeline_run_id') || null,
+      phase: state.get('canonical_pipeline_phase') ?? 'idle',
+      updated_at: state.get('canonical_pipeline_updated_at') ?? null,
+      lock: canonicalLock ? {
+        pipeline_run_id: canonicalLock['pipeline_run_id'],
+        acquired_at: canonicalLock['acquired_at'],
+        lease_expires_at: canonicalLock['lease_expires_at'],
+      } : null,
     },
     shadow: parity ? {
       pipeline_run_id: parity['pipeline_run_id'],
@@ -434,7 +455,7 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
       changed_during_run: parity['changed_during_run'],
       difference_count: parity['difference_count'],
       consecutive_matches: parity['consecutive_matches'],
-      required_consecutive_matches: 10,
+      required_consecutive_matches: 3,
       eligible_for_cutover: parity['eligible_for_cutover'] === 1,
       compared_at: parity['compared_at'],
     } : null,
@@ -460,6 +481,7 @@ const OBSERVABILITY_TABLES = [
   'sync_parity_runs',
   'sync_parity_differences',
   'sync_daily_budgets',
+  'sync_pipeline_locks',
 ] as const;
 
 export function isMissingSyncObservabilityTableError(error: unknown): boolean {
@@ -503,6 +525,13 @@ async function getPreMigrationSyncStatus(env: Env): Promise<Record<string, unkno
       stale_after_hours: 8,
     },
     shadow: null,
+    canonical: {
+      schedule_enabled: false,
+      pipeline_run_id: null,
+      phase: 'migration_required',
+      updated_at: null,
+      lock: null,
+    },
     budgets: [],
     budget_history: [],
     incomplete_runs: [],
