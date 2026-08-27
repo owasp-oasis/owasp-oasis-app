@@ -29,10 +29,9 @@ jobs:
         run: |
           echo "Syncing to Google Sheets..."
           RESPONSE=$(curl -s -o /tmp/sheets_response.json -w "%{http_code}" \
-            -X POST \
             -H "Content-Type: application/json" \
             -d @/tmp/registrations.json \
-            -L --post302 \
+            -L \
             --max-time 30 \
             "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}?secret=${{ secrets.ADMIN_SECRET }}")
 
