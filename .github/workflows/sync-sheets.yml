@@ -32,7 +32,7 @@ jobs:
             -X POST \
             -H "Content-Type: application/json" \
             -d @/tmp/registrations.json \
-            -L \
+            -L --post302 \
             --max-time 30 \
             "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}?secret=${{ secrets.ADMIN_SECRET }}")
 
