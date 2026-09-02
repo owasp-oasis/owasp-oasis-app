@@ -11,16 +11,8 @@ const RETRYABLE_JOB_KEYS = new Set([
   'hubspot_contacts',
 ]);
 
-const RETRYABLE_STATUSES: readonly SyncJobStatus[] = [
-  'failed',
-  'skipped',
-  'deferred',
-  'interrupted',
-];
-
 interface RetryTarget {
   id: string;
-  status: SyncJobStatus;
 }
 
 async function finishRepositoryInventory(env: Env, runId: string): Promise<SyncJobStatus> {
@@ -130,12 +122,9 @@ export async function handleRetrySyncJob(
   if (active) return jsonErr('This sync job is already running', 409, request);
 
   const target = await env.DB.prepare(`
-    SELECT id, status FROM sync_job_runs
+    SELECT id FROM sync_job_runs
      WHERE job_key = ? ORDER BY started_at DESC LIMIT 1
   `).bind(jobKey).first<RetryTarget>();
-  if (!target || !RETRYABLE_STATUSES.includes(target.status)) {
-    return jsonErr('Only an incomplete sync job can be retried', 409, request);
-  }
 
   const retryRunId = await startSyncJob(env.DB, {
     jobKey,
@@ -160,7 +149,7 @@ export async function handleRetrySyncJob(
     ok: true,
     accepted: true,
     job_key: jobKey,
-    retried_run_id: target.id,
+    retried_run_id: target?.id ?? null,
     retry_run_id: retryRunId,
   }, { status: 202 }), request);
 }

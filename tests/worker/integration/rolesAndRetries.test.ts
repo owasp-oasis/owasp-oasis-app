@@ -191,7 +191,7 @@ describe('server-side roles and sync retries', () => {
     ]);
   });
 
-  it('refuses unsupported, complete, and currently active jobs for an administrator', async () => {
+  it('lets an administrator run completed and never-run jobs but refuses unsupported or active jobs', async () => {
     const productionEnv = { ...env, ENVIRONMENT: 'production' } as Env;
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
     const csrf = makeCsrf();
@@ -208,13 +208,43 @@ describe('server-side roles and sync retries', () => {
       jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'legacy',
     });
     await finishSyncJob(env.DB, completeRunId, 'succeeded');
+
+    await insertTestRepo(env, { id: 101, name: 'current-fork' });
+    fetchMock.when(request => request.url === (
+      'https://api.github.com/orgs/owasp-oasis/repos?type=public&per_page=100&page=1'
+    )).respondWith(Response.json([{ id: 101, name: 'current-fork', fork: true }]));
+    fetchMock.when(request => request.url === (
+      'https://api.github.com/orgs/owasp-oasis/repos?type=public&per_page=100&page=2'
+    )).respondWith(Response.json([]));
+
+    const completeCtx = createExecutionContext();
     const complete = await handleRetrySyncJob(
       retryRequest('repository_inventory', admin.sessionCookie, admin.tokenCookie, csrf),
       productionEnv,
-      createExecutionContext(),
+      completeCtx,
       'repository_inventory',
     );
-    expect(complete.status).toBe(409);
+    expect(complete.status).toBe(202);
+    await waitOnExecutionContext(completeCtx);
+
+    const neverRunCtx = createExecutionContext();
+    const neverRun = await handleRetrySyncJob(
+      retryRequest('hubspot_contacts', admin.sessionCookie, admin.tokenCookie, csrf),
+      productionEnv,
+      neverRunCtx,
+      'hubspot_contacts',
+    );
+    expect(neverRun.status).toBe(202);
+    await expect(neverRun.json()).resolves.toEqual(expect.objectContaining({
+      retried_run_id: null,
+    }));
+    await waitOnExecutionContext(neverRunCtx);
+
+    const firstHubSpotRun = await env.DB.prepare(`
+      SELECT status, trigger_type, mode FROM sync_job_runs
+       WHERE job_key = 'hubspot_contacts' ORDER BY started_at DESC LIMIT 1
+    `).first<{ status: string; trigger_type: string; mode: string }>();
+    expect(firstHubSpotRun).toEqual({ status: 'skipped', trigger_type: 'manual', mode: 'live' });
 
     const failedRunId = await startSyncJob(env.DB, {
       jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy',

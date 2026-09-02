@@ -283,7 +283,7 @@ This is a transitional authorization layer, not a general identity-management sy
 
 The status page exposes retry controls only to an authenticated administrator. `POST /api/admin/sync/jobs/:jobKey/retry` independently resolves the server session, checks the stored role, and validates the CSRF double-submit token. It does not accept `X-Admin-Secret` as a substitute. Accepted and completed attempts are written to `privileged_action_audit`.
 
-Only independently executable jobs currently support retry: repository inventory, orphan cleanup, and HubSpot contacts. A retry is accepted only when that job's latest run is incomplete and no instance of the same job is queued or running. Canonical stages that depend on pipeline state intentionally remain non-retryable until they have a safe stage-resumption contract.
+Only independently executable jobs currently support manual execution: repository inventory, orphan cleanup, and HubSpot contacts. An administrator can retry a failed job, rerun a completed job, or start a job with no recorded history. The server refuses the request while an instance of the same job is queued or running. Canonical stages that depend on pipeline state intentionally remain unavailable until they have a safe stage-resumption contract.
 
 To assign or change a role, first obtain the immutable GitHub user ID from GitHub, then execute a parameterized equivalent of this upsert against the target environment:
 

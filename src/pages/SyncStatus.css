@@ -59,6 +59,7 @@
 .sync-job-card summary small { color: var(--muted); }
 .sync-job-body { padding: 4px 18px 18px; border-top: 1px solid var(--line); }
 .sync-job-latest { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 14px 0; color: var(--muted); font-size: .85rem; }
+.sync-job-empty { color: var(--muted); margin: 14px 0; }
 .sync-admin-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 14px 0; padding: 12px 14px; border: 1px solid #bfdbfe; border-radius: 9px; background: #eff6ff; }
 .sync-admin-actions span { color: #1e40af; font: 700 .72rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .sync-admin-actions button { border: 0; border-radius: 8px; padding: 8px 12px; background: var(--blue-dark); color: var(--white); font-weight: 750; cursor: pointer; }
