@@ -69,12 +69,21 @@ Required behavior:
 ### Administrative dashboard
 
 - Create an unlisted, authenticated administrative route separate from `/workspace/status`.
-- Add server-enforced administrator authorization; do not put `ADMIN_SECRET` in browser code or local storage.
+- Reuse the temporary server-enforced administrator role for initial access; do not put `ADMIN_SECRET` in browser code or local storage.
 - Support selectable date ranges, comparisons with the preceding period, and daily/weekly/monthly aggregation.
 - Show site usage, route usage, availability, error rates, cache performance, Worker performance, and operational-budget trends.
 - Clearly distinguish measured values from estimates supplied by Cloudflare.
 - Suppress empty, incomplete, or still-collecting periods rather than presenting them as zero.
 - Provide data freshness, collector status, and backfill state on every view.
+
+### Replace the temporary application-role layer
+
+- Replace the rudimentary D1 role assignment with a reviewed identity and permission model before administrative capabilities expand materially.
+- Define permissions as capabilities instead of continuing to hard-code role names at each endpoint.
+- Add an authenticated, audited role-administration workflow with protection against removing the final administrator.
+- Require recent authentication or equivalent step-up verification for high-impact actions.
+- Define audit retention, inspection, and alerting rules; keep privileged action details free of tokens and sensitive payloads.
+- Migrate immutable GitHub user IDs and existing role grants without falling back to mutable logins after legacy sessions expire.
 
 ## Planned feature branch: privacy-safe validation engagement metrics
 

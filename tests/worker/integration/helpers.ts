@@ -207,12 +207,36 @@ CREATE TABLE IF NOT EXISTS sync_pipeline_locks (
 
 -- Auth tables
 CREATE TABLE IF NOT EXISTS user_sessions (
-  session_id   TEXT PRIMARY KEY,
-  github_login TEXT NOT NULL,
-  avatar_url   TEXT,
-  created_at   TEXT NOT NULL,
-  expires_at   TEXT NOT NULL
+  session_id     TEXT PRIMARY KEY,
+  github_user_id INTEGER,
+  github_login   TEXT NOT NULL,
+  avatar_url     TEXT,
+  created_at     TEXT NOT NULL,
+  expires_at     TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  github_user_id INTEGER PRIMARY KEY,
+  github_login TEXT NOT NULL COLLATE NOCASE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  assigned_by_github_user_id INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_roles_login ON user_roles(github_login COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS privileged_action_audit (
+  id TEXT PRIMARY KEY, github_user_id INTEGER, github_login TEXT NOT NULL COLLATE NOCASE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  action TEXT NOT NULL, target_type TEXT, target_id TEXT,
+  outcome TEXT NOT NULL CHECK (outcome IN ('accepted', 'succeeded', 'failed', 'rejected')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_privileged_action_audit_created ON privileged_action_audit(created_at DESC);
+
+INSERT OR IGNORE INTO user_roles (
+  github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+) VALUES (7505051, 'humor4fun', 'admin', 7505051, '2026-09-02T00:00:00.000Z', '2026-09-02T00:00:00.000Z');
 
 CREATE TABLE IF NOT EXISTS user_preferences (
   github_login         TEXT PRIMARY KEY,
@@ -238,6 +262,7 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
 CREATE TABLE IF NOT EXISTS sync_job_runs (
   id TEXT PRIMARY KEY, pipeline_run_id TEXT, workflow_instance_id TEXT,
@@ -322,6 +347,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'user_votes',
     'user_preferences',
     'user_sessions',
+    'privileged_action_audit',
     'comment_reactions',
     'pr_comments',
     'pr_participants',
@@ -335,6 +361,13 @@ export async function cleanDB(env: Env): Promise<void> {
   // Batch delete all rows
   const stmts = tables.map(table => `DELETE FROM ${table}`);
   await env.DB.prepare(stmts.join('; ')).run();
+
+  await env.DB.prepare(`
+    DELETE FROM user_roles;
+    INSERT INTO user_roles (
+      github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+    ) VALUES (7505051, 'humor4fun', 'admin', 7505051, '2026-09-02T00:00:00.000Z', '2026-09-02T00:00:00.000Z');
+  `).run();
 
   // Reset sync_state to defaults
   await env.DB.prepare(`
@@ -391,6 +424,7 @@ export async function createTestSession(
   env: Env,
   overrides?: {
     session_id?: string;
+    github_user_id?: number | null;
     github_login?: string;
     avatar_url?: string | null;
     github_token?: string;
@@ -398,6 +432,7 @@ export async function createTestSession(
 ): Promise<{ sessionCookie: string; tokenCookie: string; sessionId: string; login: string }> {
   const session_id = overrides?.session_id ?? makeCsrf();
   const github_login = overrides?.github_login ?? 'test-user';
+  const github_user_id = overrides?.github_user_id ?? null;
   const avatar_url = overrides?.avatar_url ?? 'https://avatars.githubusercontent.com/u/1?v=4';
   const github_token = overrides?.github_token ?? 'test-token';
 
@@ -406,9 +441,9 @@ export async function createTestSession(
 
   // Insert session into DB
   await env.DB.prepare(`
-    INSERT INTO user_sessions (session_id, github_login, avatar_url, created_at, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(session_id, github_login, avatar_url, now, expires_at).run();
+    INSERT INTO user_sessions (session_id, github_user_id, github_login, avatar_url, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(session_id, github_user_id, github_login, avatar_url, now, expires_at).run();
 
   // Encrypt token
   const encryptedToken = await encryptToken(env.TOKEN_ENCRYPTION_KEY, github_token);

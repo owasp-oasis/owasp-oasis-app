@@ -7,14 +7,14 @@
 import type { Env } from './types.js';
 import { ghFetchAll, META_REPOS, ORG, type GitHubRepo } from './github.js';
 
-interface CleanupResult {
+export interface CleanupResult {
   checked: number;
   flagged: number;
   errors: number;
   deletedPRs: Array<{ repo: string; number: number; id: number }>;
 }
 
-interface RepositoryReconciliationResult {
+export interface RepositoryReconciliationResult {
   checked: number;
   removed: number;
   flagged: number;

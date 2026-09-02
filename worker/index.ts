@@ -45,6 +45,7 @@ import { handleGetPreferences, handlePutPreferences } from './handlers/preferenc
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
+import { handleRetrySyncJob } from './handlers/syncRetry.js';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -150,6 +151,10 @@ export default {
       const syncRunMatch = url.pathname.match(/^\/api\/sync\/status\/runs\/([^/]+)$/);
       if (method === 'GET' && syncRunMatch) {
         return await handleSyncRunDetail(request, env, syncRunMatch[1]);
+      }
+      const syncRetryMatch = url.pathname.match(/^\/api\/admin\/sync\/jobs\/([a-z0-9_]+)\/retry$/);
+      if (method === 'POST' && syncRetryMatch) {
+        return await handleRetrySyncJob(request, env, ctx, syncRetryMatch[1]);
       }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */

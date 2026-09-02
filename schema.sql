@@ -234,11 +234,45 @@ CREATE TABLE IF NOT EXISTS sync_pipeline_locks (
 --   ALTER TABLE user_sessions DROP COLUMN github_token;
 -- The token is now stored only in an AES-GCM encrypted HttpOnly cookie (__gh_token).
 CREATE TABLE IF NOT EXISTS user_sessions (
-  session_id   TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
-  github_login TEXT NOT NULL,
-  avatar_url   TEXT,
-  created_at   TEXT NOT NULL,
-  expires_at   TEXT NOT NULL       -- ISO-8601, 7 days from login
+  session_id     TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
+  github_user_id INTEGER,            -- immutable GitHub identity; null only on pre-migration sessions
+  github_login   TEXT NOT NULL,
+  avatar_url     TEXT,
+  created_at     TEXT NOT NULL,
+  expires_at     TEXT NOT NULL       -- ISO-8601, 7 days from login
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  github_user_id             INTEGER PRIMARY KEY,
+  github_login               TEXT NOT NULL COLLATE NOCASE,
+  role                       TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  assigned_by_github_user_id INTEGER,
+  created_at                 TEXT NOT NULL,
+  updated_at                 TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_roles_login ON user_roles(github_login COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS privileged_action_audit (
+  id             TEXT PRIMARY KEY,
+  github_user_id INTEGER,
+  github_login   TEXT NOT NULL COLLATE NOCASE,
+  role           TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  action         TEXT NOT NULL,
+  target_type    TEXT,
+  target_id      TEXT,
+  outcome        TEXT NOT NULL CHECK (outcome IN ('accepted', 'succeeded', 'failed', 'rejected')),
+  created_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_privileged_action_audit_created
+  ON privileged_action_audit(created_at DESC);
+
+INSERT OR IGNORE INTO user_roles (
+  github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+) VALUES (
+  7505051, 'humor4fun', 'admin', 7505051,
+  '2026-09-02T00:00:00.000Z', '2026-09-02T00:00:00.000Z'
 );
 
 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -265,6 +299,7 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
 -- Sync observability and shadow validation tables are introduced by
 -- migrations/0007_sync_job_observability.sql. Apply migrations after this

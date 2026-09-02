@@ -223,7 +223,9 @@ node export-db.js
 | `contributors` | Aggregated per-user validation stats (prs_worked, accepts, modifies, rejects, reactions_received) |
 | `pr_participants` | Per-PR per-user interaction records |
 | `sync_state` | Key/value store for sync cursor, last sync times, running flag |
-| `user_sessions` | Active GitHub OAuth sessions (30-day TTL; HttpOnly cookie maps to `session_id`) |
+| `user_sessions` | Active GitHub OAuth sessions (7-day TTL; HttpOnly cookie maps to `session_id`) |
+| `user_roles` | Temporary GitHub-ID-backed application role assignments |
+| `privileged_action_audit` | Append-only outcome log for role-protected server actions |
 | `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
 
 ---
@@ -272,6 +274,31 @@ Before enabling HubSpot, create any custom contact properties referenced by `HUB
 ## Observability
 
 Wrangler enables persisted Worker logs and invocation logs at full head sampling. Distributed traces remain disabled. Runtime code emits structured operational events and must not include registration records, application narratives, OAuth values, authorization headers, or external API response bodies.
+
+### Temporary application roles and manual retries
+
+Migration `0009_user_roles.sql` introduces the deliberately small `admin`, `moderator`, `member`, and `guest` role model. Unauthenticated requests are guests, authenticated GitHub users default to members, and an explicit D1 assignment can promote or restrict an account. Assignments use GitHub's immutable numeric user ID as their authority; the login is retained only as an operator-readable snapshot and as a compatibility lookup for sessions created before this migration. `humor4fun` (GitHub user ID `7505051`) is seeded as the first administrator.
+
+This is a transitional authorization layer, not a general identity-management system. Role changes are performed directly in D1, must identify the assigning administrator, and take effect on the next request. Never infer elevated access from a browser-supplied role, a GitHub login alone, or the presence of `ADMIN_SECRET`.
+
+The status page exposes retry controls only to an authenticated administrator. `POST /api/admin/sync/jobs/:jobKey/retry` independently resolves the server session, checks the stored role, and validates the CSRF double-submit token. It does not accept `X-Admin-Secret` as a substitute. Accepted and completed attempts are written to `privileged_action_audit`.
+
+Only independently executable jobs currently support retry: repository inventory, orphan cleanup, and HubSpot contacts. A retry is accepted only when that job's latest run is incomplete and no instance of the same job is queued or running. Canonical stages that depend on pipeline state intentionally remain non-retryable until they have a safe stage-resumption contract.
+
+To assign or change a role, first obtain the immutable GitHub user ID from GitHub, then execute a parameterized equivalent of this upsert against the target environment:
+
+```sql
+INSERT INTO user_roles (
+  github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(github_user_id) DO UPDATE SET
+  github_login = excluded.github_login,
+  role = excluded.role,
+  assigned_by_github_user_id = excluded.assigned_by_github_user_id,
+  updated_at = excluded.updated_at;
+```
+
+Allowed values are `admin`, `moderator`, `member`, and `guest`. Use an explicit `guest` assignment to keep an account signed in while denying member-level permissions. Do not add a public role-management endpoint to this temporary system.
 
 ### Retired sync entry points
 
