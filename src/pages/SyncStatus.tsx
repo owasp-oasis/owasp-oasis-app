@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import './SyncStatus.css'
 
 type OverallStatus = 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown'
@@ -27,6 +28,7 @@ interface PublicJob {
   category: 'workspace' | 'integration' | 'analytics'
   schedule: string
   status: RunStatus | 'unknown'
+  retryable: boolean
   latest_run: PublicRun | null
   recent_runs: PublicRun[]
 }
@@ -137,6 +139,8 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`sync-status-pill sync-status-pill--${status}`}>{status}</span>
 }
 
+const RETRYABLE_STATUSES: readonly string[] = ['failed', 'skipped', 'deferred', 'interrupted']
+
 export function SyncRunDetail() {
   const { runId = '' } = useParams()
   const [detail, setDetail] = useState<RunDetailPayload | null>(null)
@@ -199,14 +203,17 @@ export function SyncRunDetail() {
 }
 
 export default function SyncStatus() {
+  const { user } = useAuth()
   const [payload, setPayload] = useState<SyncStatusPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [retryingJob, setRetryingJob] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      const response = await fetch('/api/sync/status')
+      const response = await fetch(`/api/sync/status?refresh=${Date.now()}`, { cache: 'no-store' })
       if (!response.ok) throw new Error(`Status API returned ${response.status}`)
       setPayload(await response.json() as SyncStatusPayload)
       setError(null)
@@ -216,6 +223,36 @@ export default function SyncStatus() {
       setRefreshing(false)
     }
   }, [])
+
+  const retryJob = useCallback(async (job: PublicJob) => {
+    if (!job.latest_run || !RETRYABLE_STATUSES.includes(job.latest_run.status)) return
+    setRetryingJob(job.key)
+    setActionMessage(null)
+    try {
+      const csrfResponse = await fetch('/api/csrf', { credentials: 'include', cache: 'no-store' })
+      if (!csrfResponse.ok) throw new Error('Unable to obtain a security token')
+      const { token } = await csrfResponse.json() as { token: string }
+      const response = await fetch(`/api/admin/sync/jobs/${encodeURIComponent(job.key)}/retry`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-csrf-token': token },
+      })
+      const result = await response.json() as { error?: string; retry_run_id?: string }
+      if (!response.ok) throw new Error(result.error ?? `Retry request returned ${response.status}`)
+      setActionMessage({
+        kind: 'success',
+        text: `${job.label} retry accepted${result.retry_run_id ? ` as ${result.retry_run_id}` : ''}.`,
+      })
+      await refresh()
+    } catch (reason) {
+      setActionMessage({
+        kind: 'error',
+        text: reason instanceof Error ? reason.message : 'Unable to retry the sync job',
+      })
+    } finally {
+      setRetryingJob(null)
+    }
+  }, [refresh])
 
   useEffect(() => {
     void refresh()
@@ -245,6 +282,11 @@ export default function SyncStatus() {
           <button onClick={() => void refresh()} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
         </div>
         {error && <div className="sync-error">{error}. Existing results remain visible while retrying.</div>}
+        {actionMessage && (
+          <div className={actionMessage.kind === 'success' ? 'sync-action-success' : 'sync-error'} role="status">
+            {actionMessage.text}
+          </div>
+        )}
         {!payload && !error && <p>Loading synchronization status…</p>}
         {payload && (
           <>
@@ -356,6 +398,18 @@ export default function SyncStatus() {
                             <span>Mode {job.latest_run.mode}</span>
                           </div>
                           {job.latest_run.error && <p className="sync-run-error">{job.latest_run.error.code}: {job.latest_run.error.summary}</p>}
+                          {user?.role === 'admin' && job.retryable && RETRYABLE_STATUSES.includes(job.latest_run.status) && (
+                            <div className="sync-admin-actions">
+                              <span>Admin action</span>
+                              <button
+                                type="button"
+                                onClick={() => void retryJob(job)}
+                                disabled={retryingJob !== null}
+                              >
+                                {retryingJob === job.key ? 'Retrying…' : `Retry ${job.label}`}
+                              </button>
+                            </div>
+                          )}
                           <MetricList metrics={job.latest_run.metrics} />
                           <h3>Recent runs</h3>
                           <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>

@@ -19,6 +19,7 @@ export interface SyncJobDefinition {
   category: SyncJobCategory;
   schedule: string;
   criticalForWorkspace: boolean;
+  retryable: boolean;
 }
 
 export interface StartSyncJobOptions {
@@ -32,20 +33,20 @@ export interface StartSyncJobOptions {
 }
 
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
-  { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Manual canary; every 4 hours after activation', criticalForWorkspace: true },
-  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'Daily in preview', criticalForWorkspace: false },
-  { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'upstream_merge_status', label: 'Upstream merge status', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'pull_request_comments', label: 'Pull request comments', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'comment_reactions', label: 'Comment reactions', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'vote_projection', label: 'Vote projection', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'duplicate_resolution', label: 'Duplicate resolution', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'contributor_scores', label: 'Contributor scores', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'orphan_cleanup', label: 'Orphan cleanup', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true },
-  { key: 'hubspot_contacts', label: 'HubSpot contacts', category: 'integration', schedule: 'Hourly at :15', criticalForWorkspace: false },
-  { key: 'cloudflare_analytics', label: 'Cloudflare analytics archive', category: 'analytics', schedule: 'Daily (planned)', criticalForWorkspace: false },
+  { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Manual canary; every 4 hours after activation', criticalForWorkspace: true, retryable: false },
+  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'Daily in preview', criticalForWorkspace: false, retryable: false },
+  { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
+  { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'upstream_merge_status', label: 'Upstream merge status', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'pull_request_comments', label: 'Pull request comments', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'comment_reactions', label: 'Comment reactions', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'vote_projection', label: 'Vote projection', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'duplicate_resolution', label: 'Duplicate resolution', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'contributor_scores', label: 'Contributor scores', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: false },
+  { key: 'orphan_cleanup', label: 'Orphan cleanup', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
+  { key: 'hubspot_contacts', label: 'HubSpot contacts', category: 'integration', schedule: 'Hourly at :15', criticalForWorkspace: false, retryable: true },
+  { key: 'cloudflare_analytics', label: 'Cloudflare analytics archive', category: 'analytics', schedule: 'Daily (planned)', criticalForWorkspace: false, retryable: false },
 ] as const;
 
 const JOB_BY_KEY = new Map(SYNC_JOBS.map(job => [job.key, job]));
@@ -419,6 +420,7 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
       category: definition.category,
       schedule: definition.schedule,
       critical_for_workspace: definition.criticalForWorkspace,
+      retryable: definition.retryable && env.ENVIRONMENT === 'production',
       status: runs[0]?.status ?? 'unknown',
       latest_run: runs[0] ? publicRun(runs[0]) : null,
       recent_runs: runs.map(publicRun),
@@ -548,6 +550,7 @@ async function getPreMigrationSyncStatus(env: Env): Promise<Record<string, unkno
       category: definition.category,
       schedule: definition.schedule,
       critical_for_workspace: definition.criticalForWorkspace,
+      retryable: false,
       status: 'unknown',
       latest_run: null,
       recent_runs: [],

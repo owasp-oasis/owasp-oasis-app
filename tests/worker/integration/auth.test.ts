@@ -82,6 +82,7 @@ describe('Authentication (OAuth)', () => {
         .respondWith(
           new Response(
             JSON.stringify({
+              id: 12345,
               login: 'test-user',
               avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4',
             }),
@@ -148,6 +149,7 @@ describe('Authentication (OAuth)', () => {
         .all();
       expect(sessions.results).toHaveLength(1);
       expect((sessions.results[0] as any).github_login).toBe('test-user');
+      expect((sessions.results[0] as any).github_user_id).toBe(12345);
     });
 
     it('creates registrations row with validator role', async () => {
@@ -229,6 +231,7 @@ describe('Authentication (OAuth)', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.user).toBeNull();
+      expect(body.role).toBe('guest');
     });
 
     it('returns user data when authenticated', async () => {
@@ -244,6 +247,7 @@ describe('Authentication (OAuth)', () => {
         .respondWith(
           new Response(
             JSON.stringify({
+              id: 23456,
               login: 'authenticated-user',
               avatar_url: 'https://avatars.githubusercontent.com/u/2?v=4',
             }),
@@ -291,6 +295,7 @@ describe('Authentication (OAuth)', () => {
       expect(body.user).not.toBeNull();
       expect(body.user.login).toBe('authenticated-user');
       expect(body.user.avatar_url).toBeTruthy();
+      expect(body.user.role).toBe('member');
     });
 
     it('returns null user when session is expired', async () => {
