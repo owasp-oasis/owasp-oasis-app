@@ -195,6 +195,15 @@ CREATE TABLE IF NOT EXISTS sync_state (
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_synced_at',   '2020-01-01T00:00:00Z');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_sync_enabled', '0');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_run_id', '');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_phase', 'idle');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');
+
+CREATE TABLE IF NOT EXISTS sync_pipeline_locks (
+  lock_key TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, acquired_at TEXT NOT NULL,
+  lease_expires_at TEXT NOT NULL
+);
 
 -- Auth tables
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -229,6 +238,62 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
+
+CREATE TABLE IF NOT EXISTS sync_job_runs (
+  id TEXT PRIMARY KEY, pipeline_run_id TEXT, workflow_instance_id TEXT,
+  job_key TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL,
+  trigger_type TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL,
+  started_at TEXT NOT NULL, finished_at TEXT, duration_ms INTEGER,
+  expected_items INTEGER NOT NULL DEFAULT 0, completed_items INTEGER NOT NULL DEFAULT 0,
+  failed_items INTEGER NOT NULL DEFAULT 0, metrics_json TEXT NOT NULL DEFAULT '{}',
+  error_code TEXT, error_summary TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sync_job_runs_job_started ON sync_job_runs(job_key, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS sync_job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, job_run_id TEXT NOT NULL,
+  event_type TEXT NOT NULL, entity_type TEXT, entity_id TEXT, attempt INTEGER,
+  response_status INTEGER, message TEXT, details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_work_items (
+  id TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, job_run_id TEXT NOT NULL,
+  job_key TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT, status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0, leased_at TEXT, lease_expires_at TEXT,
+  last_error_code TEXT, last_error_summary TEXT, created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_shadow_entities (
+  pipeline_run_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  repository_id INTEGER, source_updated_at TEXT, fingerprint TEXT NOT NULL,
+  payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY(pipeline_run_id, entity_type, entity_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_parity_runs (
+  pipeline_run_id TEXT PRIMARY KEY, canonical_cutoff_at TEXT NOT NULL,
+  status TEXT NOT NULL, comparable_entities INTEGER NOT NULL DEFAULT 0,
+  matched_entities INTEGER NOT NULL DEFAULT 0, changed_during_run INTEGER NOT NULL DEFAULT 0,
+  difference_count INTEGER NOT NULL DEFAULT 0, consecutive_matches INTEGER NOT NULL DEFAULT 0,
+  eligible_for_cutover INTEGER NOT NULL DEFAULT 0, compared_at TEXT, created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_parity_differences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_run_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, difference_type TEXT NOT NULL,
+  fields_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_daily_budgets (
+  budget_date TEXT NOT NULL, budget_key TEXT NOT NULL, label TEXT NOT NULL,
+  unit TEXT NOT NULL, configured_limit INTEGER, consumed INTEGER NOT NULL DEFAULT 0,
+  reserved INTEGER NOT NULL DEFAULT 0, deferred INTEGER NOT NULL DEFAULT 0,
+  remaining INTEGER, reset_at TEXT, updated_at TEXT NOT NULL,
+  PRIMARY KEY(budget_date, budget_key)
+);
   `;
 
   // Split by semicolon and execute each statement
@@ -245,6 +310,14 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'sync_parity_differences',
+    'sync_parity_runs',
+    'sync_shadow_entities',
+    'sync_work_items',
+    'sync_job_events',
+    'sync_job_runs',
+    'sync_daily_budgets',
+    'sync_pipeline_locks',
     'hubspot_sync_queue',
     'user_votes',
     'user_preferences',
@@ -269,7 +342,11 @@ export async function cleanDB(env: Env): Promise<void> {
     INSERT INTO sync_state (key, value) VALUES
       ('last_synced_at', '2020-01-01T00:00:00Z'),
       ('sync_running', '0'),
-      ('last_manual_sync', '2020-01-01T00:00:00Z');
+      ('last_manual_sync', '2020-01-01T00:00:00Z'),
+      ('canonical_sync_enabled', '0'),
+      ('canonical_pipeline_run_id', ''),
+      ('canonical_pipeline_phase', 'idle'),
+      ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');
   `).run();
 
   const rateLimitKeys = await env.RATE_KV.list();

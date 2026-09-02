@@ -15,7 +15,21 @@ export interface Env {
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
   OAUTH_CALLBACK_URL: string;
+  SHADOW_SYNC_WORKFLOW?: Workflow<ShadowSyncParams>;
+  CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
 }
+
+export type ShadowSyncParams =
+  | { action: 'start'; legacyPipelineRunId: string; canonicalCutoffAt: string }
+  | { action: 'repository'; pipelineRunId: string }
+  | { action: 'pull_request'; pipelineRunId: string }
+  | { action: 'finalize'; pipelineRunId: string };
+
+export type CanonicalSyncParams =
+  | { action: 'inventory'; pipelineRunId: string }
+  | { action: 'sync'; pipelineRunId: string }
+  | { action: 'reaction'; pipelineRunId: string }
+  | { action: 'duplicate'; pipelineRunId: string };
 
 export interface SyncResult {
   ok: boolean;

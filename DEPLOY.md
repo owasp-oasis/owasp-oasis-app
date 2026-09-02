@@ -232,11 +232,38 @@ node export-db.js
 
 The leaderboard is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
 
-### Scheduled syncs (automatic)
+### Bounded Workflow rollout
 
-GitHub schedule: `0 */4 * * *` — every 4 hours.
+The production GitHub sync is implemented as a chain of bounded Workflow instances under the Workers Free 50-subrequest ceiling, which Cloudflare applies automatically. Do not add a Wrangler `[limits]` block while this Worker uses the Free plan: custom runtime limits are supported only by the paid Standard usage model and will make deployment fail. Repository/PR collection handles one PR per instance, reaction collection handles one validation comment per instance, and duplicate closing handles one PR (two GitHub writes) per instance. A D1 lease prevents overlapping canonical pipelines. The Workflow pauses before its tracked daily step allowance is exhausted and resumes after the UTC reset.
 
-The cron sync runs `runSync()` which uses the Worker's 1000 subrequest limit. It fetches all repos, PRs, comments, and reactions (including `+1` reactions on OASIS-template comments, which contribute to reputation scores).
+Preview runs the read-only shadow Workflow daily at `02:30 UTC`. It shares the production D1 database but writes only shadow, parity, work-item, and observability tables. Production keeps the `0 */4 * * *` trigger installed. While D1 key `canonical_sync_enabled` remains at its default `0`, that trigger continues to run the existing legacy synchronizer. Enabling the key atomically switches subsequent triggers to the bounded canonical Workflow; disabling it returns subsequent triggers to legacy behavior.
+
+Before deploying the migration, record a D1 Time Travel bookmark:
+
+```bash
+npx wrangler d1 time-travel info oasis-db --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --json
+npx wrangler d1 migrations apply oasis-db --remote --env production
+```
+
+After deployment, start one production canary and inspect `/workspace/status` until the canonical pipeline succeeds:
+
+```bash
+curl --fail-with-body -sS -X POST \
+  -H "X-Admin-Secret: ${OASIS_ADMIN_SECRET}" \
+  https://www.owasp-oasis.org/api/admin/sync/canonical/run
+```
+
+Do not enable the production schedule until preview has recorded three consecutive matching parity runs and the canary result has been reviewed. The server rejects early activation even with a valid admin secret.
+
+```bash
+curl --fail-with-body -sS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Secret: ${OASIS_ADMIN_SECRET}" \
+  --data '{"enabled":true}' \
+  https://www.owasp-oasis.org/api/admin/sync/canonical/schedule
+```
+
+Rollback is immediate and does not require a deploy: send the same request with `{"enabled":false}` so the next four-hour trigger uses the retained legacy synchronizer. If code rollback is also required, restore the previous Worker deployment only after disabling the schedule. Use the saved Time Travel bookmark only when canonical writes themselves must be reverted; restoring D1 also rolls back unrelated database writes after that bookmark and therefore requires explicit review.
 
 Production also processes the HubSpot queue at `15 * * * *`. Form submissions are written to D1 together with their outbox job, so a temporary HubSpot failure cannot lose the contact. Failed jobs return to `pending` with capped exponential backoff; stale processing claims are recovered automatically. Logs contain batch counts and safe error codes, never contact payloads or API response bodies.
 
@@ -246,16 +273,9 @@ Before enabling HubSpot, create any custom contact properties referenced by `HUB
 
 Wrangler enables persisted Worker logs and invocation logs at full head sampling. Distributed traces remain disabled. Runtime code emits structured operational events and must not include registration records, application narratives, OAuth values, authorization headers, or external API response bodies.
 
-### Manual sync trigger
+### Retired sync entry points
 
-```bash
-# Trigger one chunk (10 PRs) — call repeatedly until done: true
-curl https://preview.owasp-oasis.org/leaderboard-refresh
-```
-
-The manual endpoint runs `runSyncOneRepo()`, a cursor-based chunked sync designed to stay within the Worker's 50 subrequest limit in the fetch context. Each call processes up to 10 PRs and returns a progress message and cursor. Call it repeatedly until the response contains `"done": true`.
-
-Manual sync skips reactions (cron handles those). Reputation scores based on reactions will be updated at the next scheduled cron run.
+`GET /leaderboard-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
 
 ### Sync state
 
@@ -268,9 +288,9 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="UPDATE sync_state SET value = '0' WHERE key = 'sync_running'"
 
-# Reset cursor to re-sync from the beginning
-wrangler d1 execute oasis-db --remote \
-  --command="DELETE FROM sync_state WHERE key = 'sync_cursor'"
+# Inspect the canonical lease and phase
+wrangler d1 execute oasis-db --remote --env production \
+  --command="SELECT * FROM sync_pipeline_locks; SELECT key, value FROM sync_state WHERE key LIKE 'canonical_%'"
 ```
 
 ---
