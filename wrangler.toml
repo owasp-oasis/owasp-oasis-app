@@ -3,6 +3,9 @@ main               = "dist-worker/index.js"
 compatibility_date = "2026-08-24"
 workers_dev        = false
 
+# Workers Free applies its CPU and subrequest ceilings automatically. Do not add
+# a [limits] block here: custom runtime limits require the paid Standard model.
+
 # Persist privacy-safe Worker logs and invocation metadata. Traces remain disabled.
 [observability]
 enabled            = false
@@ -51,7 +54,13 @@ OAUTH_CALLBACK_URL   = "https://preview.owasp-oasis.org/api/auth/callback"
 
 # ── Cron triggers ──
 [triggers]
-crons = ["0 */4 * * *"]
+crons = ["30 2 * * *"]
+
+# Preview is strictly read-only with respect to canonical Workspace tables.
+[[workflows]]
+name       = "oasis-shadow-sync-preview"
+binding    = "SHADOW_SYNC_WORKFLOW"
+class_name = "ShadowSyncWorkflow"
 
 # ── Production environment ──
 [env.production]
@@ -92,9 +101,9 @@ OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
 [env.production.triggers]
 crons = ["0 */4 * * *", "15 * * * *"]
 
-# Shadow sync is production-only and read-only with respect to canonical
-# Workspace tables. The legacy cron remains the authoritative writer.
+# The production canonical writer is disabled in D1 until an administrator
+# accepts a manual canary and enables its schedule.
 [[env.production.workflows]]
-name       = "oasis-shadow-sync"
-binding    = "SHADOW_SYNC_WORKFLOW"
-class_name = "ShadowSyncWorkflow"
+name       = "oasis-canonical-sync"
+binding    = "CANONICAL_SYNC_WORKFLOW"
+class_name = "CanonicalSyncWorkflow"

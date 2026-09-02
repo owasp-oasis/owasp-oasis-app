@@ -41,6 +41,17 @@ interface SyncStatusPayload {
     last_attempt_at: string | null
     stale_after_hours: number
   }
+  canonical: {
+    schedule_enabled: boolean
+    pipeline_run_id: string | null
+    phase: string
+    updated_at: string | null
+    lock: null | {
+      pipeline_run_id: string
+      acquired_at: string
+      lease_expires_at: string
+    }
+  }
   shadow: null | {
     status: string
     matched_entities: number
@@ -252,7 +263,12 @@ export default function SyncStatus() {
                 <div><dt>Last attempt</dt><dd>{dateTime(payload.overall.last_attempt_at)}</dd></div>
                 <div><dt>Stale threshold</dt><dd>{payload.overall.stale_after_hours} hours</dd></div>
                 <div><dt>Status generated</dt><dd>{dateTime(payload.generated_at)}</dd></div>
+                <div><dt>Workflow phase</dt><dd>{payload.canonical.phase.replace(/_/g, ' ')}</dd></div>
+                <div><dt>Production schedule</dt><dd>{payload.canonical.schedule_enabled ? 'Enabled' : 'Disabled for canary'}</dd></div>
+                <div><dt>Pipeline updated</dt><dd>{dateTime(payload.canonical.updated_at)}</dd></div>
+                <div><dt>Lease expires</dt><dd>{dateTime(payload.canonical.lock?.lease_expires_at ?? null)}</dd></div>
               </dl>
+              {payload.canonical.pipeline_run_id && <code>{payload.canonical.pipeline_run_id}</code>}
             </article>
 
             <article className="sync-summary-card">

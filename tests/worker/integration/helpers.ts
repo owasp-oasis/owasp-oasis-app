@@ -195,6 +195,15 @@ CREATE TABLE IF NOT EXISTS sync_state (
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_synced_at',   '2020-01-01T00:00:00Z');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_sync_enabled', '0');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_run_id', '');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_phase', 'idle');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');
+
+CREATE TABLE IF NOT EXISTS sync_pipeline_locks (
+  lock_key TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, acquired_at TEXT NOT NULL,
+  lease_expires_at TEXT NOT NULL
+);
 
 -- Auth tables
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -308,6 +317,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'sync_job_events',
     'sync_job_runs',
     'sync_daily_budgets',
+    'sync_pipeline_locks',
     'hubspot_sync_queue',
     'user_votes',
     'user_preferences',
@@ -332,7 +342,11 @@ export async function cleanDB(env: Env): Promise<void> {
     INSERT INTO sync_state (key, value) VALUES
       ('last_synced_at', '2020-01-01T00:00:00Z'),
       ('sync_running', '0'),
-      ('last_manual_sync', '2020-01-01T00:00:00Z');
+      ('last_manual_sync', '2020-01-01T00:00:00Z'),
+      ('canonical_sync_enabled', '0'),
+      ('canonical_pipeline_run_id', ''),
+      ('canonical_pipeline_phase', 'idle'),
+      ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');
   `).run();
 
   const rateLimitKeys = await env.RATE_KV.list();

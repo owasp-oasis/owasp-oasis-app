@@ -1070,7 +1070,7 @@ async function finalizeShadow(env: Env, params: Extract<ShadowSyncParams, { acti
      ORDER BY created_at DESC LIMIT 1
   `).bind(pipelineRunId).first<{ status: string; consecutive_matches: number }>();
   const consecutive = complete ? (prior?.status === 'match' ? prior.consecutive_matches : 0) + 1 : 0;
-  const eligible = complete && consecutive >= 10;
+  const eligible = complete && consecutive >= 3;
   await env.DB.prepare(`
     UPDATE sync_parity_runs
        SET status = ?, comparable_entities = ?, matched_entities = ?,
@@ -1143,7 +1143,7 @@ async function continueShadow(env: Env, params: ShadowSyncParams, suffix: string
 }
 
 export async function startShadowSync(env: Env, legacyPipelineRunId: string, canonicalCutoffAt: string): Promise<string | null> {
-  if (!env.SHADOW_SYNC_WORKFLOW || env.ENVIRONMENT !== 'production') return null;
+  if (!env.SHADOW_SYNC_WORKFLOW || env.ENVIRONMENT !== 'preview') return null;
   const dispatchRunId = await startSyncJob(env.DB, {
     jobKey: 'shadow_sync_dispatch',
     pipelineRunId: legacyPipelineRunId,
