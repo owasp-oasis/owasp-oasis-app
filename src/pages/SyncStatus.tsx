@@ -224,8 +224,7 @@ export default function SyncStatus() {
     }
   }, [])
 
-  const retryJob = useCallback(async (job: PublicJob) => {
-    if (!job.latest_run || !RETRYABLE_STATUSES.includes(job.latest_run.status)) return
+  const runJob = useCallback(async (job: PublicJob) => {
     setRetryingJob(job.key)
     setActionMessage(null)
     try {
@@ -241,13 +240,13 @@ export default function SyncStatus() {
       if (!response.ok) throw new Error(result.error ?? `Retry request returned ${response.status}`)
       setActionMessage({
         kind: 'success',
-        text: `${job.label} retry accepted${result.retry_run_id ? ` as ${result.retry_run_id}` : ''}.`,
+        text: `${job.label} run accepted${result.retry_run_id ? ` as ${result.retry_run_id}` : ''}.`,
       })
       await refresh()
     } catch (reason) {
       setActionMessage({
         kind: 'error',
-        text: reason instanceof Error ? reason.message : 'Unable to retry the sync job',
+        text: reason instanceof Error ? reason.message : 'Unable to run the sync job',
       })
     } finally {
       setRetryingJob(null)
@@ -390,41 +389,49 @@ export default function SyncStatus() {
                         <span><strong>{job.label}</strong><small>{job.schedule}</small></span>
                         <StatusPill status={job.status} />
                       </summary>
-                      {job.latest_run && (
-                        <div className="sync-job-body">
+                      <div className="sync-job-body">
+                        {job.latest_run ? (
+                          <>
                           <div className="sync-job-latest">
                             <span>Last started {dateTime(job.latest_run.started_at)}</span>
                             <span>Duration {duration(job.latest_run.duration_ms)}</span>
                             <span>Mode {job.latest_run.mode}</span>
                           </div>
                           {job.latest_run.error && <p className="sync-run-error">{job.latest_run.error.code}: {job.latest_run.error.summary}</p>}
-                          {user?.role === 'admin' && job.retryable && RETRYABLE_STATUSES.includes(job.latest_run.status) && (
-                            <div className="sync-admin-actions">
-                              <span>Admin action</span>
-                              <button
-                                type="button"
-                                onClick={() => void retryJob(job)}
-                                disabled={retryingJob !== null}
-                              >
-                                {retryingJob === job.key ? 'Retrying…' : `Retry ${job.label}`}
-                              </button>
-                            </div>
-                          )}
                           <MetricList metrics={job.latest_run.metrics} />
-                          <h3>Recent runs</h3>
-                          <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>
-                            {job.recent_runs.length === 0 && <p>No tracked runs yet.</p>}
-                            {job.recent_runs.map(run => (
-                              <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row">
-                                <StatusPill status={run.status} />
-                                <span>{dateTime(run.started_at)}</span>
-                                <span>{duration(run.duration_ms)}</span>
-                                <span>Details →</span>
-                              </Link>
-                            ))}
+                          </>
+                        ) : (
+                          <p className="sync-job-empty">This job has no tracked runs yet.</p>
+                        )}
+                        {user?.role === 'admin' && job.retryable && (
+                          <div className="sync-admin-actions">
+                            <span>Admin action</span>
+                            <button
+                              type="button"
+                              onClick={() => void runJob(job)}
+                              disabled={retryingJob !== null}
+                            >
+                              {retryingJob === job.key
+                                ? 'Starting…'
+                                : job.latest_run && RETRYABLE_STATUSES.includes(job.latest_run.status)
+                                  ? `Retry ${job.label}`
+                                  : `Run ${job.label}`}
+                            </button>
                           </div>
+                        )}
+                        <h3>Recent runs</h3>
+                        <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>
+                          {job.recent_runs.length === 0 && <p>No tracked runs yet.</p>}
+                          {job.recent_runs.map(run => (
+                            <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row">
+                              <StatusPill status={run.status} />
+                              <span>{dateTime(run.started_at)}</span>
+                              <span>{duration(run.duration_ms)}</span>
+                              <span>Details →</span>
+                            </Link>
+                          ))}
                         </div>
-                      )}
+                      </div>
                     </details>
                   ))}
                 </div>
