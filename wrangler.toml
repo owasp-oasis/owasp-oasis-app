@@ -3,8 +3,8 @@ main               = "dist-worker/index.js"
 compatibility_date = "2026-08-24"
 workers_dev        = false
 
-[limits]
-subrequests = 50
+# Workers Free applies its CPU and subrequest ceilings automatically. Do not add
+# a [limits] block here: custom runtime limits require the paid Standard model.
 
 # Persist privacy-safe Worker logs and invocation metadata. Traces remain disabled.
 [observability]
@@ -65,9 +65,6 @@ class_name = "ShadowSyncWorkflow"
 # ── Production environment ──
 [env.production]
 name = "owasp-oasis"
-
-[env.production.limits]
-subrequests = 50
 
 [[env.production.routes]]
 pattern   = "www.owasp-oasis.org/*"

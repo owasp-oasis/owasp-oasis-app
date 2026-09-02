@@ -22,7 +22,7 @@ Current state:
 - Feature branch `fix/free-tier-sync-orchestration` introduces the bounded canonical writer while keeping production scheduling disabled in D1 by default.
 - The existing production synchronizer remains the scheduled path until the cutover flag is explicitly enabled and remains available as the first rollback path.
 - Preview is shadow-only and runs one daily comparison against the shared canonical tables.
-- Canonical collection is split into one-PR, one-comment-reaction, and one-duplicate-close Workflow instances; Wrangler also enforces the 50-subrequest ceiling.
+- Canonical collection is split into one-PR, one-comment-reaction, and one-duplicate-close Workflow instances. The application keeps each unit below the Cloudflare Workers Free ceiling, which the platform applies automatically; the Wrangler configuration intentionally omits paid-only custom runtime limits.
 - A renewable D1 lease prevents overlapping canonical runs, and the public status page exposes the phase, lease, schedule gate, job history, and budgets.
 - Production scheduling cannot be enabled until the latest shadow result records at least three consecutive matches and cutover eligibility.
 - GitHub authentication failures terminate the shadow inventory and mark blocked downstream jobs instead of leaving them running indefinitely.
