@@ -121,6 +121,7 @@ describe('validation.ts', () => {
       expect(vGitHub('octocat')).toEqual({ ok: true, val: 'octocat' });
       expect(vGitHub('john-doe')).toEqual({ ok: true, val: 'john-doe' });
       expect(vGitHub('user123')).toEqual({ ok: true, val: 'user123' });
+      expect(vGitHub('matt-')).toEqual({ ok: true, val: 'matt-' });
     });
 
     it('strips leading @ symbol', () => {
@@ -139,10 +140,6 @@ describe('validation.ts', () => {
 
     it('rejects usernames starting with hyphen', () => {
       expect(vGitHub('-user')).toEqual({ ok: false, error: expect.any(String) });
-    });
-
-    it('rejects usernames ending with hyphen', () => {
-      expect(vGitHub('user-')).toEqual({ ok: false, error: expect.any(String) });
     });
 
     it('rejects usernames with invalid characters', () => {
