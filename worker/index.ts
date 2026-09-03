@@ -51,6 +51,7 @@ import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from 
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
+import { handleAdminUserRole, handleAdminUsers } from './handlers/adminUsers.js';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -164,6 +165,15 @@ export default {
       const syncCancelMatch = url.pathname.match(/^\/api\/admin\/sync\/runs\/([^/]+)\/cancel$/);
       if (method === 'POST' && syncCancelMatch) {
         return await handleCancelSyncRun(request, env, syncCancelMatch[1]);
+      }
+
+      /* ── Session-authorized user access administration ─────────── */
+      if (method === 'GET' && url.pathname === '/api/admin/users') {
+        return await handleAdminUsers(request, env);
+      }
+      const adminUserRoleMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)\/role$/);
+      if (method === 'POST' && adminUserRoleMatch) {
+        return await handleAdminUserRole(request, env, Number.parseInt(adminUserRoleMatch[1], 10));
       }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
