@@ -4,7 +4,7 @@ import {
   type WorkflowStep,
 } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
-import type { CanonicalSyncParams, Env, SyncResult } from './types.js';
+import type { CanonicalSyncParams, Env, SyncResult, WorkspacePipelineKind } from './types.js';
 import { reconcileRemovedRepositories } from './cleanup.js';
 import {
   closeCanonicalDuplicate,
@@ -16,7 +16,9 @@ import {
 import {
   finishSyncJob,
   incrementSyncJobProgress,
+  interruptExpiredSyncJobs,
   markSyncJobRunning,
+  pruneSyncJobHistory,
   recordDailyBudget,
   recordSyncJobEvent,
   startSyncJob,
@@ -54,6 +56,7 @@ async function setPipelineState(
   db: D1Database,
   pipelineRunId: string,
   phase: string,
+  pipelineKind: WorkspacePipelineKind,
 ): Promise<void> {
   const now = nowIso();
   await db.batch([
@@ -63,6 +66,8 @@ async function setPipelineState(
       .bind(phase),
     db.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('canonical_pipeline_updated_at', ?)")
       .bind(now),
+    db.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('workspace_pipeline_kind', ?)")
+      .bind(pipelineKind),
   ]);
 }
 
@@ -84,7 +89,11 @@ async function acquirePipelineLock(db: D1Database, pipelineRunId: string): Promi
   return (result.meta.changes ?? 0) === 1;
 }
 
-async function renewPipelineLock(db: D1Database, pipelineRunId: string): Promise<void> {
+async function renewPipelineLock(
+  db: D1Database,
+  pipelineRunId: string,
+  pipelineKind: WorkspacePipelineKind,
+): Promise<void> {
   const result = await db.prepare(`
     UPDATE sync_pipeline_locks
        SET lease_expires_at = ?
@@ -95,34 +104,51 @@ async function renewPipelineLock(db: D1Database, pipelineRunId: string): Promise
     pipelineRunId,
   ).run();
   if ((result.meta.changes ?? 0) !== 1) {
-    throw new Error('Canonical synchronization lease is no longer owned by this pipeline');
+    throw new Error('Workspace synchronization lease is no longer owned by this pipeline');
   }
-  await setPipelineState(db, pipelineRunId, 'running');
+  await setPipelineState(db, pipelineRunId, 'running', pipelineKind);
 }
 
-async function releasePipelineLock(db: D1Database, pipelineRunId: string, phase: string): Promise<void> {
+async function releasePipelineLock(
+  db: D1Database,
+  pipelineRunId: string,
+  phase: string,
+  pipelineKind: WorkspacePipelineKind,
+): Promise<void> {
   await db.prepare(
     'DELETE FROM sync_pipeline_locks WHERE lock_key = ? AND pipeline_run_id = ?',
   ).bind(CANONICAL_LOCK, pipelineRunId).run();
-  await setPipelineState(db, pipelineRunId, phase);
+  await setPipelineState(db, pipelineRunId, phase, pipelineKind);
 }
 
 async function jobRunId(db: D1Database, pipelineRunId: string, jobKey: string): Promise<string> {
   const row = await db.prepare(`
     SELECT id FROM sync_job_runs
-     WHERE pipeline_run_id = ? AND job_key = ? AND mode = 'live'
+     WHERE pipeline_run_id = ? AND job_key = ?
      ORDER BY created_at LIMIT 1
   `).bind(pipelineRunId, jobKey).first<{ id: string }>();
-  if (!row) throw new Error(`Missing canonical job run: ${jobKey}`);
+  if (!row) throw new Error(`Missing Workspace synchronization job run: ${jobKey}`);
   return row.id;
 }
 
-async function parentRunId(db: D1Database, pipelineRunId: string): Promise<string> {
-  return jobRunId(db, pipelineRunId, 'canonical_workspace_sync');
+function pipelineKind(params: CanonicalSyncParams): WorkspacePipelineKind {
+  return params.pipelineKind ?? 'canonical';
+}
+
+function parentJobKey(kind: WorkspacePipelineKind): 'legacy_workspace_sync' | 'canonical_workspace_sync' {
+  return kind === 'legacy' ? 'legacy_workspace_sync' : 'canonical_workspace_sync';
+}
+
+async function parentRunId(
+  db: D1Database,
+  pipelineRunId: string,
+  kind: WorkspacePipelineKind,
+): Promise<string> {
+  return jobRunId(db, pipelineRunId, parentJobKey(kind));
 }
 
 function workflowInstanceId(pipelineRunId: string, suffix: string): string {
-  return `canonical-${pipelineRunId.slice(0, 8)}-${suffix}`
+  return `workspace-${pipelineRunId.slice(0, 8)}-${suffix}`
     .replace(/[^a-zA-Z0-9-_]/g, '-')
     .slice(0, 100);
 }
@@ -132,7 +158,7 @@ async function continueCanonical(
   params: CanonicalSyncParams,
   suffix: string,
 ): Promise<string> {
-  if (!env.CANONICAL_SYNC_WORKFLOW) throw new Error('Canonical Workflow binding is unavailable');
+  if (!env.CANONICAL_SYNC_WORKFLOW) throw new Error('Workspace synchronization Workflow binding is unavailable');
   const id = workflowInstanceId(params.pipelineRunId, suffix);
   try {
     const instance = await env.CANONICAL_SYNC_WORKFLOW.create({
@@ -155,18 +181,19 @@ async function createPipelineJobs(
   env: Env,
   pipelineRunId: string,
   trigger: 'scheduled' | 'manual',
+  kind: WorkspacePipelineKind,
 ): Promise<void> {
   await startSyncJob(env.DB, {
-    jobKey: 'canonical_workspace_sync',
+    jobKey: parentJobKey(kind),
     pipelineRunId,
     trigger,
-    mode: 'live',
+    mode: kind === 'legacy' ? 'legacy' : 'live',
   });
   await startSyncJob(env.DB, {
     jobKey: 'repository_inventory',
     pipelineRunId,
     trigger,
-    mode: 'live',
+    mode: kind === 'legacy' ? 'legacy' : 'live',
     status: 'queued',
   });
   for (const jobKey of PIPELINE_JOB_KEYS) {
@@ -174,7 +201,7 @@ async function createPipelineJobs(
       jobKey,
       pipelineRunId,
       trigger: 'continuation',
-      mode: 'live',
+      mode: kind === 'legacy' ? 'legacy' : 'live',
       status: 'queued',
     });
   }
@@ -202,9 +229,10 @@ export async function canonicalCutoverEligible(db: D1Database): Promise<boolean>
   return row?.eligible_for_cutover === 1 && row.consecutive_matches >= 3;
 }
 
-export async function startCanonicalSync(
+async function startWorkspaceSync(
   env: Env,
   trigger: 'scheduled' | 'manual',
+  kind: WorkspacePipelineKind,
 ): Promise<CanonicalDispatchResult> {
   if (env.ENVIRONMENT !== 'production') {
     return { started: false, pipelineRunId: null, workflowInstanceId: null, reason: 'not_production' };
@@ -213,18 +241,8 @@ export async function startCanonicalSync(
     return { started: false, pipelineRunId: null, workflowInstanceId: null, reason: 'binding_unavailable' };
   }
 
-  const running = await env.DB.prepare(
-    "SELECT value FROM sync_state WHERE key = 'sync_running'",
-  ).first<{ value: string }>();
-  if (running?.value === '1') {
-    return {
-      started: false,
-      pipelineRunId: null,
-      workflowInstanceId: null,
-      reason: 'already_running',
-    };
-  }
-
+  await interruptExpiredSyncJobs(env.DB);
+  await pruneSyncJobHistory(env.DB);
   const pipelineRunId = crypto.randomUUID();
   if (!await acquirePipelineLock(env.DB, pipelineRunId)) {
     const active = await env.DB.prepare(
@@ -243,49 +261,67 @@ export async function startCanonicalSync(
       env.DB.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'"),
       env.DB.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')"),
     ]);
-    await setPipelineState(env.DB, pipelineRunId, 'dispatching');
-    await createPipelineJobs(env, pipelineRunId, trigger);
+    await setPipelineState(env.DB, pipelineRunId, 'dispatching', kind);
+    await createPipelineJobs(env, pipelineRunId, trigger, kind);
     const workflowId = await continueCanonical(
       env,
-      { action: 'inventory', pipelineRunId },
-      'inventory',
+      { action: 'inventory', pipelineRunId, pipelineKind: kind },
+      `${kind}-inventory`,
     );
     return { started: true, pipelineRunId, workflowInstanceId: workflowId };
   } catch (error) {
     try {
-      const parent = await parentRunId(env.DB, pipelineRunId);
+      const parent = await parentRunId(env.DB, pipelineRunId, kind);
       await finishSyncJob(env.DB, parent, 'failed', {
-        errorCode: 'canonical_dispatch_failed',
+        errorCode: 'workspace_dispatch_failed',
         error,
       });
     } catch { /* pipeline job creation itself failed */ }
     await env.DB.prepare(
       "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '0')",
     ).run();
-    await releasePipelineLock(env.DB, pipelineRunId, 'failed');
+    await releasePipelineLock(env.DB, pipelineRunId, 'failed', kind);
     throw error;
   }
 }
 
-async function failPipeline(env: Env, pipelineRunId: string, error: unknown): Promise<void> {
-  const parent = await parentRunId(env.DB, pipelineRunId);
+export async function startCanonicalSync(
+  env: Env,
+  trigger: 'scheduled' | 'manual',
+): Promise<CanonicalDispatchResult> {
+  return startWorkspaceSync(env, trigger, 'canonical');
+}
+
+export async function startBoundedLegacySync(env: Env): Promise<CanonicalDispatchResult> {
+  return startWorkspaceSync(env, 'scheduled', 'legacy');
+}
+
+async function failPipeline(
+  env: Env,
+  pipelineRunId: string,
+  kind: WorkspacePipelineKind,
+  error: unknown,
+): Promise<void> {
+  const parent = await parentRunId(env.DB, pipelineRunId, kind);
   await finishSyncJob(env.DB, parent, 'failed', {
-    errorCode: 'canonical_pipeline_failed',
+    errorCode: 'workspace_pipeline_failed',
     error,
   });
   await env.DB.prepare(
     "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '0')",
   ).run();
-  await releasePipelineLock(env.DB, pipelineRunId, 'failed');
+  await releasePipelineLock(env.DB, pipelineRunId, 'failed', kind);
 }
 
 async function processInventory(
   env: Env,
-  pipelineRunId: string,
+  params: Extract<CanonicalSyncParams, { action: 'inventory' }>,
   attempt: number,
 ): Promise<Record<string, number>> {
-  await renewPipelineLock(env.DB, pipelineRunId);
-  await setPipelineState(env.DB, pipelineRunId, 'repository_inventory');
+  const { pipelineRunId } = params;
+  const kind = pipelineKind(params);
+  await renewPipelineLock(env.DB, pipelineRunId, kind);
+  await setPipelineState(env.DB, pipelineRunId, 'repository_inventory', kind);
   const inventoryRunId = await jobRunId(env.DB, pipelineRunId, 'repository_inventory');
   await markSyncJobRunning(env.DB, inventoryRunId);
   const result = await reconcileRemovedRepositories(env);
@@ -310,7 +346,11 @@ async function processInventory(
   for (const key of ['pull_request_catalog', 'upstream_merge_status', 'pull_request_comments']) {
     await markSyncJobRunning(env.DB, await jobRunId(env.DB, pipelineRunId, key));
   }
-  await continueCanonical(env, { action: 'sync', pipelineRunId }, 'sync-start');
+  await continueCanonical(
+    env,
+    { action: 'sync', pipelineRunId, pipelineKind: kind },
+    `${kind}-sync-start`,
+  );
   return { repositories: result.checked };
 }
 
@@ -334,11 +374,13 @@ async function finishProjectionJobs(env: Env, pipelineRunId: string): Promise<vo
 
 async function processSyncChunk(
   env: Env,
-  pipelineRunId: string,
+  params: Extract<CanonicalSyncParams, { action: 'sync' }>,
   attempt: number,
 ): Promise<Record<string, number | boolean>> {
-  await renewPipelineLock(env.DB, pipelineRunId);
-  await setPipelineState(env.DB, pipelineRunId, 'pull_request_collection');
+  const { pipelineRunId } = params;
+  const kind = pipelineKind(params);
+  await renewPipelineLock(env.DB, pipelineRunId, kind);
+  await setPipelineState(env.DB, pipelineRunId, 'pull_request_collection', kind);
   const reactionJobRunId = await jobRunId(env.DB, pipelineRunId, 'comment_reactions');
   const result: SyncResult = await runSyncOneRepo(env, {
     skipReactions: true,
@@ -368,8 +410,8 @@ async function processSyncChunk(
   if (!result.done) {
     await continueCanonical(
       env,
-      { action: 'sync', pipelineRunId },
-      `sync-${result.cursor ?? crypto.randomUUID()}`,
+      { action: 'sync', pipelineRunId, pipelineKind: kind },
+      `${kind}-sync-${result.cursor ?? crypto.randomUUID()}`,
     );
     return { done: false, pull_requests: result.stats.prs };
   }
@@ -386,17 +428,23 @@ async function processSyncChunk(
     });
   }
   await markSyncJobRunning(env.DB, reactionJobRunId);
-  await continueCanonical(env, { action: 'reaction', pipelineRunId }, 'reaction-start');
+  await continueCanonical(
+    env,
+    { action: 'reaction', pipelineRunId, pipelineKind: kind },
+    `${kind}-reaction-start`,
+  );
   return { done: false, pull_requests: result.stats.prs };
 }
 
 async function processReactionChunk(
   env: Env,
-  pipelineRunId: string,
+  params: Extract<CanonicalSyncParams, { action: 'reaction' }>,
   attempt: number,
 ): Promise<Record<string, number | boolean>> {
-  await renewPipelineLock(env.DB, pipelineRunId);
-  await setPipelineState(env.DB, pipelineRunId, 'comment_reactions');
+  const { pipelineRunId } = params;
+  const kind = pipelineKind(params);
+  await renewPipelineLock(env.DB, pipelineRunId, kind);
+  await setPipelineState(env.DB, pipelineRunId, 'comment_reactions', kind);
   const reactionId = await jobRunId(env.DB, pipelineRunId, 'comment_reactions');
   const result = await runSyncOneCommentReaction(env, pipelineRunId);
   await recordSyncJobEvent(env.DB, reactionId, {
@@ -408,8 +456,8 @@ async function processReactionChunk(
     await incrementSyncJobProgress(env.DB, reactionId, 1);
     await continueCanonical(
       env,
-      { action: 'reaction', pipelineRunId },
-      `reaction-${crypto.randomUUID()}`,
+      { action: 'reaction', pipelineRunId, pipelineKind: kind },
+      `${kind}-reaction-${crypto.randomUUID()}`,
     );
     return { done: false, reactions: result.reactions };
   }
@@ -423,17 +471,23 @@ async function processReactionChunk(
     failedItems: progress?.failed_items ?? 0,
   });
   await prepareCanonicalProjections(env);
-  await continueCanonical(env, { action: 'duplicate', pipelineRunId }, 'duplicate-start');
+  await continueCanonical(
+    env,
+    { action: 'duplicate', pipelineRunId, pipelineKind: kind },
+    `${kind}-duplicate-start`,
+  );
   return { done: false, reactions: 0 };
 }
 
 async function processDuplicateChunk(
   env: Env,
-  pipelineRunId: string,
+  params: Extract<CanonicalSyncParams, { action: 'duplicate' }>,
   attempt: number,
 ): Promise<Record<string, number | boolean>> {
-  await renewPipelineLock(env.DB, pipelineRunId);
-  await setPipelineState(env.DB, pipelineRunId, 'duplicate_resolution');
+  const { pipelineRunId } = params;
+  const kind = pipelineKind(params);
+  await renewPipelineLock(env.DB, pipelineRunId, kind);
+  await setPipelineState(env.DB, pipelineRunId, 'duplicate_resolution', kind);
   const duplicateId = await jobRunId(env.DB, pipelineRunId, 'duplicate_resolution');
   await markSyncJobRunning(env.DB, duplicateId);
   const result = await closeCanonicalDuplicate(env);
@@ -446,19 +500,20 @@ async function processDuplicateChunk(
     await incrementSyncJobProgress(env.DB, duplicateId, result.closed);
     await continueCanonical(
       env,
-      { action: 'duplicate', pipelineRunId },
-      `duplicate-${crypto.randomUUID()}`,
+      { action: 'duplicate', pipelineRunId, pipelineKind: kind },
+      `${kind}-duplicate-${crypto.randomUUID()}`,
     );
     return { done: false, closed: result.closed };
   }
 
   await finalizeCanonicalSync(env);
   await finishProjectionJobs(env, pipelineRunId);
-  const parent = await parentRunId(env.DB, pipelineRunId);
+  const parent = await parentRunId(env.DB, pipelineRunId, kind);
   await finishSyncJob(env.DB, parent, 'succeeded', {
     metrics: { bounded_workflow: true },
   });
-  await releasePipelineLock(env.DB, pipelineRunId, 'succeeded');
+  await releasePipelineLock(env.DB, pipelineRunId, 'succeeded', kind);
+  await pruneSyncJobHistory(env.DB);
   return { done: true, reactions: 0 };
 }
 
@@ -467,6 +522,7 @@ export class CanonicalSyncWorkflow extends WorkflowEntrypoint<Env, CanonicalSync
     event: WorkflowEvent<CanonicalSyncParams>,
     step: WorkflowStep,
   ): Promise<Record<string, number | boolean>> {
+    const kind = pipelineKind(event.payload);
     const today = nowIso().slice(0, 10);
     const budget = await this.env.DB.prepare(`
       SELECT consumed FROM sync_daily_budgets
@@ -483,25 +539,30 @@ export class CanonicalSyncWorkflow extends WorkflowEntrypoint<Env, CanonicalSync
          WHERE lock_key = ? AND pipeline_run_id = ?
       `).bind(extendedLease, CANONICAL_LOCK, event.payload.pipelineRunId).run();
       if ((lease.meta.changes ?? 0) !== 1) {
-        const error = new Error('Canonical synchronization lease was lost before budget pause');
-        await failPipeline(this.env, event.payload.pipelineRunId, error);
+        const error = new Error('Workspace synchronization lease was lost before budget pause');
+        await failPipeline(this.env, event.payload.pipelineRunId, kind, error);
         throw new NonRetryableError(error.message);
       }
-      await setPipelineState(this.env.DB, event.payload.pipelineRunId, 'paused_for_daily_budget');
+      await setPipelineState(
+        this.env.DB,
+        event.payload.pipelineRunId,
+        'paused_for_daily_budget',
+        kind,
+      );
       await step.sleepUntil('wait for daily Workflow step budget reset', resumeAt);
     }
-    return step.do('process bounded canonical sync work', {
+    return step.do('process bounded Workspace sync work', {
       retries: { limit: RETRY_LIMIT, delay: '10 seconds', backoff: 'exponential' },
       timeout: '15 minutes',
     }, async context => {
       try {
         const result = event.payload.action === 'inventory'
-          ? await processInventory(this.env, event.payload.pipelineRunId, context.attempt)
+          ? await processInventory(this.env, event.payload, context.attempt)
           : event.payload.action === 'sync'
-            ? await processSyncChunk(this.env, event.payload.pipelineRunId, context.attempt)
+            ? await processSyncChunk(this.env, event.payload, context.attempt)
             : event.payload.action === 'reaction'
-              ? await processReactionChunk(this.env, event.payload.pipelineRunId, context.attempt)
-              : await processDuplicateChunk(this.env, event.payload.pipelineRunId, context.attempt);
+              ? await processReactionChunk(this.env, event.payload, context.attempt)
+              : await processDuplicateChunk(this.env, event.payload, context.attempt);
         await recordDailyBudget(this.env.DB, {
           key: 'workflow_steps',
           label: 'OASIS Workflow steps',
@@ -512,8 +573,8 @@ export class CanonicalSyncWorkflow extends WorkflowEntrypoint<Env, CanonicalSync
         return result;
       } catch (error) {
         if (context.attempt <= RETRY_LIMIT) throw error;
-        await failPipeline(this.env, event.payload.pipelineRunId, error);
-        throw new NonRetryableError(error instanceof Error ? error.message : 'Canonical pipeline failed');
+        await failPipeline(this.env, event.payload.pipelineRunId, kind, error);
+        throw new NonRetryableError(error instanceof Error ? error.message : 'Workspace pipeline failed');
       }
     });
   }

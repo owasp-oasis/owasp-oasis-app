@@ -112,3 +112,8 @@ class_name = "CanonicalSyncWorkflow"
 name       = "oasis-orphan-cleanup"
 binding    = "ORPHAN_CLEANUP_WORKFLOW"
 class_name = "OrphanCleanupWorkflow"
+
+[[env.production.workflows]]
+name       = "oasis-hubspot-sync"
+binding    = "HUBSPOT_SYNC_WORKFLOW"
+class_name = "HubSpotSyncWorkflow"

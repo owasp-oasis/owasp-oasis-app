@@ -18,6 +18,7 @@ export interface Env {
   SHADOW_SYNC_WORKFLOW?: Workflow<ShadowSyncParams>;
   CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
   ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
+  HUBSPOT_SYNC_WORKFLOW?: Workflow<HubSpotSyncParams>;
 }
 
 export interface OrphanCleanupActor {
@@ -41,10 +42,20 @@ export type ShadowSyncParams =
   | { action: 'finalize'; pipelineRunId: string };
 
 export type CanonicalSyncParams =
-  | { action: 'inventory'; pipelineRunId: string }
-  | { action: 'sync'; pipelineRunId: string }
-  | { action: 'reaction'; pipelineRunId: string }
-  | { action: 'duplicate'; pipelineRunId: string };
+  | { action: 'inventory'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'sync'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'reaction'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'duplicate'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind };
+
+export type WorkspacePipelineKind = 'legacy' | 'canonical';
+
+export interface HubSpotSyncParams {
+  jobRunId: string;
+  chunk: number;
+  maxQueueId: number;
+  eligibleAt: string;
+  auditActor?: OrphanCleanupActor;
+}
 
 export interface SyncResult {
   ok: boolean;

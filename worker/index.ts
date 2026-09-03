@@ -18,16 +18,18 @@ import {
 } from './security.js';
 import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
-import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
+import { runTrackedHubSpot } from './scheduledJobs.js';
 import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
   canonicalCutoverEligible,
   canonicalScheduleEnabled,
   setCanonicalScheduleEnabled,
+  startBoundedLegacySync,
   startCanonicalSync,
 } from './canonicalSync.js';
 import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
+import { HubSpotSyncWorkflow } from './hubSpotSyncWorkflow.js';
 import {
   handleMeta,
   handleRepos,
@@ -223,7 +225,7 @@ export default {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          try {
            const result = await runTrackedHubSpot(env, 'manual');
-           return jsonOk(result, request);
+           return secHeaders(Response.json(result, { status: result.started ? 202 : 409 }), request);
          } catch {
            console.error(JSON.stringify({
              event: 'hubspot_sync_manual_failed',
@@ -282,7 +284,8 @@ export default {
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (event.cron === HUBSPOT_SYNC_CRON) {
-      await runTrackedHubSpot(env, 'scheduled');
+      const dispatch = await runTrackedHubSpot(env, 'scheduled');
+      console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));
       return;
     }
     if (event.cron === '30 2 * * *' && env.ENVIRONMENT === 'preview') {
@@ -298,8 +301,8 @@ export default {
       return;
     }
     if (!await canonicalScheduleEnabled(env.DB)) {
-      console.log(JSON.stringify({ event: 'canonical_sync_schedule_disabled_legacy_retained' }));
-      await runTrackedLegacySync(env);
+      const dispatch = await startBoundedLegacySync(env);
+      console.log(JSON.stringify({ event: 'bounded_legacy_sync_dispatched', ...dispatch }));
       return;
     }
     const dispatch = await startCanonicalSync(env, 'scheduled');
@@ -312,3 +315,4 @@ export { ALLOWED_ORIGINS };
 export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
 export { OrphanCleanupWorkflow };
+export { HubSpotSyncWorkflow };
