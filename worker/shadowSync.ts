@@ -1094,13 +1094,22 @@ async function finalizeShadow(env: Env, params: Extract<ShadowSyncParams, { acti
 
 async function continueShadow(env: Env, params: ShadowSyncParams, suffix: string): Promise<void> {
   if (!env.SHADOW_SYNC_WORKFLOW) throw new Error('Shadow Workflow binding is unavailable');
+  const pipelineRunId = 'pipelineRunId' in params ? params.pipelineRunId : null;
+  if (pipelineRunId) {
+    const active = await env.DB.prepare(`
+      SELECT 1 AS active FROM sync_job_runs
+       WHERE pipeline_run_id = ? AND mode = 'shadow'
+         AND status IN ('queued', 'running')
+       LIMIT 1
+    `).bind(pipelineRunId).first<{ active: number }>();
+    if (!active) throw nonRetryableShadowError('Shadow synchronization was cancelled');
+  }
   const today = isoNow().slice(0, 10);
   const budget = await env.DB.prepare(`
     SELECT consumed FROM sync_daily_budgets
      WHERE budget_date = ? AND budget_key = 'workflow_steps'
   `).bind(today).first<{ consumed: number }>();
   if ((budget?.consumed ?? 0) >= WORKFLOW_STEP_LIMIT) {
-    const pipelineRunId = 'pipelineRunId' in params ? params.pipelineRunId : null;
     await recordDailyBudget(env.DB, {
       key: 'workflow_steps', label: 'OASIS Workflow steps', unit: 'steps',
       limit: WORKFLOW_STEP_LIMIT, deferredDelta: 1,
@@ -1128,17 +1137,28 @@ async function continueShadow(env: Env, params: ShadowSyncParams, suffix: string
   }
   const pipeline = 'pipelineRunId' in params ? params.pipelineRunId.slice(0, 8) : 'start';
   const id = `shadow-${pipeline}-${suffix}`.replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 100);
+  let createdId: string;
   try {
-    await env.SHADOW_SYNC_WORKFLOW.create({
+    const instance = await env.SHADOW_SYNC_WORKFLOW.create({
       id,
       params,
       retention: { successRetention: '1 day', errorRetention: '3 days' },
     });
+    createdId = instance.id;
   } catch (error) {
     // Deterministic continuation IDs make retries idempotent. If a retry sees
     // the already-created instance, obtaining its handle proves it exists.
-    try { await env.SHADOW_SYNC_WORKFLOW.get(id); }
+    try {
+      const instance = await env.SHADOW_SYNC_WORKFLOW.get(id);
+      createdId = instance.id;
+    }
     catch { throw error; }
+  }
+  if (pipelineRunId) {
+    await env.DB.prepare(`
+      UPDATE sync_job_runs SET workflow_instance_id = ?
+       WHERE pipeline_run_id = ? AND mode = 'shadow' AND status IN ('queued', 'running')
+    `).bind(createdId, pipelineRunId).run();
   }
 }
 
@@ -1197,6 +1217,15 @@ export async function startShadowSync(
 
 export class ShadowSyncWorkflow extends WorkflowEntrypoint<Env, ShadowSyncParams> {
   async run(event: WorkflowEvent<ShadowSyncParams>, step: WorkflowStep): Promise<Record<string, number | boolean>> {
+    if ('pipelineRunId' in event.payload) {
+      const active = await this.env.DB.prepare(`
+        SELECT 1 AS active FROM sync_job_runs
+         WHERE pipeline_run_id = ? AND mode = 'shadow'
+           AND status IN ('queued', 'running')
+         LIMIT 1
+      `).bind(event.payload.pipelineRunId).first<{ active: number }>();
+      if (!active) return { done: true, cancelled: true };
+    }
     return step.do('process bounded shadow sync work', {
       retries: { limit: 3, delay: '10 seconds', backoff: 'exponential' },
       timeout: '15 minutes',

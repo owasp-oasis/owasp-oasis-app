@@ -18,6 +18,7 @@ import {
 import {
   finishSyncJob,
   incrementSyncJobProgress,
+  isSyncJobActive,
   markSyncJobRunning,
   recordDailyBudget,
   recordSyncJobEvent,
@@ -37,22 +38,31 @@ function workflowInstanceId(jobRunId: string, chunk: number): string {
 
 async function createWorkflowInstance(env: Env, params: ManualSyncJobParams): Promise<string> {
   if (!env.MANUAL_SYNC_JOB_WORKFLOW) throw new Error('Manual synchronization Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) {
+    throw new NonRetryableError('Manual synchronization job was cancelled');
+  }
   const id = workflowInstanceId(params.jobRunId, params.chunk);
+  let createdId: string;
   try {
     const instance = await env.MANUAL_SYNC_JOB_WORKFLOW.create({
       id,
       params,
       retention: { successRetention: '1 day', errorRetention: '3 days' },
     });
-    return instance.id;
+    createdId = instance.id;
   } catch (error) {
     try {
-      await env.MANUAL_SYNC_JOB_WORKFLOW.get(id);
-      return id;
+      const instance = await env.MANUAL_SYNC_JOB_WORKFLOW.get(id);
+      createdId = instance.id;
     } catch {
       throw error;
     }
   }
+  await env.DB.prepare(`
+    UPDATE sync_job_runs SET workflow_instance_id = ?
+     WHERE id = ? AND status IN ('queued', 'running')
+  `).bind(createdId, params.jobRunId).run();
+  return createdId;
 }
 
 async function auditOutcome(
@@ -95,12 +105,25 @@ export async function initializeManualSyncJob(
   input: Omit<ManualSyncJobParams, 'chunk'>,
 ): Promise<string> {
   if (!env.MANUAL_SYNC_JOB_WORKFLOW) throw new Error('Manual synchronization Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, input.jobRunId)) {
+    throw new NonRetryableError('Manual synchronization job was cancelled');
+  }
   let expectedItems = 0;
   if (input.jobKey === 'comment_reactions') {
     expectedItems = await seedCommentReactionWorkItems(env.DB, input.jobRunId, input.pipelineRunId);
   }
+  if (!await isSyncJobActive(env.DB, input.jobRunId)) {
+    await env.DB.prepare(`
+      UPDATE sync_work_items
+         SET status = 'failed', last_error_code = 'cancelled_by_admin',
+             last_error_summary = 'Cancelled by an administrator.', updated_at = ?
+       WHERE job_run_id = ? AND status IN ('pending', 'leased', 'deferred')
+    `).bind(new Date().toISOString(), input.jobRunId).run();
+    throw new NonRetryableError('Manual synchronization job was cancelled');
+  }
   await env.DB.prepare(`
-    UPDATE sync_job_runs SET status = 'queued', expected_items = ? WHERE id = ?
+    UPDATE sync_job_runs SET status = 'queued', expected_items = ?
+     WHERE id = ? AND status IN ('queued', 'running')
   `).bind(expectedItems, input.jobRunId).run();
   const workflowId = await createWorkflowInstance(env, { ...input, chunk: 0 });
   await env.DB.prepare('UPDATE sync_job_runs SET workflow_instance_id = ? WHERE id = ?')
@@ -121,6 +144,7 @@ export async function processManualSyncJobChunk(
   params: ManualSyncJobParams,
   attempt: number,
 ): Promise<Record<string, number | boolean>> {
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) return { done: true, cancelled: true };
   await markSyncJobRunning(env.DB, params.jobRunId);
   let result: Record<string, number | boolean>;
   let done = true;
@@ -203,6 +227,7 @@ export class ManualSyncJobWorkflow extends WorkflowEntrypoint<Env, ManualSyncJob
       try {
         return await processManualSyncJobChunk(this.env, event.payload, context.attempt);
       } catch (error) {
+        if (error instanceof NonRetryableError) throw error;
         if (context.attempt <= RETRY_LIMIT) throw error;
         await finishManualJob(this.env, event.payload, 'failed', {}, error);
         throw new NonRetryableError(error instanceof Error ? error.message : 'Manual synchronization job failed');

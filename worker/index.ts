@@ -50,6 +50,7 @@ import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
+import { handleCancelSyncRun } from './handlers/syncCancel.js';
 import { handleAdminUserRole, handleAdminUsers } from './handlers/adminUsers.js';
 
 export default {
@@ -160,6 +161,10 @@ export default {
       const syncRetryMatch = url.pathname.match(/^\/api\/admin\/sync\/jobs\/([a-z0-9_]+)\/retry$/);
       if (method === 'POST' && syncRetryMatch) {
         return await handleRetrySyncJob(request, env, ctx, syncRetryMatch[1]);
+      }
+      const syncCancelMatch = url.pathname.match(/^\/api\/admin\/sync\/runs\/([^/]+)\/cancel$/);
+      if (method === 'POST' && syncCancelMatch) {
+        return await handleCancelSyncRun(request, env, syncCancelMatch[1]);
       }
 
       /* ── Session-authorized user access administration ─────────── */

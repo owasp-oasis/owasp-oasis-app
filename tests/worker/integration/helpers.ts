@@ -285,7 +285,8 @@ CREATE TABLE IF NOT EXISTS sync_job_events (
 CREATE TABLE IF NOT EXISTS sync_work_items (
   id TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, job_run_id TEXT NOT NULL,
   job_key TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
-  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT, status TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'leased', 'succeeded', 'failed', 'deferred')),
   attempts INTEGER NOT NULL DEFAULT 0, leased_at TEXT, lease_expires_at TEXT,
   last_error_code TEXT, last_error_summary TEXT, created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)

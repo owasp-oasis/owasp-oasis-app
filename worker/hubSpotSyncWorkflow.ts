@@ -14,6 +14,7 @@ import {
 import {
   finishSyncJob,
   incrementSyncJobProgress,
+  isSyncJobActive,
   markSyncJobRunning,
   recordDailyBudget,
   recordSyncJobEvent,
@@ -42,22 +43,31 @@ function workflowInstanceId(jobRunId: string, chunk: number): string {
 
 async function createWorkflowInstance(env: Env, params: HubSpotSyncParams): Promise<string> {
   if (!env.HUBSPOT_SYNC_WORKFLOW) throw new Error('HubSpot synchronization Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) {
+    throw new NonRetryableError('HubSpot synchronization job was cancelled');
+  }
   const id = workflowInstanceId(params.jobRunId, params.chunk);
+  let createdId: string;
   try {
     const instance = await env.HUBSPOT_SYNC_WORKFLOW.create({
       id,
       params,
       retention: { successRetention: '1 day', errorRetention: '3 days' },
     });
-    return instance.id;
+    createdId = instance.id;
   } catch (error) {
     try {
-      await env.HUBSPOT_SYNC_WORKFLOW.get(id);
-      return id;
+      const instance = await env.HUBSPOT_SYNC_WORKFLOW.get(id);
+      createdId = instance.id;
     } catch {
       throw error;
     }
   }
+  await env.DB.prepare(`
+    UPDATE sync_job_runs SET workflow_instance_id = ?
+     WHERE id = ? AND status IN ('queued', 'running')
+  `).bind(createdId, params.jobRunId).run();
+  return createdId;
 }
 
 async function auditTerminalOutcome(
@@ -108,11 +118,14 @@ export async function initializeHubSpotSyncRun(
   input: { jobRunId: string; auditActor?: OrphanCleanupActor },
 ): Promise<{ workflowInstanceId: string; expectedItems: number }> {
   if (!env.HUBSPOT_SYNC_WORKFLOW) throw new Error('HubSpot synchronization Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, input.jobRunId)) {
+    throw new NonRetryableError('HubSpot synchronization job was cancelled');
+  }
   const snapshot = await snapshotHubSpotQueue(env.DB);
   await env.DB.prepare(`
     UPDATE sync_job_runs
        SET status = 'queued', expected_items = ?, completed_items = 0, failed_items = 0
-     WHERE id = ?
+     WHERE id = ? AND status IN ('queued', 'running')
   `).bind(snapshot.count, input.jobRunId).run();
   const workflowInstanceId = await createWorkflowInstance(env, {
     jobRunId: input.jobRunId,
@@ -187,9 +200,20 @@ export class HubSpotSyncWorkflow extends WorkflowEntrypoint<Env, HubSpotSyncPara
     return step.do('process bounded HubSpot contact chunk', {
       retries: { limit: RETRY_LIMIT, delay: '10 seconds', backoff: 'exponential' },
       timeout: '15 minutes',
-    }, async context => {
+    }, async (context): Promise<Record<string, number | boolean>> => {
       let requestCount = 0;
       try {
+        if (!await isSyncJobActive(this.env.DB, event.payload.jobRunId)) {
+          return {
+            done: true,
+            cancelled: true,
+            processed: 0,
+            succeeded: 0,
+            failed: 0,
+            remaining: 0,
+            external_requests: 0,
+          };
+        }
         await markSyncJobRunning(this.env.DB, event.payload.jobRunId);
         const result = await processHubSpotQueue(this.env, {
           limit: HUBSPOT_SYNC_CHUNK_SIZE,
@@ -261,6 +285,7 @@ export class HubSpotSyncWorkflow extends WorkflowEntrypoint<Env, HubSpotSyncPara
         await finishHubSpotRun(this.env, event.payload, status);
         return { done: true, ...result, remaining: 0, external_requests: requestCount };
       } catch (error) {
+        if (error instanceof NonRetryableError) throw error;
         if (context.attempt <= RETRY_LIMIT) throw error;
         await finishHubSpotRun(this.env, event.payload, 'failed', error);
         throw new NonRetryableError(
