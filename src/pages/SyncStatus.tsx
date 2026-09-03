@@ -107,6 +107,48 @@ interface RunDetailPayload {
   }>
 }
 
+const WORKSPACE_PIPELINE_JOB_KEYS = [
+  'repository_inventory',
+  'pull_request_catalog',
+  'upstream_merge_status',
+  'pull_request_comments',
+  'comment_reactions',
+  'vote_projection',
+  'duplicate_resolution',
+  'contributor_scores',
+  'orphan_cleanup',
+] as const
+
+const WORKSPACE_PIPELINES = [
+  {
+    key: 'legacy',
+    title: 'Legacy Workspace runs',
+    description: 'The current production writer while the canonical schedule remains behind its cutover gate.',
+    parentJobKey: 'legacy_workspace_sync',
+    mode: 'legacy',
+  },
+  {
+    key: 'canonical',
+    title: 'Canonical Workspace runs',
+    description: 'The bounded replacement writer used for canaries and, after cutover, the production schedule.',
+    parentJobKey: 'canonical_workspace_sync',
+    mode: 'live',
+  },
+  {
+    key: 'shadow',
+    title: 'Shadow validation runs',
+    description: 'The read-only preview pipeline that compares its projections with canonical Workspace data.',
+    parentJobKey: 'shadow_sync_dispatch',
+    mode: 'shadow',
+  },
+] as const satisfies ReadonlyArray<{
+  key: string
+  title: string
+  description: string
+  parentJobKey: string
+  mode: PublicRun['mode']
+}>
+
 function dateTime(value: string | null): string {
   if (!value) return 'Not available'
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'long' }).format(new Date(value))
@@ -137,6 +179,17 @@ function MetricList({ metrics }: { metrics: Record<string, number | boolean | nu
 
 function StatusPill({ status }: { status: string }) {
   return <span className={`sync-status-pill sync-status-pill--${status}`}>{status}</span>
+}
+
+function scopeJobToMode(job: PublicJob, mode: PublicRun['mode']): PublicJob {
+  const recentRuns = job.recent_runs.filter(run => run.mode === mode)
+  const latestRun = recentRuns[0] ?? null
+  return {
+    ...job,
+    status: latestRun?.status ?? 'unknown',
+    latest_run: latestRun,
+    recent_runs: recentRuns,
+  }
 }
 
 const RETRYABLE_STATUSES: readonly string[] = ['failed', 'skipped', 'deferred', 'interrupted']
@@ -337,10 +390,86 @@ export default function SyncStatus() {
     }
   }, [payload])
 
-  const groups = useMemo(() => ({
-    workspace: payload?.jobs.filter(job => job.category === 'workspace') ?? [],
-    integration: payload?.jobs.filter(job => job.category !== 'workspace') ?? [],
-  }), [payload])
+  const groups = useMemo(() => {
+    const jobs = payload?.jobs ?? []
+    const byKey = new Map(jobs.map(job => [job.key, job]))
+    return {
+      pipelines: WORKSPACE_PIPELINES.map(pipeline => {
+        const parent = byKey.get(pipeline.parentJobKey)
+        return {
+          ...pipeline,
+          parent: parent ? scopeJobToMode(parent, pipeline.mode) : null,
+          jobs: WORKSPACE_PIPELINE_JOB_KEYS.flatMap(jobKey => {
+            const job = byKey.get(jobKey)
+            return job ? [scopeJobToMode(job, pipeline.mode)] : []
+          }),
+        }
+      }),
+      integration: jobs.filter(job => job.category !== 'workspace'),
+    }
+  }, [payload])
+
+  const renderJob = (job: PublicJob, stateKey: string, allowAdminActions: boolean) => (
+    <details
+      className="sync-job-card"
+      key={job.key}
+      open={expandedSections.has(stateKey)}
+      onToggle={event => setSectionExpanded(stateKey, event.currentTarget.open)}
+    >
+      <summary>
+        <span><strong>{job.label}</strong><small>{job.schedule}</small></span>
+        <StatusPill status={job.status} />
+      </summary>
+      <div className="sync-job-body">
+        {job.latest_run ? (
+          <>
+            <div className="sync-job-latest">
+              <span>Last started {dateTime(job.latest_run.started_at)}</span>
+              <span>Duration {duration(job.latest_run.duration_ms)}</span>
+              <span>Mode {job.latest_run.mode}</span>
+            </div>
+            {job.latest_run.error && <p className="sync-run-error">{job.latest_run.error.code}: {job.latest_run.error.summary}</p>}
+            <MetricList metrics={job.latest_run.metrics} />
+          </>
+        ) : (
+          <p className="sync-job-empty">This job has no tracked runs in this pipeline yet.</p>
+        )}
+        {allowAdminActions && user?.role === 'admin' && job.retryable && (
+          <div className="sync-admin-actions">
+            <span>Admin action</span>
+            <button
+              type="button"
+              onClick={() => void runJob(job)}
+              disabled={retryingJob !== null}
+            >
+              {retryingJob === job.key
+                ? 'Starting…'
+                : job.latest_run && RETRYABLE_STATUSES.includes(job.latest_run.status)
+                  ? `Retry ${job.label}`
+                  : `Run ${job.label}`}
+            </button>
+          </div>
+        )}
+        <h3>Recent runs</h3>
+        <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>
+          {job.recent_runs.length === 0 && <p>No tracked runs in this pipeline yet.</p>}
+          {job.recent_runs.map(run => (
+            <Link
+              key={run.id}
+              to={`/workspace/status/runs/${run.id}`}
+              className="sync-run-row"
+              onClick={rememberStatusView}
+            >
+              <StatusPill status={run.status} />
+              <span>{dateTime(run.started_at)}</span>
+              <span>{duration(run.duration_ms)}</span>
+              <span>Details →</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </details>
+  )
 
   return (
     <div className="sync-status-page">
@@ -468,74 +597,58 @@ export default function SyncStatus() {
               </div>
             </details>
 
-            {([['Workspace jobs', groups.workspace], ['Integrations', groups.integration]] as const).map(([title, jobs]) => (
-              <section key={title}>
-                <h2 className="sync-section-title">{title}</h2>
-                <div className="sync-job-list">
-                  {jobs.map(job => (
-                    <details
-                      className="sync-job-card"
-                      key={job.key}
-                      open={expandedSections.has(`job:${job.key}`)}
-                      onToggle={event => setSectionExpanded(`job:${job.key}`, event.currentTarget.open)}
-                    >
-                      <summary>
-                        <span><strong>{job.label}</strong><small>{job.schedule}</small></span>
-                        <StatusPill status={job.status} />
-                      </summary>
-                      <div className="sync-job-body">
-                        {job.latest_run ? (
-                          <>
-                          <div className="sync-job-latest">
-                            <span>Last started {dateTime(job.latest_run.started_at)}</span>
-                            <span>Duration {duration(job.latest_run.duration_ms)}</span>
-                            <span>Mode {job.latest_run.mode}</span>
-                          </div>
-                          {job.latest_run.error && <p className="sync-run-error">{job.latest_run.error.code}: {job.latest_run.error.summary}</p>}
-                          <MetricList metrics={job.latest_run.metrics} />
-                          </>
-                        ) : (
-                          <p className="sync-job-empty">This job has no tracked runs yet.</p>
-                        )}
-                        {user?.role === 'admin' && job.retryable && (
-                          <div className="sync-admin-actions">
-                            <span>Admin action</span>
-                            <button
-                              type="button"
-                              onClick={() => void runJob(job)}
-                              disabled={retryingJob !== null}
-                            >
-                              {retryingJob === job.key
-                                ? 'Starting…'
-                                : job.latest_run && RETRYABLE_STATUSES.includes(job.latest_run.status)
-                                  ? `Retry ${job.label}`
-                                  : `Run ${job.label}`}
-                            </button>
-                          </div>
-                        )}
-                        <h3>Recent runs</h3>
-                        <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>
-                          {job.recent_runs.length === 0 && <p>No tracked runs yet.</p>}
-                          {job.recent_runs.map(run => (
-                            <Link
-                              key={run.id}
-                              to={`/workspace/status/runs/${run.id}`}
-                              className="sync-run-row"
-                              onClick={rememberStatusView}
-                            >
-                              <StatusPill status={run.status} />
-                              <span>{dateTime(run.started_at)}</span>
-                              <span>{duration(run.duration_ms)}</span>
-                              <span>Details →</span>
-                            </Link>
-                          ))}
+            <section>
+              <h2 className="sync-section-title">Workspace synchronization pipelines</h2>
+              <p className="sync-section-description">Expand a run type to inspect only the jobs and history produced by that pipeline.</p>
+              <div className="sync-pipeline-list">
+                {groups.pipelines.map(pipeline => (
+                  <details
+                    className={`sync-pipeline-card sync-pipeline-card--${pipeline.key}`}
+                    key={pipeline.key}
+                    open={expandedSections.has(`pipeline:${pipeline.key}`)}
+                    onToggle={event => setSectionExpanded(`pipeline:${pipeline.key}`, event.currentTarget.open)}
+                  >
+                    <summary>
+                      <span>
+                        <strong>{pipeline.title}</strong>
+                        <small>{pipeline.description}</small>
+                      </span>
+                      <StatusPill status={pipeline.parent?.status ?? 'unknown'} />
+                    </summary>
+                    <div className="sync-pipeline-body">
+                      {pipeline.parent?.latest_run ? (
+                        <div className="sync-pipeline-overview">
+                          <span>Latest parent run</span>
+                          <Link
+                            to={`/workspace/status/runs/${pipeline.parent.latest_run.id}`}
+                            onClick={rememberStatusView}
+                          >
+                            {dateTime(pipeline.parent.latest_run.started_at)} · View run →
+                          </Link>
                         </div>
+                      ) : (
+                        <p className="sync-job-empty">This pipeline has no tracked parent runs yet.</p>
+                      )}
+                      <h3>Jobs in this pipeline</h3>
+                      <div className="sync-pipeline-jobs">
+                        {pipeline.jobs.map(job => renderJob(
+                          job,
+                          `pipeline:${pipeline.key}:job:${job.key}`,
+                          pipeline.key === 'canonical',
+                        ))}
                       </div>
-                    </details>
-                  ))}
-                </div>
-              </section>
-            ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="sync-section-title">Integrations</h2>
+              <div className="sync-job-list">
+                {groups.integration.map(job => renderJob(job, `integration:${job.key}`, true))}
+              </div>
+            </section>
           </>
         )}
       </div></section>
