@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './SyncStatus.css'
@@ -140,6 +140,39 @@ function StatusPill({ status }: { status: string }) {
 }
 
 const RETRYABLE_STATUSES: readonly string[] = ['failed', 'skipped', 'deferred', 'interrupted']
+const STATUS_RETURN_VIEW_KEY = 'oasis.sync-status.return-view'
+
+interface StatusReturnView {
+  expandedSections: string[]
+  scrollY: number
+}
+
+function readStatusReturnView(): StatusReturnView | null {
+  try {
+    const raw = window.sessionStorage.getItem(STATUS_RETURN_VIEW_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StatusReturnView>
+    if (!Array.isArray(parsed.expandedSections) || typeof parsed.scrollY !== 'number') return null
+    return {
+      expandedSections: parsed.expandedSections.filter(value => typeof value === 'string'),
+      scrollY: Math.max(0, parsed.scrollY),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeStatusReturnView(view: StatusReturnView): void {
+  try {
+    window.sessionStorage.setItem(STATUS_RETURN_VIEW_KEY, JSON.stringify(view))
+  } catch { /* Returning still works; only view restoration is unavailable. */ }
+}
+
+function clearStatusReturnView(): void {
+  try {
+    window.sessionStorage.removeItem(STATUS_RETURN_VIEW_KEY)
+  } catch { /* Storage can be unavailable in privacy-restricted browsers. */ }
+}
 
 export function SyncRunDetail() {
   const { runId = '' } = useParams()
@@ -204,11 +237,31 @@ export function SyncRunDetail() {
 
 export default function SyncStatus() {
   const { user } = useAuth()
+  const returnView = useRef<StatusReturnView | null>(readStatusReturnView())
   const [payload, setPayload] = useState<SyncStatusPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [retryingJob, setRetryingJob] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    () => new Set(returnView.current?.expandedSections ?? []),
+  )
+
+  const setSectionExpanded = useCallback((section: string, expanded: boolean) => {
+    setExpandedSections(current => {
+      const next = new Set(current)
+      if (expanded) next.add(section)
+      else next.delete(section)
+      return next
+    })
+  }, [])
+
+  const rememberStatusView = useCallback(() => {
+    writeStatusReturnView({
+      expandedSections: Array.from(expandedSections),
+      scrollY: window.scrollY,
+    })
+  }, [expandedSections])
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
@@ -260,6 +313,29 @@ export default function SyncStatus() {
     }, 30_000)
     return () => window.clearInterval(timer)
   }, [refresh])
+
+  useLayoutEffect(() => {
+    if (!payload || !returnView.current) return
+    const savedScrollY = returnView.current.scrollY
+    const root = document.documentElement
+    const priorScrollBehavior = root.style.scrollBehavior
+    root.style.scrollBehavior = 'auto'
+    let secondFrame: number | null = null
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.scrollTo(0, savedScrollY)
+      secondFrame = window.requestAnimationFrame(() => {
+        window.scrollTo(0, savedScrollY)
+        root.style.scrollBehavior = priorScrollBehavior
+        clearStatusReturnView()
+        returnView.current = null
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame)
+      root.style.scrollBehavior = priorScrollBehavior
+    }
+  }, [payload])
 
   const groups = useMemo(() => ({
     workspace: payload?.jobs.filter(job => job.category === 'workspace') ?? [],
@@ -344,7 +420,11 @@ export default function SyncStatus() {
               })}
             </div>
 
-            <details className="sync-history-card">
+            <details
+              className="sync-history-card"
+              open={expandedSections.has('budget-history')}
+              onToggle={event => setSectionExpanded('budget-history', event.currentTarget.open)}
+            >
               <summary>100-day operation budget history</summary>
               <div className="sync-history-table" role="table" aria-label="Operation budget history">
                 <div className="sync-history-row sync-history-row--heading" role="row">
@@ -363,13 +443,22 @@ export default function SyncStatus() {
               </div>
             </details>
 
-            <details className="sync-history-card">
+            <details
+              className="sync-history-card"
+              open={expandedSections.has('incomplete-runs')}
+              onToggle={event => setSectionExpanded('incomplete-runs', event.currentTarget.open)}
+            >
               <summary>Incomplete run archive ({payload.incomplete_runs.length})</summary>
               <p className="sync-history-description">The newest 100 incomplete jobs remain directly inspectable beyond each job's ten-run summary.</p>
               <div className="sync-run-table" role="table" aria-label="Incomplete sync runs">
                 {payload.incomplete_runs.length === 0 && <p>No incomplete runs have been recorded.</p>}
                 {payload.incomplete_runs.map(run => (
-                  <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row sync-run-row--archive">
+                  <Link
+                    key={run.id}
+                    to={`/workspace/status/runs/${run.id}`}
+                    className="sync-run-row sync-run-row--archive"
+                    onClick={rememberStatusView}
+                  >
                     <StatusPill status={run.status} />
                     <span className="sync-run-identity"><strong>{run.label}</strong><small>{run.mode} mode</small></span>
                     <span>{dateTime(run.started_at)}</span>
@@ -384,7 +473,12 @@ export default function SyncStatus() {
                 <h2 className="sync-section-title">{title}</h2>
                 <div className="sync-job-list">
                   {jobs.map(job => (
-                    <details className="sync-job-card" key={job.key}>
+                    <details
+                      className="sync-job-card"
+                      key={job.key}
+                      open={expandedSections.has(`job:${job.key}`)}
+                      onToggle={event => setSectionExpanded(`job:${job.key}`, event.currentTarget.open)}
+                    >
                       <summary>
                         <span><strong>{job.label}</strong><small>{job.schedule}</small></span>
                         <StatusPill status={job.status} />
@@ -423,7 +517,12 @@ export default function SyncStatus() {
                         <div className="sync-run-table" role="table" aria-label={`${job.label} recent runs`}>
                           {job.recent_runs.length === 0 && <p>No tracked runs yet.</p>}
                           {job.recent_runs.map(run => (
-                            <Link key={run.id} to={`/workspace/status/runs/${run.id}`} className="sync-run-row">
+                            <Link
+                              key={run.id}
+                              to={`/workspace/status/runs/${run.id}`}
+                              className="sync-run-row"
+                              onClick={rememberStatusView}
+                            >
                               <StatusPill status={run.status} />
                               <span>{dateTime(run.started_at)}</span>
                               <span>{duration(run.duration_ms)}</span>
