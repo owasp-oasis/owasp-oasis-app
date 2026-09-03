@@ -173,6 +173,57 @@ describe('administrator user role management', () => {
       target_id: '4242',
       outcome: 'succeeded',
     });
+
+    const rebind = await SELF.fetch(adminRequest(`/api/admin/users/${id}/role`, admin, {
+      method: 'POST', csrf, body: { role: 'guest', github: 'different-user' },
+    }));
+    expect(rebind.status).toBe(409);
+    const retainedRole = await env.DB.prepare(
+      'SELECT role FROM user_roles WHERE github_user_id = 4242',
+    ).first<{ role: string }>();
+    expect(retainedRole?.role).toBe('moderator');
+  });
+
+  it('lets an administrator supply a missing GitHub identity while assigning a role', async () => {
+    await insertTestRegistration(env, { email: 'legacy@example.org', github: '' });
+    const id = await registrationId('legacy@example.org');
+    fetchMock.when(request => request.url === 'https://api.github.com/users/legacy-user')
+      .respondWith(Response.json({ id: 5150, login: 'Legacy-User', type: 'User' }));
+
+    const admin = await createTestSession(env, {
+      github_user_id: 7505051,
+      github_login: 'humor4fun',
+    });
+    const list = await SELF.fetch(adminRequest('/api/admin/users?q=legacy', admin));
+    expect(list.status).toBe(200);
+    await expect(list.json()).resolves.toEqual(expect.objectContaining({
+      users: [expect.objectContaining({
+        github: '',
+        access_role: null,
+        is_self: false,
+        can_assign_role: true,
+      })],
+    }));
+
+    const response = await SELF.fetch(adminRequest(`/api/admin/users/${id}/role`, admin, {
+      method: 'POST',
+      csrf: makeCsrf(),
+      body: { role: 'moderator', github: '@legacy-user' },
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      user: {
+        registration_id: id,
+        github: 'Legacy-User',
+        github_user_id: 5150,
+        access_role: 'moderator',
+      },
+    }));
+    const registration = await env.DB.prepare(
+      'SELECT github FROM registrations WHERE id = ?',
+    ).bind(id).first();
+    expect(registration).toEqual({ github: 'Legacy-User' });
   });
 
   it('refuses missing or invalid GitHub identities without changing roles', async () => {
@@ -226,5 +277,10 @@ describe('administrator user role management', () => {
       'SELECT role FROM user_roles WHERE github_user_id = 7505051',
     ).first<{ role: string }>();
     expect(role?.role).toBe('admin');
+
+    const overrideAttempt = await SELF.fetch(adminRequest(`/api/admin/users/${id}/role`, admin, {
+      method: 'POST', csrf, body: { role: 'guest', github: 'different-user' },
+    }));
+    expect(overrideAttempt.status).toBe(409);
   });
 });
