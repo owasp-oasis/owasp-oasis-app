@@ -220,7 +220,12 @@ describe('PR Panel endpoints', () => {
   describe('POST /api/pr-panel/:id/react', () => {
     beforeEach(() => {
       fetchMock
-        .when((req) => req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
+        .when((req) => req.method === 'GET' && req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
+        .respondWith(
+          new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } }),
+        );
+      fetchMock
+        .when((req) => req.method === 'POST' && req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
         .respondWith(
           new Response(
             JSON.stringify({
@@ -228,7 +233,7 @@ describe('PR Panel endpoints', () => {
               content: '+1',
               user: { login: 'test-user' },
             }),
-            { headers: { 'Content-Type': 'application/json' } },
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
           ),
         );
     });
@@ -292,6 +297,92 @@ describe('PR Panel endpoints', () => {
       );
 
       expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        created: true,
+        reaction: '+1',
+      });
+    });
+
+    it('does not create another reaction when the user already reacted to the comment', async () => {
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when((req) => req.method === 'GET' && req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
+        .respondWith(
+          new Response(JSON.stringify([
+            { id: 99, content: 'heart', user: { login: 'TEST-USER' } },
+          ]), { headers: { 'Content-Type': 'application/json' } }),
+        );
+
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestRepo(env);
+      await insertTestPR(env);
+
+      const res = await SELF.fetch(
+        new Request('http://localhost/api/pr-panel/1001/react', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrf,
+            Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
+          },
+          body: JSON.stringify({ comment_id: 123456, reaction: '+1' }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        created: false,
+        reaction: 'heart',
+      });
+    });
+
+    it('does not report an increment when GitHub deduplicates a concurrent reaction', async () => {
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when((req) => req.method === 'GET' && req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
+        .respondWith(
+          new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } }),
+        );
+      fetchMock
+        .when((req) => req.method === 'POST' && req.url.includes('/issues/comments/') && req.url.includes('/reactions'))
+        .respondWith(
+          new Response(JSON.stringify({
+            id: 100,
+            content: '+1',
+            user: { login: 'test-user' },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
+
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestRepo(env);
+      await insertTestPR(env);
+
+      const res = await SELF.fetch(
+        new Request('http://localhost/api/pr-panel/1001/react', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrf,
+            Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
+          },
+          body: JSON.stringify({ comment_id: 123456, reaction: '+1' }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        created: false,
+        reaction: '+1',
+      });
     });
 
     it('rejects invalid reaction type', async () => {

@@ -63,8 +63,9 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
-  // Map of commentId → reaction → pendingCount delta (for optimistic updates)
   const [reactionErrors, setReactionErrors] = useState<Map<number, string>>(new Map())
+  const [pendingReactions, setPendingReactions] = useState<Set<number>>(new Set())
+  const [viewerReactions, setViewerReactions] = useState<Map<number, string>>(new Map())
 
   // Fetch CSRF token once the user is authenticated
   useEffect(() => {
@@ -100,16 +101,14 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
       }
       return
     }
+    if (pendingReactions.has(commentId) || viewerReactions.has(commentId)) return
 
-    // Optimistic update
-    setComments(prev => prev ? prev.map(c => {
-      if (c.id !== commentId) return c
-      const r = { ...c.reactions }
-      const k = reaction as keyof Omit<Reactions, 'total_count'>
-      r[k] = (r[k] ?? 0) + 1
-      r.total_count = r.total_count + 1
-      return { ...c, reactions: r }
-    }) : null)
+    setPendingReactions(prev => new Set(prev).add(commentId))
+    setReactionErrors(prev => {
+      const next = new Map(prev)
+      next.delete(commentId)
+      return next
+    })
 
     try {
       const res = await fetch(`/api/pr-panel/${prId}/react`, {
@@ -121,42 +120,44 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
         },
         body: JSON.stringify({ comment_id: commentId, reaction }),
       })
+      const data = await res.json() as {
+        ok: boolean
+        created?: boolean
+        reaction?: string
+        error?: string
+      }
 
       if (res.status === 403) {
-        // Revert and show re-auth message
-        setComments(prev => prev ? prev.map(c => {
-          if (c.id !== commentId) return c
-          const r = { ...c.reactions }
-          const k = reaction as keyof Omit<Reactions, 'total_count'>
-          r[k] = Math.max(0, (r[k] ?? 1) - 1)
-          r.total_count = Math.max(0, r.total_count - 1)
-          return { ...c, reactions: r }
-        }) : null)
         setReactionErrors(prev => new Map(prev).set(commentId, 'reauth'))
         return
       }
 
       if (!res.ok) {
-        // Revert on other errors
+        setReactionErrors(prev => new Map(prev).set(commentId, data.error ?? 'Could not add reaction'))
+        return
+      }
+
+      const selectedReaction = data.reaction ?? reaction
+      setViewerReactions(prev => new Map(prev).set(commentId, selectedReaction))
+
+      if (data.created) {
         setComments(prev => prev ? prev.map(c => {
           if (c.id !== commentId) return c
           const r = { ...c.reactions }
-          const k = reaction as keyof Omit<Reactions, 'total_count'>
-          r[k] = Math.max(0, (r[k] ?? 1) - 1)
-          r.total_count = Math.max(0, r.total_count - 1)
+          const k = selectedReaction as keyof Omit<Reactions, 'total_count'>
+          r[k] = (r[k] ?? 0) + 1
+          r.total_count += 1
           return { ...c, reactions: r }
         }) : null)
       }
     } catch {
-      // Revert on network error
-      setComments(prev => prev ? prev.map(c => {
-        if (c.id !== commentId) return c
-        const r = { ...c.reactions }
-        const k = reaction as keyof Omit<Reactions, 'total_count'>
-        r[k] = Math.max(0, (r[k] ?? 1) - 1)
-        r.total_count = Math.max(0, r.total_count - 1)
-        return { ...c, reactions: r }
-      }) : null)
+      setReactionErrors(prev => new Map(prev).set(commentId, 'Could not add reaction'))
+    } finally {
+      setPendingReactions(prev => {
+        const next = new Set(prev)
+        next.delete(commentId)
+        return next
+      })
     }
   }
 
@@ -169,6 +170,9 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
       {comments.map(c => {
         const isOasis = c.oasis_decision !== null
         const reauthError = reactionErrors.get(c.id) === 'reauth'
+        const reactionError = reactionErrors.get(c.id)
+        const pending = pendingReactions.has(c.id)
+        const viewerReaction = viewerReactions.get(c.id)
 
         return (
           <div key={c.id} className="prp-comment">
@@ -204,10 +208,12 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
                 return (
                   <button
                     key={key}
-                    className="prp-reaction-btn"
+                    className={`prp-reaction-btn${viewerReaction === key ? ' prp-reaction-btn--active' : ''}`}
                     onClick={() => handleReact(c.id, key)}
-                    title={label}
+                    disabled={pending || viewerReaction !== undefined}
+                    title={viewerReaction ? `You reacted with ${viewerReaction}` : label}
                     aria-label={`${label} (${count})`}
+                    aria-pressed={viewerReaction === key}
                   >
                     {emoji} {count > 0 && <span className="prp-reaction-count">{count}</span>}
                   </button>
@@ -221,6 +227,9 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
                 <a href="/api/auth/login" className="prp-gh-link">Sign in again</a> with the
                 new scope.
               </p>
+            )}
+            {reactionError && !reauthError && (
+              <p className="prp-reaction-note" role="alert">{reactionError}</p>
             )}
           </div>
         )
