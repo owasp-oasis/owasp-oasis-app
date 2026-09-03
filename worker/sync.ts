@@ -275,6 +275,7 @@ export async function runSyncOneRepo(
     reactionJobRunId?: string;
     pipelineRunId?: string;
     deferFinalization?: boolean;
+    cursorKey?: string;
   } = {},
 ): Promise<SyncResult> {
   const { skipReactions = true } = opts;
@@ -294,7 +295,8 @@ export async function runSyncOneRepo(
     }
 
     // Parse cursor "repoIndex:prStart"
-    const cursorRow = await db.prepare("SELECT value FROM sync_state WHERE key = 'sync_cursor'")
+    const cursorKey = opts.cursorKey ?? 'sync_cursor';
+    const cursorRow = await db.prepare('SELECT value FROM sync_state WHERE key = ?').bind(cursorKey)
       .first<{ value: string }>();
     let repoIdx = 0, prStart = 0;
     if (cursorRow?.value) {
@@ -306,7 +308,7 @@ export async function runSyncOneRepo(
      // All repos processed — rebuild contributors and finish
      if (repoIdx >= repos.length) {
        if (opts.deferFinalization) {
-         await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
+         await db.prepare('DELETE FROM sync_state WHERE key = ?').bind(cursorKey).run();
          return { ok: true, message: 'Repository and pull request collection complete', stats, done: true };
        }
        // Sync user votes from pr_comments before resolving duplicates
@@ -321,7 +323,7 @@ export async function runSyncOneRepo(
        
        await setSyncState(db, 'last_synced_at', syncStart);
        await setSyncState(db, 'sync_running', '0');
-       await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
+       await db.prepare('DELETE FROM sync_state WHERE key = ?').bind(cursorKey).run();
        return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
      }
 
@@ -388,7 +390,7 @@ export async function runSyncOneRepo(
     // Advance cursor
     const nextRepoIdx  = hasMore ? repoIdx : repoIdx + 1;
     const nextPrStart  = hasMore ? prEnd : 0;
-    await setSyncState(db, 'sync_cursor', `${nextRepoIdx}:${nextPrStart}`);
+    await setSyncState(db, cursorKey, `${nextRepoIdx}:${nextPrStart}`);
 
     const reposLeft = repos.length - nextRepoIdx;
     const prsLeft   = hasMore ? allPRs.length - prEnd : 0;
@@ -400,9 +402,32 @@ export async function runSyncOneRepo(
 
     return { ok: true, message: msg, stats, done: false, cursor: `${nextRepoIdx}:${nextPrStart}`, total_repos: repos.length };
   } catch (err) {
-    await setSyncState(db, 'sync_running', '0');
+    if (!opts.cursorKey) await setSyncState(db, 'sync_running', '0');
     return { ok: false, message: (err as Error)?.message ?? String(err), stats };
   }
+}
+
+/** Seeds a stable reaction-refresh queue from the comments currently stored in D1. */
+export async function seedCommentReactionWorkItems(
+  db: D1Database,
+  jobRunId: string,
+  pipelineRunId: string = jobRunId,
+): Promise<number> {
+  const timestamp = new Date().toISOString();
+  await db.prepare(`
+    INSERT OR IGNORE INTO sync_work_items (
+      id, pipeline_run_id, job_run_id, job_key, entity_type, entity_id,
+      payload_json, status, created_at, updated_at
+    )
+    SELECT ? || ':reaction:' || CAST(id AS TEXT), ?, ?, 'comment_reactions',
+           'comment', CAST(id AS TEXT), '{}', 'pending', ?, ?
+      FROM pr_comments
+  `).bind(jobRunId, pipelineRunId, jobRunId, timestamp, timestamp).run();
+  const row = await db.prepare(`
+    SELECT COUNT(*) AS count FROM sync_work_items
+     WHERE job_run_id = ? AND job_key = 'comment_reactions'
+  `).bind(jobRunId).first<{ count: number }>();
+  return Number(row?.count ?? 0);
 }
 
 /** Processes exactly one queued comment-reaction work item. */

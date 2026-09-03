@@ -19,6 +19,7 @@ export interface Env {
   CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
   ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
   HUBSPOT_SYNC_WORKFLOW?: Workflow<HubSpotSyncParams>;
+  MANUAL_SYNC_JOB_WORKFLOW?: Workflow<ManualSyncJobParams>;
 }
 
 export interface OrphanCleanupActor {
@@ -55,6 +56,25 @@ export interface HubSpotSyncParams {
   maxQueueId: number;
   eligibleAt: string;
   auditActor?: OrphanCleanupActor;
+}
+
+export type ManualSyncJobKey =
+  | 'repository_inventory'
+  | 'pull_request_catalog'
+  | 'upstream_merge_status'
+  | 'pull_request_comments'
+  | 'comment_reactions'
+  | 'vote_projection'
+  | 'duplicate_resolution'
+  | 'contributor_scores';
+
+export interface ManualSyncJobParams {
+  jobRunId: string;
+  pipelineRunId: string;
+  jobKey: ManualSyncJobKey;
+  pipeline: WorkspacePipelineKind;
+  chunk: number;
+  auditActor: OrphanCleanupActor;
 }
 
 export interface SyncResult {

@@ -37,6 +37,7 @@
 
 .sync-section-title { margin: 36px 0 15px; font-size: 1.25rem; }
 .sync-section-description { margin: -7px 0 16px; color: var(--muted); }
+.sync-planned-note { margin: 14px 2px 0; color: var(--muted); font-size: .85rem; }
 .sync-budget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .sync-budget-card { padding: 16px; }
 .sync-budget-card > div:first-child { display: flex; justify-content: space-between; gap: 12px; }

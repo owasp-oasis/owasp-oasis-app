@@ -330,8 +330,9 @@ export default function SyncStatus() {
     }
   }, [])
 
-  const runJob = useCallback(async (job: PublicJob) => {
-    setRetryingJob(job.key)
+  const runJob = useCallback(async (job: PublicJob, pipeline: string) => {
+    const actionKey = `${pipeline}:${job.key}`
+    setRetryingJob(actionKey)
     setActionMessage(null)
     try {
       const csrfResponse = await fetch('/api/csrf', { credentials: 'include', cache: 'no-store' })
@@ -340,7 +341,8 @@ export default function SyncStatus() {
       const response = await fetch(`/api/admin/sync/jobs/${encodeURIComponent(job.key)}/retry`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'x-csrf-token': token },
+        headers: { 'content-type': 'application/json', 'x-csrf-token': token },
+        body: JSON.stringify({ pipeline }),
       })
       const result = await response.json() as { error?: string; retry_run_id?: string }
       if (!response.ok) throw new Error(result.error ?? `Retry request returned ${response.status}`)
@@ -405,11 +407,13 @@ export default function SyncStatus() {
           }),
         }
       }),
-      integration: jobs.filter(job => job.category !== 'workspace'),
+      integration: jobs.filter(job => job.category !== 'workspace' && job.key !== 'cloudflare_analytics'),
     }
   }, [payload])
 
-  const renderJob = (job: PublicJob, stateKey: string, allowAdminActions: boolean) => (
+  const renderJob = (job: PublicJob, stateKey: string, pipeline: string) => {
+    const actionKey = `${pipeline}:${job.key}`
+    return (
     <details
       className="sync-job-card"
       key={job.key}
@@ -434,19 +438,21 @@ export default function SyncStatus() {
         ) : (
           <p className="sync-job-empty">This job has no tracked runs in this pipeline yet.</p>
         )}
-        {allowAdminActions && user?.role === 'admin' && job.retryable && (
+        {user?.role === 'admin' && job.retryable && (
           <div className="sync-admin-actions">
             <span>Admin action</span>
             <button
               type="button"
-              onClick={() => void runJob(job)}
+              onClick={() => void runJob(job, pipeline)}
               disabled={retryingJob !== null}
             >
-              {retryingJob === job.key
+              {retryingJob === actionKey
                 ? 'Starting…'
                 : job.latest_run && RETRYABLE_STATUSES.includes(job.latest_run.status)
                   ? `Retry ${job.label}`
-                  : `Run ${job.label}`}
+                  : pipeline === 'shadow'
+                    ? 'Run shadow pipeline for this job'
+                    : `Run ${job.label}`}
             </button>
           </div>
         )}
@@ -469,7 +475,8 @@ export default function SyncStatus() {
         </div>
       </div>
     </details>
-  )
+    )
+  }
 
   return (
     <div className="sync-status-page">
@@ -629,12 +636,26 @@ export default function SyncStatus() {
                       ) : (
                         <p className="sync-job-empty">This pipeline has no tracked parent runs yet.</p>
                       )}
+                      {user?.role === 'admin' && pipeline.parent?.retryable && (
+                        <div className="sync-admin-actions">
+                          <span>Admin pipeline action</span>
+                          <button
+                            type="button"
+                            onClick={() => void runJob(pipeline.parent!, pipeline.key)}
+                            disabled={retryingJob !== null}
+                          >
+                            {retryingJob === `${pipeline.key}:${pipeline.parent.key}`
+                              ? 'Starting…'
+                              : `Run ${pipeline.title}`}
+                          </button>
+                        </div>
+                      )}
                       <h3>Jobs in this pipeline</h3>
                       <div className="sync-pipeline-jobs">
                         {pipeline.jobs.map(job => renderJob(
                           job,
                           `pipeline:${pipeline.key}:job:${job.key}`,
-                          pipeline.key === 'canonical',
+                          pipeline.key,
                         ))}
                       </div>
                     </div>
@@ -646,8 +667,9 @@ export default function SyncStatus() {
             <section>
               <h2 className="sync-section-title">Integrations</h2>
               <div className="sync-job-list">
-                {groups.integration.map(job => renderJob(job, `integration:${job.key}`, true))}
+                {groups.integration.map(job => renderJob(job, `integration:${job.key}`, 'integration'))}
               </div>
+              <p className="sync-planned-note">Cloudflare analytics archiving remains a planned dashboard capability and is not presented as an executable job.</p>
             </section>
           </>
         )}
