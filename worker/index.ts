@@ -30,6 +30,7 @@ import {
 } from './canonicalSync.js';
 import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
 import { HubSpotSyncWorkflow } from './hubSpotSyncWorkflow.js';
+import { ManualSyncJobWorkflow } from './manualSyncJobWorkflow.js';
 import {
   handleMeta,
   handleRepos,
@@ -316,3 +317,4 @@ export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
 export { OrphanCleanupWorkflow };
 export { HubSpotSyncWorkflow };
+export { ManualSyncJobWorkflow };

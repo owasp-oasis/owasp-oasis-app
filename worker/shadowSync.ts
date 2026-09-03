@@ -1142,12 +1142,17 @@ async function continueShadow(env: Env, params: ShadowSyncParams, suffix: string
   }
 }
 
-export async function startShadowSync(env: Env, legacyPipelineRunId: string, canonicalCutoffAt: string): Promise<string | null> {
-  if (!env.SHADOW_SYNC_WORKFLOW || env.ENVIRONMENT !== 'preview') return null;
+export async function startShadowSync(
+  env: Env,
+  legacyPipelineRunId: string,
+  canonicalCutoffAt: string,
+  trigger: 'scheduled' | 'manual' = 'scheduled',
+): Promise<string | null> {
+  if (!env.SHADOW_SYNC_WORKFLOW) return null;
   const dispatchRunId = await startSyncJob(env.DB, {
     jobKey: 'shadow_sync_dispatch',
     pipelineRunId: legacyPipelineRunId,
-    trigger: 'scheduled',
+    trigger,
     mode: 'shadow',
   });
   const id = shadowWorkflowInstanceId(legacyPipelineRunId);

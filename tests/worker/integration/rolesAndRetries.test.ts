@@ -18,7 +18,13 @@ import {
 } from './helpers.js';
 import { SELF } from './testWorker.js';
 
-function retryRequest(jobKey: string, sessionCookie?: string, tokenCookie?: string, csrf?: string): Request {
+function retryRequest(
+  jobKey: string,
+  sessionCookie?: string,
+  tokenCookie?: string,
+  csrf?: string,
+  pipeline?: 'legacy' | 'canonical' | 'shadow' | 'integration',
+): Request {
   const headers = new Headers();
   if (sessionCookie && tokenCookie) {
     headers.set('Cookie', buildCookieHeader(
@@ -28,9 +34,11 @@ function retryRequest(jobKey: string, sessionCookie?: string, tokenCookie?: stri
     ));
   }
   if (csrf) headers.set('x-csrf-token', csrf);
+  if (pipeline) headers.set('content-type', 'application/json');
   return new Request(`http://localhost/api/admin/sync/jobs/${jobKey}/retry`, {
     method: 'POST',
     headers,
+    body: pipeline ? JSON.stringify({ pipeline }) : undefined,
   });
 }
 
@@ -139,7 +147,17 @@ describe('server-side roles and sync retries', () => {
   });
 
   it('lets an admin retry an incomplete repository inventory and audits the action', async () => {
-    const productionEnv = { ...env, ENVIRONMENT: 'production' } as Env;
+    const workflows: Array<{ params: { jobKey: string } }> = [];
+    const productionEnv = {
+      ...env,
+      ENVIRONMENT: 'production',
+      MANUAL_SYNC_JOB_WORKFLOW: {
+        async create(options: { id: string; params: { jobKey: string } }) {
+          workflows.push(options);
+          return { id: options.id };
+        },
+      },
+    } as Env;
     await insertTestRepo(env, { id: 101, name: 'current-fork' });
     const failedRunId = await startSyncJob(env.DB, {
       jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'legacy',
@@ -159,7 +177,7 @@ describe('server-side roles and sync retries', () => {
     const csrf = makeCsrf();
     const ctx = createExecutionContext();
     const response = await handleRetrySyncJob(
-      retryRequest('repository_inventory', admin.sessionCookie, admin.tokenCookie, csrf),
+      retryRequest('repository_inventory', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
       productionEnv,
       ctx,
       'repository_inventory',
@@ -173,7 +191,9 @@ describe('server-side roles and sync retries', () => {
     const retried = await env.DB.prepare(
       'SELECT status, trigger_type, mode FROM sync_job_runs WHERE id = ?',
     ).bind(body.retry_run_id).first<{ status: string; trigger_type: string; mode: string }>();
-    expect(retried).toEqual({ status: 'succeeded', trigger_type: 'manual', mode: 'live' });
+    expect(retried).toEqual({ status: 'queued', trigger_type: 'manual', mode: 'legacy' });
+    expect(workflows).toHaveLength(1);
+    expect(workflows[0].params.jobKey).toBe('repository_inventory');
 
     const audit = await env.DB.prepare(`
       SELECT github_user_id, github_login, role, action, target_id, outcome
@@ -182,27 +202,25 @@ describe('server-side roles and sync retries', () => {
     expect(audit.results).toEqual([
       expect.objectContaining({
         github_user_id: 7505051, github_login: 'humor4fun', role: 'admin',
-        action: 'sync_job.retry', target_id: 'repository_inventory', outcome: 'accepted',
-      }),
-      expect.objectContaining({
-        github_user_id: 7505051, github_login: 'humor4fun', role: 'admin',
-        action: 'sync_job.retry', target_id: 'repository_inventory', outcome: 'succeeded',
+        action: 'sync_job.retry', target_id: 'legacy:repository_inventory', outcome: 'accepted',
       }),
     ]);
   });
 
-  it('lets an administrator run completed and never-run jobs but refuses unsupported or active jobs', async () => {
+  it('lets an administrator run every implemented job but refuses active jobs', async () => {
     const productionEnv = { ...env, ENVIRONMENT: 'production' } as Env;
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
     const csrf = makeCsrf();
 
-    const unsupported = await handleRetrySyncJob(
+    const catalogCtx = createExecutionContext();
+    const catalog = await handleRetrySyncJob(
       retryRequest('pull_request_catalog', admin.sessionCookie, admin.tokenCookie, csrf),
       productionEnv,
-      createExecutionContext(),
+      catalogCtx,
       'pull_request_catalog',
     );
-    expect(unsupported.status).toBe(409);
+    expect(catalog.status).toBe(202);
+    await waitOnExecutionContext(catalogCtx);
 
     const completeRunId = await startSyncJob(env.DB, {
       jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'legacy',
@@ -254,11 +272,119 @@ describe('server-side roles and sync retries', () => {
       jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy', status: 'queued',
     });
     const active = await handleRetrySyncJob(
-      retryRequest('orphan_cleanup', admin.sessionCookie, admin.tokenCookie, csrf),
+      retryRequest('orphan_cleanup', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
       productionEnv,
       createExecutionContext(),
       'orphan_cleanup',
     );
     expect(active.status).toBe(409);
+  });
+
+  it('dispatches every standalone Workspace stage through its bounded manual Workflow', async () => {
+    const created: Array<{ id: string; params: { jobKey: string; pipeline: string } }> = [];
+    const productionEnv = {
+      ...env,
+      ENVIRONMENT: 'production',
+      MANUAL_SYNC_JOB_WORKFLOW: {
+        async create(options: { id: string; params: { jobKey: string; pipeline: string } }) {
+          created.push(options);
+          return { id: options.id };
+        },
+      },
+    } as Env;
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const csrf = makeCsrf();
+    const jobKeys = [
+      'pull_request_catalog',
+      'upstream_merge_status',
+      'pull_request_comments',
+      'comment_reactions',
+      'vote_projection',
+      'duplicate_resolution',
+      'contributor_scores',
+    ];
+
+    for (const jobKey of jobKeys) {
+      const ctx = createExecutionContext();
+      const response = await handleRetrySyncJob(
+        retryRequest(jobKey, admin.sessionCookie, admin.tokenCookie, csrf, 'canonical'),
+        productionEnv,
+        ctx,
+        jobKey,
+      );
+      expect(response.status, jobKey).toBe(202);
+      const body = await response.json() as { retry_run_id: string; execution_scope: string };
+      expect(body.execution_scope).toBe('individual_job');
+      await waitOnExecutionContext(ctx);
+      await finishSyncJob(env.DB, body.retry_run_id, 'succeeded');
+    }
+
+    expect(created.map(entry => entry.params)).toEqual(jobKeys.map(jobKey => ({
+      jobKey,
+      pipeline: 'canonical',
+      jobRunId: expect.any(String),
+      pipelineRunId: expect.any(String),
+      chunk: 0,
+      auditActor: expect.objectContaining({ githubLogin: 'humor4fun', role: 'admin' }),
+    })));
+  });
+
+  it('dispatches legacy, canonical, and shadow parent runs with manual tracking', async () => {
+    const workspaceDispatches: Array<{ params: { action: string; pipelineKind?: string } }> = [];
+    const shadowDispatches: Array<{ params: { action: string; legacyPipelineRunId: string } }> = [];
+    const productionEnv = {
+      ...env,
+      ENVIRONMENT: 'production',
+      CANONICAL_SYNC_WORKFLOW: {
+        async create(options: { params: { action: string; pipelineKind?: string } }) {
+          workspaceDispatches.push(options);
+          return { id: `${options.params.pipelineKind}-workflow` };
+        },
+      },
+      SHADOW_SYNC_WORKFLOW: {
+        async create(options: { params: { action: string; legacyPipelineRunId: string } }) {
+          shadowDispatches.push(options);
+          return { id: 'shadow-workflow' };
+        },
+      },
+    } as Env;
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const csrf = makeCsrf();
+
+    for (const target of [
+      { jobKey: 'legacy_workspace_sync', pipeline: 'legacy' as const },
+      { jobKey: 'canonical_workspace_sync', pipeline: 'canonical' as const },
+    ]) {
+      const response = await handleRetrySyncJob(
+        retryRequest(target.jobKey, admin.sessionCookie, admin.tokenCookie, csrf, target.pipeline),
+        productionEnv,
+        createExecutionContext(),
+        target.jobKey,
+      );
+      expect(response.status, target.jobKey).toBe(202);
+      await env.DB.prepare(
+        "UPDATE sync_job_runs SET status = 'succeeded', finished_at = ? WHERE status IN ('queued', 'running')",
+      ).bind(new Date().toISOString()).run();
+      await env.DB.prepare('DELETE FROM sync_pipeline_locks').run();
+    }
+
+    const shadow = await handleRetrySyncJob(
+      retryRequest('shadow_sync_dispatch', admin.sessionCookie, admin.tokenCookie, csrf, 'shadow'),
+      productionEnv,
+      createExecutionContext(),
+      'shadow_sync_dispatch',
+    );
+    expect(shadow.status).toBe(202);
+    expect(workspaceDispatches.map(item => item.params)).toEqual([
+      expect.objectContaining({ action: 'inventory', pipelineKind: 'legacy' }),
+      expect.objectContaining({ action: 'inventory', pipelineKind: 'canonical' }),
+    ]);
+    expect(shadowDispatches).toHaveLength(1);
+
+    const shadowRun = await env.DB.prepare(`
+      SELECT trigger_type, mode FROM sync_job_runs
+       WHERE job_key = 'shadow_sync_dispatch' ORDER BY started_at DESC LIMIT 1
+    `).first<{ trigger_type: string; mode: string }>();
+    expect(shadowRun).toEqual({ trigger_type: 'manual', mode: 'shadow' });
   });
 });

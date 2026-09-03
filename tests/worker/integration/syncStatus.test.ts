@@ -4,6 +4,7 @@ import { SELF } from './testWorker.js';
 import { applySchema, cleanDB } from './helpers.js';
 import {
   finishSyncJob,
+  getSyncStatus,
   getOrStartSyncJob,
   pruneSyncJobHistory,
   recordDailyBudget,
@@ -11,6 +12,7 @@ import {
   resumeSyncJob,
   startSyncJob,
 } from '../../../worker/syncJobs.js';
+import type { Env } from '../../../worker/types.js';
 import { canonicalCutoverEligible } from '../../../worker/canonicalSync.js';
 
 describe('public sync status', () => {
@@ -37,6 +39,13 @@ describe('public sync status', () => {
     expect(body.jobs.some(job => job.key === 'canonical_workspace_sync')).toBe(true);
     expect(body.jobs.some(job => job.key === 'repository_inventory')).toBe(true);
     expect(body.jobs.some(job => job.key === 'hubspot_contacts')).toBe(true);
+    const productionStatus = await getSyncStatus({ ...env, ENVIRONMENT: 'production' } as Env) as {
+      jobs: Array<{ key: string; retryable: boolean }>;
+    };
+    const executableJobs = productionStatus.jobs.filter(job => job.key !== 'cloudflare_analytics');
+    expect(executableJobs.length).toBeGreaterThan(0);
+    expect(executableJobs.every(job => job.retryable)).toBe(true);
+    expect(productionStatus.jobs.find(job => job.key === 'cloudflare_analytics')?.retryable).toBe(false);
   });
 
   it('requires three consecutive matching parity runs before scheduled cutover', async () => {

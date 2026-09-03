@@ -1,67 +1,101 @@
-import type { Env } from '../types.js';
+import type { Env, ManualSyncJobKey, OrphanCleanupActor } from '../types.js';
 import { roleAllows, getRequestPrincipal, recordPrivilegedAction } from '../authorization.js';
-import { reconcileRemovedRepositories } from '../cleanup.js';
+import { startBoundedLegacySync, startCanonicalSync } from '../canonicalSync.js';
 import { failHubSpotSyncDispatch, initializeHubSpotSyncRun } from '../hubSpotSyncWorkflow.js';
+import { failManualSyncJobDispatch, initializeManualSyncJob } from '../manualSyncJobWorkflow.js';
 import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphanCleanupWorkflow.js';
 import { jsonErr, secHeaders, validateCSRF } from '../security.js';
-import { finishSyncJob, markSyncJobRunning, startSyncJob, type SyncJobStatus } from '../syncJobs.js';
+import { startShadowSync } from '../shadowSync.js';
+import { finishSyncJob, startSyncJob } from '../syncJobs.js';
 
-const RETRYABLE_JOB_KEYS = new Set([
+const MANUAL_JOB_KEYS = new Set<ManualSyncJobKey>([
   'repository_inventory',
+  'pull_request_catalog',
+  'upstream_merge_status',
+  'pull_request_comments',
+  'comment_reactions',
+  'vote_projection',
+  'duplicate_resolution',
+  'contributor_scores',
+]);
+const PARENT_JOB_KEYS = new Set([
+  'legacy_workspace_sync',
+  'canonical_workspace_sync',
+  'shadow_sync_dispatch',
+]);
+const TRIGGERABLE_JOB_KEYS = new Set([
+  ...MANUAL_JOB_KEYS,
+  ...PARENT_JOB_KEYS,
   'orphan_cleanup',
   'hubspot_contacts',
 ]);
+type PipelineTarget = 'legacy' | 'canonical' | 'shadow' | 'integration';
 
-interface RetryTarget {
-  id: string;
+interface RetryTarget { id: string }
+
+function isPipelineTarget(value: unknown): value is PipelineTarget {
+  return value === 'legacy' || value === 'canonical' || value === 'shadow' || value === 'integration';
 }
 
-async function finishRepositoryInventory(env: Env, runId: string): Promise<SyncJobStatus> {
-  const result = await reconcileRemovedRepositories(env);
-  const status = result.errors > 0 ? 'failed' : 'succeeded';
-  await finishSyncJob(env.DB, runId, status, {
-    metrics: {
-      checked: result.checked,
-      removed: result.removed,
-      flagged: result.flagged,
-      errors: result.errors,
-    },
-    completedItems: result.checked,
-    failedItems: result.errors,
-    errorCode: result.errors > 0 ? 'repository_reconciliation_failed' : null,
-    error: result.errors > 0 ? `${result.errors} repository reconciliation operation(s) failed.` : undefined,
-  });
-  return status;
-}
-
-async function executeRetry(
-  env: Env,
-  jobKey: string,
-  runId: string,
-  principal: Awaited<ReturnType<typeof getRequestPrincipal>>,
-): Promise<void> {
-  let outcome: 'succeeded' | 'failed';
+async function requestedPipeline(request: Request, jobKey: string): Promise<PipelineTarget> {
+  let value: unknown;
   try {
-    await markSyncJobRunning(env.DB, runId);
-    let status: SyncJobStatus;
-    if (jobKey === 'repository_inventory') status = await finishRepositoryInventory(env, runId);
-    else throw new Error('Unsupported inline sync job retry');
-    outcome = status === 'succeeded' ? 'succeeded' : 'failed';
-  } catch (error) {
-    try {
-      await finishSyncJob(env.DB, runId, 'failed', {
-        errorCode: 'manual_retry_failed',
-        error,
-      });
-    } catch { /* retain the original failure */ }
-    outcome = 'failed';
-    console.error(JSON.stringify({ event: 'sync_job_manual_retry_failed', job_key: jobKey }));
-  }
-  await recordPrivilegedAction(env, principal, {
-    action: 'sync_job.retry', targetType: 'sync_job', targetId: jobKey, outcome,
-  }).catch(() => {
-    console.error(JSON.stringify({ event: 'privileged_action_audit_failed', action: 'sync_job.retry' }));
-  });
+    value = (await request.clone().json<{ pipeline?: unknown }>()).pipeline;
+  } catch { /* Existing clients may send an empty body. */ }
+  if (isPipelineTarget(value)) return value;
+  if (jobKey === 'legacy_workspace_sync') return 'legacy';
+  if (jobKey === 'shadow_sync_dispatch') return 'shadow';
+  if (jobKey === 'hubspot_contacts') return 'integration';
+  return 'canonical';
+}
+
+function actorFor(principal: Awaited<ReturnType<typeof getRequestPrincipal>>): OrphanCleanupActor {
+  if (!principal.session) throw new Error('Authenticated principal required');
+  return {
+    githubUserId: principal.session.github_user_id,
+    githubLogin: principal.session.github_login,
+    role: principal.role,
+  };
+}
+
+async function latestRunId(env: Env, jobKey: string, mode?: string): Promise<string | null> {
+  const statement = mode
+    ? env.DB.prepare(`
+        SELECT id FROM sync_job_runs WHERE job_key = ? AND mode = ?
+         ORDER BY started_at DESC LIMIT 1
+      `).bind(jobKey, mode)
+    : env.DB.prepare(`
+        SELECT id FROM sync_job_runs WHERE job_key = ?
+         ORDER BY started_at DESC LIMIT 1
+      `).bind(jobKey);
+  const scoped = (await statement.first<RetryTarget>())?.id ?? null;
+  if (scoped || !mode) return scoped;
+  return (await env.DB.prepare(`
+    SELECT id FROM sync_job_runs WHERE job_key = ? ORDER BY started_at DESC LIMIT 1
+  `).bind(jobKey).first<RetryTarget>())?.id ?? null;
+}
+
+async function startManualShadow(env: Env): Promise<{ started: boolean; workflowInstanceId: string | null }> {
+  const cutoff = await env.DB.prepare(
+    "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
+  ).first<{ value: string }>();
+  const workflowInstanceId = await startShadowSync(
+    env,
+    `manual-${crypto.randomUUID()}`,
+    cutoff?.value ?? new Date().toISOString(),
+    'manual',
+  );
+  return { started: workflowInstanceId !== null, workflowInstanceId };
+}
+
+async function activeManualWorkspaceRun(env: Env): Promise<string | null> {
+  const run = await env.DB.prepare(`
+    SELECT id FROM sync_job_runs
+     WHERE category = 'workspace' AND trigger_type = 'manual'
+       AND status IN ('queued', 'running')
+     ORDER BY started_at DESC LIMIT 1
+  `).first<{ id: string }>();
+  return run?.id ?? null;
 }
 
 export async function handleRetrySyncJob(
@@ -74,71 +108,123 @@ export async function handleRetrySyncJob(
   if (!principal.session) return jsonErr('Authentication required', 401, request);
   if (!roleAllows(principal.role, 'admin')) return jsonErr('Admin role required', 403, request);
   if (!validateCSRF(request)) return jsonErr('Invalid security token', 403, request);
-  if (env.ENVIRONMENT !== 'production') {
-    return jsonErr('Sync job retries are production-only', 409, request);
+  if (env.ENVIRONMENT !== 'production') return jsonErr('Sync job triggers are production-only', 409, request);
+  if (!TRIGGERABLE_JOB_KEYS.has(jobKey)) return jsonErr('This job is not currently runnable', 409, request);
+
+  const pipeline = await requestedPipeline(request, jobKey);
+  const pipelineMismatch =
+    (jobKey === 'legacy_workspace_sync' && pipeline !== 'legacy')
+    || (jobKey === 'canonical_workspace_sync' && pipeline !== 'canonical')
+    || (jobKey === 'shadow_sync_dispatch' && pipeline !== 'shadow')
+    || (jobKey === 'hubspot_contacts' && pipeline !== 'integration')
+    || (pipeline === 'integration' && jobKey !== 'hubspot_contacts');
+  if (pipelineMismatch) return jsonErr('Job does not belong to the requested pipeline', 400, request);
+  const mode = pipeline === 'legacy' ? 'legacy' : pipeline === 'shadow' ? 'shadow' : 'live';
+  const retriedRunId = await latestRunId(env, jobKey, mode);
+
+  if (pipeline === 'shadow') {
+    if (!env.SHADOW_SYNC_WORKFLOW) return jsonErr('Shadow Workflow binding is unavailable', 503, request);
+    await recordPrivilegedAction(env, principal, {
+      action: 'sync_job.retry', targetType: 'sync_job', targetId: `${pipeline}:${jobKey}`, outcome: 'accepted',
+    });
+    const dispatch = await startManualShadow(env);
+    return secHeaders(Response.json({
+      ok: dispatch.started,
+      accepted: dispatch.started,
+      job_key: jobKey,
+      pipeline,
+      retried_run_id: retriedRunId,
+      workflow_instance_id: dispatch.workflowInstanceId,
+      execution_scope: 'shadow_pipeline',
+    }, { status: dispatch.started ? 202 : 409 }), request);
   }
-  if (!RETRYABLE_JOB_KEYS.has(jobKey)) return jsonErr('This sync job does not support manual retry', 409, request);
+
+  if (jobKey === 'legacy_workspace_sync' || jobKey === 'canonical_workspace_sync') {
+    if (await activeManualWorkspaceRun(env)) {
+      return jsonErr('Another manually triggered Workspace job is already running', 409, request);
+    }
+    await recordPrivilegedAction(env, principal, {
+      action: 'sync_job.retry', targetType: 'sync_job', targetId: `${pipeline}:${jobKey}`, outcome: 'accepted',
+    });
+    const dispatch = jobKey === 'legacy_workspace_sync'
+      ? await startBoundedLegacySync(env, 'manual')
+      : await startCanonicalSync(env, 'manual');
+    return secHeaders(Response.json({
+      ok: dispatch.started,
+      accepted: dispatch.started,
+      job_key: jobKey,
+      pipeline,
+      retried_run_id: retriedRunId,
+      pipeline_run_id: dispatch.pipelineRunId,
+      workflow_instance_id: dispatch.workflowInstanceId,
+      reason: dispatch.reason,
+      execution_scope: 'workspace_pipeline',
+    }, { status: dispatch.started ? 202 : 409 }), request);
+  }
+
+  if (pipeline !== 'integration') {
+    const workspaceLock = await env.DB.prepare(`
+      SELECT pipeline_run_id FROM sync_pipeline_locks
+       WHERE lock_key = 'canonical_workspace_sync' AND lease_expires_at > ?
+    `).bind(new Date().toISOString()).first<{ pipeline_run_id: string }>();
+    if (workspaceLock || await activeManualWorkspaceRun(env)) {
+      return jsonErr('Another Workspace synchronization operation is already running', 409, request);
+    }
+  }
 
   const active = await env.DB.prepare(`
     SELECT id FROM sync_job_runs
-     WHERE job_key = ? AND status IN ('queued', 'running')
+     WHERE job_key = ? AND mode = ? AND status IN ('queued', 'running')
      ORDER BY started_at DESC LIMIT 1
-  `).bind(jobKey).first<{ id: string }>();
+  `).bind(jobKey, mode).first<{ id: string }>();
   if (active) return jsonErr('This sync job is already running', 409, request);
 
-  const target = await env.DB.prepare(`
-    SELECT id FROM sync_job_runs
-     WHERE job_key = ? ORDER BY started_at DESC LIMIT 1
-  `).bind(jobKey).first<RetryTarget>();
-
-  const retryRunId = await startSyncJob(env.DB, {
-    jobKey,
-    trigger: 'manual',
-    mode: 'live',
-    status: 'queued',
+  await recordPrivilegedAction(env, principal, {
+    action: 'sync_job.retry', targetType: 'sync_job', targetId: `${pipeline}:${jobKey}`, outcome: 'accepted',
   });
-  try {
-    await recordPrivilegedAction(env, principal, {
-      action: 'sync_job.retry', targetType: 'sync_job', targetId: jobKey, outcome: 'accepted',
-    });
-  } catch {
-    await finishSyncJob(env.DB, retryRunId, 'failed', {
-      errorCode: 'privileged_action_audit_failed',
-      error: 'The retry was not started because its privileged action audit could not be recorded.',
-    }).catch(() => undefined);
-    return jsonErr('Unable to record privileged action', 500, request);
-  }
-  if (jobKey === 'orphan_cleanup' || jobKey === 'hubspot_contacts') {
-    const auditActor = {
-      githubUserId: principal.session.github_user_id,
-      githubLogin: principal.session.github_login,
-      role: principal.role,
+
+  const pipelineRunId = crypto.randomUUID();
+  const runId = await startSyncJob(env.DB, {
+    jobKey, trigger: 'manual', mode, status: 'queued', pipelineRunId,
+  });
+  const auditActor = actorFor(principal);
+  if (jobKey === 'hubspot_contacts') {
+    ctx.waitUntil(
+      initializeHubSpotSyncRun(env, { jobRunId: runId, auditActor })
+        .catch(error => failHubSpotSyncDispatch(env, { jobRunId: runId, auditActor }, error)),
+    );
+  } else if (jobKey === 'orphan_cleanup') {
+    const params = { jobRunId: runId, pipelineRunId, auditActor };
+    ctx.waitUntil(
+      initializeOrphanCleanupRun(env, params)
+        .catch(error => failOrphanCleanupDispatch(env, params, error)),
+    );
+  } else if (MANUAL_JOB_KEYS.has(jobKey as ManualSyncJobKey)) {
+    const params = {
+      jobRunId: runId,
+      pipelineRunId,
+      jobKey: jobKey as ManualSyncJobKey,
+      pipeline: pipeline as 'legacy' | 'canonical',
+      auditActor,
     };
-    if (jobKey === 'hubspot_contacts') {
-      ctx.waitUntil(
-        initializeHubSpotSyncRun(env, { jobRunId: retryRunId, auditActor })
-          .catch(error => failHubSpotSyncDispatch(env, { jobRunId: retryRunId, auditActor }, error)),
-      );
-    } else {
-      const params = {
-        jobRunId: retryRunId,
-        pipelineRunId: retryRunId,
-        auditActor,
-      };
-      ctx.waitUntil(
-        initializeOrphanCleanupRun(env, params)
-          .catch(error => failOrphanCleanupDispatch(env, params, error)),
-      );
-    }
+    ctx.waitUntil(
+      initializeManualSyncJob(env, params)
+        .catch(error => failManualSyncJobDispatch(env, params, error)),
+    );
   } else {
-    ctx.waitUntil(executeRetry(env, jobKey, retryRunId, principal));
+    await finishSyncJob(env.DB, runId, 'failed', {
+      errorCode: 'unsupported_manual_job', error: 'No manual executor is registered for this job.',
+    });
+    return jsonErr('No manual executor is registered for this job', 409, request);
   }
 
   return secHeaders(Response.json({
     ok: true,
     accepted: true,
     job_key: jobKey,
-    retried_run_id: target?.id ?? null,
-    retry_run_id: retryRunId,
+    pipeline,
+    retried_run_id: retriedRunId,
+    retry_run_id: runId,
+    execution_scope: 'individual_job',
   }, { status: 202 }), request);
 }

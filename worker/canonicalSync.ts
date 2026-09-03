@@ -292,8 +292,11 @@ export async function startCanonicalSync(
   return startWorkspaceSync(env, trigger, 'canonical');
 }
 
-export async function startBoundedLegacySync(env: Env): Promise<CanonicalDispatchResult> {
-  return startWorkspaceSync(env, 'scheduled', 'legacy');
+export async function startBoundedLegacySync(
+  env: Env,
+  trigger: 'scheduled' | 'manual' = 'scheduled',
+): Promise<CanonicalDispatchResult> {
+  return startWorkspaceSync(env, trigger, 'legacy');
 }
 
 async function failPipeline(
