@@ -107,3 +107,8 @@ crons = ["0 */4 * * *", "15 * * * *"]
 name       = "oasis-canonical-sync"
 binding    = "CANONICAL_SYNC_WORKFLOW"
 class_name = "CanonicalSyncWorkflow"
+
+[[env.production.workflows]]
+name       = "oasis-orphan-cleanup"
+binding    = "ORPHAN_CLEANUP_WORKFLOW"
+class_name = "OrphanCleanupWorkflow"

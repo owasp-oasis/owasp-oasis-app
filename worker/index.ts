@@ -27,6 +27,7 @@ import {
   setCanonicalScheduleEnabled,
   startCanonicalSync,
 } from './canonicalSync.js';
+import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
 import {
   handleMeta,
   handleRepos,
@@ -310,3 +311,4 @@ export default {
 export { ALLOWED_ORIGINS };
 export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
+export { OrphanCleanupWorkflow };
