@@ -1,12 +1,13 @@
 # OASIS product and operations roadmap
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-09-03
 
 This file is the durable backlog for work that is planned, partially implemented, or intentionally waiting on an operational gate. Update the status and acceptance criteria here when work starts or lands so feature intent does not remain only in issues, branch names, or conversations.
 
 ## Operating rules
 
 - Keep production changes atomic, independently revertible, and documented with verification and rollback scope.
+- Start development from current `main` on a short-lived branch such as `feat/new-feature-name`; use PRs for every transition into `preview` or `main`.
 - Keep the legacy Workspace cron authoritative until the shadow Workflow repeatedly produces the same result and is explicitly approved for cutover.
 - Develop the analytics dashboard on its own feature branch after sync status is operational and stable.
 - Never expose a username or other user-identifying value in administrative analytics. Usernames may appear only in the user's own profile and the existing contributor panel.
@@ -17,9 +18,9 @@ This file is the durable backlog for work that is planned, partially implemented
 
 Current state:
 
-- The public Workspace status page, job history, budget history, incomplete-run archive, and shadow parity system are implemented in `preview` and `integration/preview-main`.
+- The public Workspace status page, job history, budget history, incomplete-run archive, and shadow parity system are implemented in `main` and `preview`.
 - Migration `0007_sync_job_observability.sql` is applied to the shared remote D1 database.
-- Feature branch `fix/free-tier-sync-orchestration` introduces the bounded canonical writer while keeping production scheduling disabled in D1 by default.
+- The bounded canonical writer is implemented while production scheduling remains disabled in D1 by default.
 - The existing production synchronizer remains the scheduled path until the cutover flag is explicitly enabled and remains available as the first rollback path.
 - Preview is shadow-only and runs one daily comparison against the shared canonical tables.
 - Canonical collection is split into one-PR, one-comment-reaction, and one-duplicate-close Workflow instances. The application keeps each unit below the Cloudflare Workers Free ceiling, which the platform applies automatically; the Wrangler configuration intentionally omits paid-only custom runtime limits.
@@ -37,13 +38,12 @@ Exit criteria before cutover review:
 - Exercise rollback while the legacy cron remains available.
 - Obtain an explicit cutover decision; eligibility shown on the status page is not automatic authorization.
 
-Branch and deployment follow-up:
+Development and promotion policy:
 
-- `integration/preview-main` is the convergence tree containing current `main` News work plus the sync-status feature.
-- Merge integration into `preview` only after the current preview validation is accepted.
-- Promote the validated combined preview tree into `main` afterward.
-- Integration and preview currently build the same Cloudflare preview Worker. Either give integration an isolated Worker or prevent competing branch builds before relying on it as an independent environment.
-- After all three branch trees agree and production is verified, prune merged feature branches and preserve only intentional archive tags.
+- Use `feat/new-feature-name` → `main` when the complete change can be validated locally.
+- Use `feat/new-feature-name` → `preview` → `main` when validation requires the deployed Cloudflare preview environment.
+- Keep unrelated work out of an active preview candidate, and reconcile `preview` with the resulting `main` after production promotion.
+- Prune merged feature branches after verifying their commits are reachable from `main`; preserve an archive tag only when it has intentional historical value.
 
 ## Planned feature branch: administrative analytics
 
@@ -179,12 +179,9 @@ Current merge detection recognizes only an exact head commit SHA in the upstream
 - Replace CSP `unsafe-inline` allowances with nonces or hashes after confirming the Vite asset strategy.
 - Remove the unused standalone `VoteModal` if no future caller is identified.
 
-## Repository cleanup inventory
+## Repository branch hygiene
 
-- There are currently no open pull requests.
-- Remote feature branches whose commits are already reachable from integration are merged cleanup candidates.
-- `chore/update-schema-for-leaderboards` is tagged `archive/superseded-schema-2026-08-24`; its unique schema commit is superseded.
-- `merge-from-project-website` is tagged `archive/superseded-static-site-2026-08-24`; its static HTML/legacy Worker commit is superseded by the React/TypeScript application.
-- The only local stash is a `.DS_Store` binary change from the superseded static-site branch. It contains no product work and may be discarded during the approved cleanup pass.
-
-Do not delete branches or the stash until branch promotion is complete and the final cleanup targets have been reviewed explicitly.
+- `main` and `preview` are the only long-lived remote branches.
+- Feature, fix, chore, and documentation branches are short-lived and are pruned after their merged commits are confirmed reachable from `main`.
+- Branch deletion requires an explicit reviewed target list. Never infer that an unmerged branch is disposable from its age or name alone.
+- Git history and merged PRs preserve accepted work; create archive tags only for deliberately named historical milestones.

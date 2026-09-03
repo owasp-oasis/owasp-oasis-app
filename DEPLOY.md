@@ -17,6 +17,16 @@ Both workers share a single D1 database (`oasis-db`) and a single KV namespace (
 
 Deployment is triggered automatically by **Cloudflare Git integration**. GitHub Actions runs validation only and has no Cloudflare deployment credentials.
 
+### Branch-driven promotion
+
+`main` is the development base and production branch. New work must start on a short-lived branch such as `feat/new-feature-name` and pass `npm run check` locally before review.
+
+- When local validation is sufficient, open `feat/new-feature-name` → `main`.
+- When a live Cloudflare environment is required, open `feat/new-feature-name` → `preview`, validate the deployed preview, then open `preview` → `main`.
+- After production promotion, reconcile `preview` to the resulting `main` tip.
+
+All transitions into `preview` or `main` use pull requests. Do not push directly to either deployment branch or combine unrelated changes in one preview promotion. The complete contributor workflow, including handling changes to `main` during preview validation, is documented in [README.md](./README.md#required-development-workflow).
+
 ---
 
 ## Prerequisites

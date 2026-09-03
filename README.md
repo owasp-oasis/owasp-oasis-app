@@ -17,17 +17,50 @@ preview   ← staging     — auto-deploys to preview.owasp-oasis.org on push
 
 Deployment is handled by **Cloudflare Git integration**. GitHub Actions validates pushes and pull requests but has no Cloudflare credentials and never deploys.
 
-### Recommended workflow
+### Required development workflow
 
-```
-preview  ←── feature/your-feature   (open PR, merge to preview to test)
-   └──→ main                        (merge preview to main to go live)
+All new work starts from the latest `main` on a short-lived, purpose-named branch. Use `feat/new-feature-name` for a feature; use the equivalent `fix/`, `chore/`, or `docs/` prefix when that more accurately describes the change.
+
+```bash
+git switch main
+git pull --ff-only
+git switch -c feat/new-feature-name
 ```
 
-1. Branch off `preview` for your work
-2. Open a PR into `preview` — get a review
-3. Merge → auto-deploys to `preview.owasp-oasis.org` for testing
-4. When ready for production, open a PR from `preview` into `main`
+Keep commits atomic and independently reversible. Commit messages must explain the reason for the change, resulting behavior, verification performed, and rollback scope. Before requesting review, run the complete local check unless the PR documents why a check cannot run:
+
+```bash
+npm run check
+```
+
+Choose one promotion path based on the validation the change requires:
+
+#### Local validation is sufficient
+
+```text
+main → feat/new-feature-name → pull request → main
+```
+
+1. Develop and test on `feat/new-feature-name`.
+2. Push the feature branch and open a PR from `feat/new-feature-name` into `main`.
+3. Merge only after local checks, required GitHub checks, and review pass.
+4. The merge to `main` triggers the production deployment through Cloudflare Git integration.
+
+#### Remote preview validation is required
+
+```text
+main → feat/new-feature-name → pull request → preview → pull request → main
+```
+
+1. Develop and test locally on `feat/new-feature-name`.
+2. Open a PR from `feat/new-feature-name` into `preview`.
+3. Merge after review; Cloudflare deploys the resulting `preview` branch to `preview.owasp-oasis.org`.
+4. Complete remote testing against the preview deployment. Apply fixes on the feature branch and merge them through follow-up `feat/new-feature-name` → `preview` PRs; ensure the final preview build passes.
+5. Open a PR from `preview` into `main`, documenting the remote evidence and rollback plan.
+6. Merge the `preview` → `main` PR only after remote validation and required checks pass.
+7. Reconcile `preview` back to the resulting `main` tip after promotion so both long-lived branches start the next feature from the same commit.
+
+Do not develop directly on `preview`, push directly to either long-lived branch, or mix unrelated features into a preview promotion. If `main` changes while preview validation is underway, bring the updated `main` into the feature/preview candidate through a reviewed PR and repeat the affected remote checks before promotion.
 
 ---
 
