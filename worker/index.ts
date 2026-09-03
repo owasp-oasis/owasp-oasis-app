@@ -18,13 +18,14 @@ import {
 } from './security.js';
 import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
-import { runTrackedHubSpot, runTrackedLegacySync } from './scheduledJobs.js';
+import { runTrackedHubSpot } from './scheduledJobs.js';
 import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
   canonicalCutoverEligible,
   canonicalScheduleEnabled,
   setCanonicalScheduleEnabled,
+  startBoundedLegacySync,
   startCanonicalSync,
 } from './canonicalSync.js';
 import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
@@ -298,8 +299,8 @@ export default {
       return;
     }
     if (!await canonicalScheduleEnabled(env.DB)) {
-      console.log(JSON.stringify({ event: 'canonical_sync_schedule_disabled_legacy_retained' }));
-      await runTrackedLegacySync(env);
+      const dispatch = await startBoundedLegacySync(env);
+      console.log(JSON.stringify({ event: 'bounded_legacy_sync_dispatched', ...dispatch }));
       return;
     }
     const dispatch = await startCanonicalSync(env, 'scheduled');

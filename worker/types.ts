@@ -41,10 +41,12 @@ export type ShadowSyncParams =
   | { action: 'finalize'; pipelineRunId: string };
 
 export type CanonicalSyncParams =
-  | { action: 'inventory'; pipelineRunId: string }
-  | { action: 'sync'; pipelineRunId: string }
-  | { action: 'reaction'; pipelineRunId: string }
-  | { action: 'duplicate'; pipelineRunId: string };
+  | { action: 'inventory'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'sync'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'reaction'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
+  | { action: 'duplicate'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind };
+
+export type WorkspacePipelineKind = 'legacy' | 'canonical';
 
 export interface SyncResult {
   ok: boolean;
