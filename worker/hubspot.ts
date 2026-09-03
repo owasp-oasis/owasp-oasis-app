@@ -31,10 +31,18 @@ interface QueueRow {
   attempts: number;
 }
 
-interface ProcessQueueOptions {
+export interface ProcessQueueOptions {
   now?: Date | string | number;
+  eligibleAt?: Date | string | number;
   limit?: number;
+  maxQueueId?: number;
   fetcher?: Fetcher;
+}
+
+export interface HubSpotQueueSnapshot {
+  eligibleAt: string;
+  maxQueueId: number;
+  count: number;
 }
 
 export class HubSpotSyncError extends Error {
@@ -231,6 +239,43 @@ export function retryAt(attempt: number, now: Date = new Date()): string {
   return new Date(now.getTime() + delay).toISOString();
 }
 
+export async function snapshotHubSpotQueue(
+  db: D1Database,
+  at: Date = new Date(),
+): Promise<HubSpotQueueSnapshot> {
+  const eligibleAt = toIso(at);
+  const staleBefore = new Date(at.getTime() - CLAIM_TIMEOUT_MS).toISOString();
+  const row = await db.prepare(`
+    SELECT COALESCE(MAX(id), 0) AS max_queue_id, COUNT(*) AS item_count
+      FROM hubspot_sync_queue
+     WHERE (status = 'pending' AND next_attempt_at <= ?)
+        OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
+  `).bind(eligibleAt, staleBefore).first<{ max_queue_id: number; item_count: number }>();
+  return {
+    eligibleAt,
+    maxQueueId: Number(row?.max_queue_id ?? 0),
+    count: Number(row?.item_count ?? 0),
+  };
+}
+
+export async function countHubSpotQueueRemaining(
+  db: D1Database,
+  snapshot: Pick<HubSpotQueueSnapshot, 'eligibleAt' | 'maxQueueId'>,
+): Promise<number> {
+  const eligibleDate = new Date(snapshot.eligibleAt);
+  const staleBefore = new Date(eligibleDate.getTime() - CLAIM_TIMEOUT_MS).toISOString();
+  const row = await db.prepare(`
+    SELECT COUNT(*) AS item_count
+      FROM hubspot_sync_queue
+     WHERE id <= ? AND (
+       (status = 'pending' AND next_attempt_at <= ?)
+       OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
+     )
+  `).bind(snapshot.maxQueueId, snapshot.eligibleAt, staleBefore)
+    .first<{ item_count: number }>();
+  return Number(row?.item_count ?? 0);
+}
+
 function safeErrorCode(error: unknown): string {
   if (error instanceof HubSpotSyncError) return error.code;
   if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'timeout';
@@ -264,17 +309,32 @@ export async function processHubSpotQueue(
 
   const nowDate = options.now instanceof Date ? options.now : new Date(options.now ?? Date.now());
   const now = toIso(nowDate);
-  const staleBefore = new Date(nowDate.getTime() - CLAIM_TIMEOUT_MS).toISOString();
+  const eligibleDate = options.eligibleAt instanceof Date
+    ? options.eligibleAt
+    : new Date(options.eligibleAt ?? nowDate);
+  const eligibleAt = toIso(eligibleDate);
+  const staleBefore = new Date(eligibleDate.getTime() - CLAIM_TIMEOUT_MS).toISOString();
   const limit = Math.max(1, Math.min(Number(options.limit) || 25, 100));
   const fetcher = options.fetcher ?? fetch;
-  const rows = await env.DB.prepare(`
+  const maxQueueId = Number.isFinite(options.maxQueueId) ? Number(options.maxQueueId) : null;
+  const statement = maxQueueId === null ? env.DB.prepare(`
     SELECT id, payload_json, attempts
       FROM hubspot_sync_queue
      WHERE (status = 'pending' AND next_attempt_at <= ?)
         OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
      ORDER BY created_at ASC, id ASC
      LIMIT ?
-  `).bind(now, staleBefore, limit).all<QueueRow>();
+  `).bind(eligibleAt, staleBefore, limit) : env.DB.prepare(`
+    SELECT id, payload_json, attempts
+      FROM hubspot_sync_queue
+     WHERE id <= ? AND (
+       (status = 'pending' AND next_attempt_at <= ?)
+       OR (status = 'processing' AND (locked_at IS NULL OR locked_at <= ?))
+     )
+     ORDER BY created_at ASC, id ASC
+     LIMIT ?
+  `).bind(maxQueueId, eligibleAt, staleBefore, limit);
+  const rows = await statement.all<QueueRow>();
 
   let processed = 0;
   let succeeded = 0;

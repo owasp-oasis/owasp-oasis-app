@@ -18,6 +18,7 @@ export interface Env {
   SHADOW_SYNC_WORKFLOW?: Workflow<ShadowSyncParams>;
   CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
   ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
+  HUBSPOT_SYNC_WORKFLOW?: Workflow<HubSpotSyncParams>;
 }
 
 export interface OrphanCleanupActor {
@@ -47,6 +48,14 @@ export type CanonicalSyncParams =
   | { action: 'duplicate'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind };
 
 export type WorkspacePipelineKind = 'legacy' | 'canonical';
+
+export interface HubSpotSyncParams {
+  jobRunId: string;
+  chunk: number;
+  maxQueueId: number;
+  eligibleAt: string;
+  auditActor?: OrphanCleanupActor;
+}
 
 export interface SyncResult {
   ok: boolean;

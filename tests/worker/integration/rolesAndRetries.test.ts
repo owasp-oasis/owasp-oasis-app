@@ -244,7 +244,7 @@ describe('server-side roles and sync retries', () => {
       SELECT status, trigger_type, mode FROM sync_job_runs
        WHERE job_key = 'hubspot_contacts' ORDER BY started_at DESC LIMIT 1
     `).first<{ status: string; trigger_type: string; mode: string }>();
-    expect(firstHubSpotRun).toEqual({ status: 'skipped', trigger_type: 'manual', mode: 'live' });
+    expect(firstHubSpotRun).toEqual({ status: 'failed', trigger_type: 'manual', mode: 'live' });
 
     const failedRunId = await startSyncJob(env.DB, {
       jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy',

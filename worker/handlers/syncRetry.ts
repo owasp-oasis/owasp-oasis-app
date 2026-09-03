@@ -1,7 +1,7 @@
 import type { Env } from '../types.js';
 import { roleAllows, getRequestPrincipal, recordPrivilegedAction } from '../authorization.js';
 import { reconcileRemovedRepositories } from '../cleanup.js';
-import { processHubSpotQueue } from '../hubspot.js';
+import { failHubSpotSyncDispatch, initializeHubSpotSyncRun } from '../hubSpotSyncWorkflow.js';
 import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphanCleanupWorkflow.js';
 import { jsonErr, secHeaders, validateCSRF } from '../security.js';
 import { finishSyncJob, markSyncJobRunning, startSyncJob, type SyncJobStatus } from '../syncJobs.js';
@@ -34,23 +34,6 @@ async function finishRepositoryInventory(env: Env, runId: string): Promise<SyncJ
   return status;
 }
 
-async function finishHubSpotContacts(env: Env, runId: string): Promise<SyncJobStatus> {
-  const result = await processHubSpotQueue(env, { limit: 25 });
-  const status = result.skipped ? 'skipped' : result.failed > 0 ? 'failed' : 'succeeded';
-  await finishSyncJob(env.DB, runId, status, {
-    metrics: result,
-    completedItems: result.succeeded,
-    failedItems: result.failed,
-    errorCode: result.skipped ? 'configuration_missing' : result.failed > 0 ? 'queue_items_failed' : null,
-    error: result.skipped
-      ? 'HubSpot synchronization was skipped because a required binding was unavailable.'
-      : result.failed > 0
-        ? `${result.failed} HubSpot queue item(s) failed and remain eligible for retry.`
-        : undefined,
-  });
-  return status;
-}
-
 async function executeRetry(
   env: Env,
   jobKey: string,
@@ -62,8 +45,7 @@ async function executeRetry(
     await markSyncJobRunning(env.DB, runId);
     let status: SyncJobStatus;
     if (jobKey === 'repository_inventory') status = await finishRepositoryInventory(env, runId);
-    else if (jobKey === 'hubspot_contacts') status = await finishHubSpotContacts(env, runId);
-    else throw new Error('Unsupported sync job retry');
+    else throw new Error('Unsupported inline sync job retry');
     outcome = status === 'succeeded' ? 'succeeded' : 'failed';
   } catch (error) {
     try {
@@ -126,20 +108,28 @@ export async function handleRetrySyncJob(
     }).catch(() => undefined);
     return jsonErr('Unable to record privileged action', 500, request);
   }
-  if (jobKey === 'orphan_cleanup') {
-    const params = {
-      jobRunId: retryRunId,
-      pipelineRunId: retryRunId,
-      auditActor: {
-        githubUserId: principal.session.github_user_id,
-        githubLogin: principal.session.github_login,
-        role: principal.role,
-      },
+  if (jobKey === 'orphan_cleanup' || jobKey === 'hubspot_contacts') {
+    const auditActor = {
+      githubUserId: principal.session.github_user_id,
+      githubLogin: principal.session.github_login,
+      role: principal.role,
     };
-    ctx.waitUntil(
-      initializeOrphanCleanupRun(env, params)
-        .catch(error => failOrphanCleanupDispatch(env, params, error)),
-    );
+    if (jobKey === 'hubspot_contacts') {
+      ctx.waitUntil(
+        initializeHubSpotSyncRun(env, { jobRunId: retryRunId, auditActor })
+          .catch(error => failHubSpotSyncDispatch(env, { jobRunId: retryRunId, auditActor }, error)),
+      );
+    } else {
+      const params = {
+        jobRunId: retryRunId,
+        pipelineRunId: retryRunId,
+        auditActor,
+      };
+      ctx.waitUntil(
+        initializeOrphanCleanupRun(env, params)
+          .catch(error => failOrphanCleanupDispatch(env, params, error)),
+      );
+    }
   } else {
     ctx.waitUntil(executeRetry(env, jobKey, retryRunId, principal));
   }
