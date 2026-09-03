@@ -1,7 +1,7 @@
 import { getRequestPrincipal, roleAllows } from '../authorization.js';
 import { jsonErr, jsonOk, validateCSRF } from '../security.js';
 import type { Env } from '../types.js';
-import { parseBody } from '../validation.js';
+import { parseBody, vGitHub } from '../validation.js';
 import type { UserRole } from './auth.js';
 
 const PAGE_SIZE = 50;
@@ -148,11 +148,15 @@ export async function handleAdminUsers(request: Request, env: Env): Promise<Resp
       countStatement.bind(...countBindings).first<{ count: number }>(),
     ]);
     const total = countRow?.count ?? 0;
-    const users = (rows.results ?? []).map(user => ({
-      ...user,
-      is_self: user.github_user_id === principal.session?.github_user_id,
-      can_assign_role: Boolean(user.github),
-    }));
+    const users = (rows.results ?? []).map(user => {
+      const isSelf = user.github_user_id === principal.session?.github_user_id
+        || user.github.toLowerCase() === principal.session?.github_login.toLowerCase();
+      return {
+        ...user,
+        is_self: isSelf,
+        can_assign_role: !isSelf,
+      };
+    });
     return jsonOk({
       users,
       pagination: {
@@ -195,11 +199,26 @@ export async function handleAdminUserRole(
     WHERE id = ?
   `).bind(registrationId).first<RegistrationIdentity>();
   if (!registration) return jsonErr('Registered user not found', 404, request);
-  if (!registration.github) {
-    return jsonErr('This registration does not include a GitHub username.', 409, request);
+  if (registration.github.toLowerCase() === principal.session.github_login.toLowerCase()) {
+    return jsonErr('You cannot change your own access role.', 409, request);
   }
 
-  const profile = await resolveGitHubProfile(request, registration.github, env.GITHUB_TOKEN);
+  const submittedGitHub = parsed.val.github === undefined
+    ? registration.github
+    : parsed.val.github;
+  const github = vGitHub(submittedGitHub);
+  if (!github.ok) return jsonErr(github.error, 400, request);
+  if (!github.val) {
+    return jsonErr('This registration does not include a GitHub username.', 409, request);
+  }
+  if (
+    registration.github
+    && github.val.toLowerCase() !== registration.github.toLowerCase()
+  ) {
+    return jsonErr('An existing GitHub identity cannot be replaced while assigning a role.', 409, request);
+  }
+
+  const profile = await resolveGitHubProfile(request, github.val, env.GITHUB_TOKEN);
   if (profile instanceof Response) return profile;
 
   if (

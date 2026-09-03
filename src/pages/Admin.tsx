@@ -59,6 +59,7 @@ export default function Admin() {
   const [searchInput, setSearchInput] = useState('')
   const [query, setQuery] = useState('')
   const [draftRoles, setDraftRoles] = useState<Record<number, AccessRole>>({})
+  const [draftGitHub, setDraftGitHub] = useState<Record<number, string>>({})
   const [savingId, setSavingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -79,9 +80,10 @@ export default function Admin() {
       setUsers(data.users)
       setPagination(data.pagination)
       setDraftRoles(Object.fromEntries(
-        data.users
-          .filter(entry => entry.access_role)
-          .map(entry => [entry.id, entry.access_role as AccessRole]),
+        data.users.map(entry => [entry.id, entry.access_role ?? 'member']),
+      ))
+      setDraftGitHub(Object.fromEntries(
+        data.users.map(entry => [entry.id, entry.github]),
       ))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load registered users.')
@@ -101,7 +103,9 @@ export default function Admin() {
 
   async function saveRole(entry: RegisteredUser) {
     const role = draftRoles[entry.id]
-    if (!role || role === entry.access_role) return
+    const github = (draftGitHub[entry.id] ?? entry.github).trim().replace(/^@/, '')
+    const unchanged = role === (entry.access_role ?? 'member') && github === entry.github
+    if (!role || !github || unchanged) return
     setSavingId(entry.id)
     setError('')
     setNotice('')
@@ -117,7 +121,7 @@ export default function Admin() {
           'content-type': 'application/json',
           'x-csrf-token': csrf.token,
         },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, github }),
       })
       const data = await response.json() as RoleUpdateResponse
       if (!response.ok || !data.ok || !data.user) {
@@ -133,6 +137,7 @@ export default function Admin() {
           }
         : item))
       setDraftRoles(current => ({ ...current, [entry.id]: updated.access_role }))
+      setDraftGitHub(current => ({ ...current, [entry.id]: updated.github }))
       setNotice(`Updated @${updated.github} to ${updated.access_role}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not update the access role.')
@@ -200,8 +205,10 @@ export default function Admin() {
               <tbody>
                 {users.map(entry => {
                   const selectedRole = draftRoles[entry.id] ?? entry.access_role ?? 'member'
-                  const unchanged = selectedRole === entry.access_role
-                  const disabled = !entry.can_assign_role || entry.is_self || savingId === entry.id
+                  const github = draftGitHub[entry.id] ?? entry.github
+                  const unchanged = selectedRole === (entry.access_role ?? 'member')
+                    && github.trim().replace(/^@/, '') === entry.github
+                  const disabled = entry.is_self || savingId === entry.id
                   return (
                     <tr key={entry.id}>
                       <td data-label="User">
@@ -209,7 +216,7 @@ export default function Admin() {
                         <a href={`mailto:${entry.email}`}>{entry.email}</a>
                         {entry.github
                           ? <a href={`https://github.com/${encodeURIComponent(entry.github)}`} target="_blank" rel="noreferrer">@{entry.github}</a>
-                          : <span className="admin-muted">No GitHub username</span>}
+                          : <span className="admin-muted">GitHub username needed before saving</span>}
                       </td>
                       <td data-label="Registration">
                         <span>{entry.registration_role || 'General'}</span>
@@ -228,14 +235,34 @@ export default function Admin() {
                         >
                           {ROLES.map(role => <option key={role} value={role}>{role}</option>)}
                         </select>
+                        {!entry.is_self && !entry.github && (
+                          <>
+                            <label className="admin-github-label" htmlFor={`github-${entry.id}`}>GitHub username</label>
+                            <input
+                              id={`github-${entry.id}`}
+                              className="admin-github-input"
+                              type="text"
+                              value={github}
+                              disabled={savingId === entry.id}
+                              maxLength={40}
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              placeholder="github-username"
+                              onChange={event => setDraftGitHub(current => ({
+                                ...current,
+                                [entry.id]: event.target.value,
+                              }))}
+                            />
+                          </>
+                        )}
                         {entry.is_self && <span className="admin-muted">Your own role is locked</span>}
-                        {!entry.can_assign_role && <span className="admin-muted">GitHub account required</span>}
                       </td>
                       <td data-label="Action">
                         <button
                           type="button"
                           className="btn btn-secondary admin-save"
-                          disabled={disabled || unchanged}
+                          disabled={disabled || unchanged || !github.trim()}
                           onClick={() => void saveRole(entry)}
                         >
                           {savingId === entry.id ? 'Saving…' : 'Save role'}
