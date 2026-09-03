@@ -34,8 +34,8 @@ import { reconcileRepositoryPullRequests } from './cleanup.js';
 const CHUNK_SIZE = 1;
 
 /* ─── SHARED PR PROCESSOR ────────────────────────────────────── */
-// Contains the inner loop logic shared between runSync and runSyncOneRepo.
-// skipReactions = true on manual sync (50-subrequest limit); false on cron (1000 limit).
+// Contains the inner-loop logic used by the request-bounded Workspace Workflow.
+// Reactions are queued separately so this operation only collects one PR.
 async function processPR(
   pr: GitHubPR,
   repoId: number,
@@ -263,63 +263,7 @@ async function processPR(
   return { comments: comments.length };
 }
 
-/* ─── FULL SYNC (cron — 1000 subrequest limit) ───────────────── */
-export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}): Promise<SyncResult> {
-  const { skipReactions = false } = opts;
-  const token = env.GITHUB_TOKEN;
-  const db    = env.DB;
-  const stats: SyncStats = { repos: 0, prs: 0, comments: 0 };
-
-  try {
-    const syncStart = new Date().toISOString();
-    const allRepos  = await ghFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, token);
-    const repos     = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
-
-    for (const repo of repos) {
-      const detail      = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
-      const upstreamUrl = detail.parent?.html_url ?? null;
-
-      // Get the previous sync timestamp for this repo (or epoch if new)
-      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE id = ?')
-        .bind(repo.id).first<{ synced_at: string | null }>();
-      const repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
-
-      await upsertRepo(db, repo, upstreamUrl, syncStart);
-      stats.repos++;
-
-      const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
-      const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-      const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
-
-      for (const pr of prs) {
-        stats.prs++;
-        const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, { skipReactions });
-        stats.comments += result.comments;
-      }
-
-      await updateRepoPRCount(db, repo.id, syncStart);
-    }
-
-     // Sync user votes from pr_comments before resolving duplicates
-     // (so duplicate chain resolution has complete vote data)
-     await syncVotesFromComments(db);
-     
-     // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
-     await rebuildDuplicates(db, token);
-     
-     // Rebuild contributor reputation scores
-     await rebuildContributors(db, syncStart);
-    
-    await setSyncState(db, 'last_synced_at', syncStart);
-    await setSyncState(db, 'sync_running', '0');
-    return { ok: true, message: `Sync complete at ${syncStart}`, stats };
-  } catch (err) {
-    await setSyncState(db, 'sync_running', '0');
-    return { ok: false, message: (err as Error)?.message ?? String(err), stats };
-  }
-}
-
-/* ─── CHUNKED CANONICAL SYNC (one PR per invocation) ──────────── */
+/* ─── CHUNKED WORKSPACE SYNC (one PR per invocation) ──────────── */
 // Cursor stored in sync_state as "repoIndex:prStart", e.g. "0:10".
 // Each call processes up to CHUNK_SIZE PRs from the current repo, then advances.
 // When all PRs in a repo are done, moves to next repo.
