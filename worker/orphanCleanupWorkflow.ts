@@ -8,6 +8,7 @@ import type { OrphanCleanupActor, OrphanCleanupParams, Env } from './types.js';
 import { recordPrivilegedActionForActor } from './authorization.js';
 import {
   finishSyncJob,
+  isSyncJobActive,
   markSyncJobRunning,
   recordDailyBudget,
   recordSyncJobEvent,
@@ -52,22 +53,31 @@ function workflowInstanceId(jobRunId: string, chunk: number): string {
 
 async function createWorkflowInstance(env: Env, params: OrphanCleanupParams): Promise<string> {
   if (!env.ORPHAN_CLEANUP_WORKFLOW) throw new Error('Orphan cleanup Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) {
+    throw new NonRetryableError('Orphan cleanup job was cancelled');
+  }
   const id = workflowInstanceId(params.jobRunId, params.chunk);
+  let createdId: string;
   try {
     const instance = await env.ORPHAN_CLEANUP_WORKFLOW.create({
       id,
       params,
       retention: { successRetention: '1 day', errorRetention: '3 days' },
     });
-    return instance.id;
+    createdId = instance.id;
   } catch (error) {
     try {
-      await env.ORPHAN_CLEANUP_WORKFLOW.get(id);
-      return id;
+      const instance = await env.ORPHAN_CLEANUP_WORKFLOW.get(id);
+      createdId = instance.id;
     } catch {
       throw error;
     }
   }
+  await env.DB.prepare(`
+    UPDATE sync_job_runs SET workflow_instance_id = ?
+     WHERE id = ? AND status IN ('queued', 'running')
+  `).bind(createdId, params.jobRunId).run();
+  return createdId;
 }
 
 async function readProgress(db: D1Database, jobRunId: string): Promise<OrphanCleanupProgress> {
@@ -310,10 +320,22 @@ export async function initializeOrphanCleanupRun(
   params: Omit<OrphanCleanupParams, 'chunk'>,
 ): Promise<string> {
   if (!env.ORPHAN_CLEANUP_WORKFLOW) throw new Error('Orphan cleanup Workflow binding is unavailable');
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) {
+    throw new NonRetryableError('Orphan cleanup job was cancelled');
+  }
   await seedOrphanCleanupWorkItems(env.DB, params.jobRunId, params.pipelineRunId);
+  if (!await isSyncJobActive(env.DB, params.jobRunId)) {
+    await env.DB.prepare(`
+      UPDATE sync_work_items
+         SET status = 'failed', last_error_code = 'cancelled_by_admin',
+             last_error_summary = 'Cancelled by an administrator.', updated_at = ?
+       WHERE job_run_id = ? AND status IN ('pending', 'leased', 'deferred')
+    `).bind(nowIso(), params.jobRunId).run();
+    throw new NonRetryableError('Orphan cleanup job was cancelled');
+  }
   const progress = await publishProgress(env.DB, params.jobRunId);
   await env.DB.prepare(
-    "UPDATE sync_job_runs SET status = 'queued', expected_items = ? WHERE id = ?",
+    "UPDATE sync_job_runs SET status = 'queued', expected_items = ? WHERE id = ? AND status IN ('queued', 'running')",
   ).bind(progress.expected, params.jobRunId).run();
   const workflowId = await createWorkflowInstance(env, { ...params, chunk: 0 });
   await env.DB.prepare(
@@ -361,8 +383,18 @@ export class OrphanCleanupWorkflow extends WorkflowEntrypoint<Env, OrphanCleanup
     return step.do('process bounded orphan cleanup chunk', {
       retries: { limit: RETRY_LIMIT, delay: '10 seconds', backoff: 'exponential' },
       timeout: '15 minutes',
-    }, async context => {
+    }, async (context): Promise<Record<string, number | boolean>> => {
       try {
+        if (!await isSyncJobActive(this.env.DB, event.payload.jobRunId)) {
+          return {
+            done: true,
+            cancelled: true,
+            checked: 0,
+            flagged: 0,
+            errors: 0,
+            remaining: 0,
+          };
+        }
         await markSyncJobRunning(this.env.DB, event.payload.jobRunId);
         const chunk = await processOrphanCleanupChunk(this.env, event.payload.jobRunId);
         await recordSyncJobEvent(this.env.DB, event.payload.jobRunId, {
@@ -413,6 +445,7 @@ export class OrphanCleanupWorkflow extends WorkflowEntrypoint<Env, OrphanCleanup
           remaining: chunk.remaining,
         };
       } catch (error) {
+        if (error instanceof NonRetryableError) throw error;
         if (context.attempt <= RETRY_LIMIT) throw error;
         await finishOrphanCleanup(this.env, event.payload, error);
         throw new NonRetryableError(
