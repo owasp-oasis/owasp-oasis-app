@@ -2,7 +2,7 @@
 
 import type { Env } from '../types.js';
 import { checkRateLimit, jsonErr, jsonOk, validateCSRF } from '../security.js';
-import { hashString, parseBody, vEmail, vGitHub, vName, vRole, vText } from '../validation.js';
+import { hashString, parseBody, vEmail, vGitHubAccount, vName, vRole, vText } from '../validation.js';
 import { isAlreadyApplied } from '../db.js';
 import {
   enqueueHubSpotSync,
@@ -26,14 +26,14 @@ export async function handleApply(request: Request, env: Env, ctx: ExecutionCont
   if (!nameRes.ok) return jsonErr(nameRes.error, 400, request);
   const emailRes = vEmail(body['email']);
   if (!emailRes.ok) return jsonErr(emailRes.error, 400, request);
-  const ghRes = vGitHub(body['github']);
-  if (!ghRes.ok) return jsonErr(ghRes.error, 400, request);
   const orgRes = vText(body['org'], 120, 'Organisation');
   if (!orgRes.ok) return jsonErr(orgRes.error, 400, request);
   const whyRes = vText(body['why'], 1_000, 'Message');
   if (!whyRes.ok) return jsonErr(whyRes.error, 400, request);
   const roleRes = vRole(body['role']);
   if (!roleRes.ok || !roleRes.val) return jsonErr('Please select a role to apply for', 400, request);
+  const ghRes = await vGitHubAccount(body['github'], env.GITHUB_TOKEN);
+  if (!ghRes.ok) return jsonErr(ghRes.error, ghRes.status ?? 400, request);
 
   const submittedAt = new Date().toISOString();
   const submission: HubSpotSubmission = {

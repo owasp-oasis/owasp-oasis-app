@@ -1,22 +1,35 @@
 /**
  * Integration tests for POST /api/register endpoint.
  *
- * Coverage gaps (mock fetch limitation):
+ * Coverage gaps:
  * - Real email deliverability (no actual email is sent)
- * - GitHub login validation against real GitHub API (not called)
+ * - Live GitHub account responses (the API is mocked)
  */
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { SELF } from './testWorker.js';
 import { applySchema, cleanDB, makeCsrf, buildCookieHeader } from './helpers.js';
+import { fetchMock } from './fetchMock.js';
 
 describe('POST /api/register', () => {
   beforeAll(async () => {
     await applySchema(env);
   });
 
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+    fetchMock
+      .when(req => req.method === 'GET' && req.url.startsWith('https://api.github.com/users/'))
+      .respondWith(new Response(
+        JSON.stringify({ login: 'verified-user', type: 'User' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ));
+  });
+
   afterEach(async () => {
+    fetchMock.deactivate();
     await cleanDB(env);
   });
 
@@ -76,6 +89,10 @@ describe('POST /api/register', () => {
     });
 
     it('allows optional github field', async () => {
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+
       const csrf = makeCsrf();
       const res = await register(
         {
@@ -234,18 +251,73 @@ describe('POST /api/register', () => {
       expect(res.status).toBe(400);
     });
 
-    it('rejects GitHub username ending with hyphen', async () => {
+    it('accepts a verified legacy GitHub username ending with a hyphen', async () => {
       const csrf = makeCsrf();
       const res = await register(
         {
           email: 'test4@oasis-test.internal',
-          github: 'user-',
+          github: 'matt-',
+          role: 'validator',
+        },
+        csrf,
+      );
+
+      expect(res.status).toBe(200);
+      const registration = await env.DB.prepare(
+        'SELECT github FROM registrations WHERE email = ?',
+      ).bind('test4@oasis-test.internal').first<{ github: string }>();
+      expect(registration?.github).toBe('matt-');
+    });
+
+    it('rejects a syntactically valid username that GitHub cannot find', async () => {
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when(req => req.method === 'GET' && req.url === 'https://api.github.com/users/not-a-real-oasis-user')
+        .respondWith(new Response('Not Found', { status: 404 }));
+
+      const csrf = makeCsrf();
+      const res = await register(
+        {
+          email: 'missing-github@oasis-test.internal',
+          github: 'not-a-real-oasis-user',
           role: 'validator',
         },
         csrf,
       );
 
       expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ ok: false, error: 'GitHub account not found' });
+      const registration = await env.DB.prepare(
+        'SELECT COUNT(*) AS count FROM registrations WHERE email = ?',
+      ).bind('missing-github@oasis-test.internal').first<{ count: number }>();
+      expect(registration?.count).toBe(0);
+    });
+
+    it('returns a retryable error when GitHub verification is unavailable', async () => {
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when(req => req.method === 'GET' && req.url === 'https://api.github.com/users/octocat')
+        .respondWith(new Response('Service Unavailable', { status: 503 }));
+
+      const csrf = makeCsrf();
+      const res = await register(
+        {
+          email: 'github-unavailable@oasis-test.internal',
+          github: 'octocat',
+          role: 'validator',
+        },
+        csrf,
+      );
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({
+        ok: false,
+        error: 'Could not verify GitHub account right now — please try again.',
+      });
     });
   });
 
