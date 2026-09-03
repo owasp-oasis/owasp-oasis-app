@@ -117,6 +117,20 @@ export default function Nav({ onOpenOnboarding }: NavProps) {
 
               {accountOpen && (
                 <div id="nav-account-menu" className="nav-account-menu" role="menu">
+                  {user.role === 'admin' && (
+                    <NavLink
+                      to="/admin"
+                      className="nav-account-action nav-account-action--admin"
+                      role="menuitem"
+                      onClick={closeMenu}
+                    >
+                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 1.5 13 3.4v3.8c0 3.3-2 5.8-5 7.3-3-1.5-5-4-5-7.3V3.4L8 1.5Z" />
+                        <path d="M6 8h4M8 6v4" />
+                      </svg>
+                      Admin
+                    </NavLink>
+                  )}
                   <button
                     type="button"
                     className="nav-account-action"
