@@ -17,6 +17,21 @@ export interface Env {
   OAUTH_CALLBACK_URL: string;
   SHADOW_SYNC_WORKFLOW?: Workflow<ShadowSyncParams>;
   CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
+  ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
+}
+
+export interface OrphanCleanupActor {
+  githubUserId: number | null;
+  githubLogin: string;
+  role: 'admin' | 'moderator' | 'member' | 'guest';
+}
+
+export interface OrphanCleanupParams {
+  jobRunId: string;
+  pipelineRunId: string;
+  chunk: number;
+  legacyParentRunId?: string;
+  auditActor?: OrphanCleanupActor;
 }
 
 export type ShadowSyncParams =

@@ -1,7 +1,8 @@
 import type { Env } from '../types.js';
 import { roleAllows, getRequestPrincipal, recordPrivilegedAction } from '../authorization.js';
-import { reconcileRemovedRepositories, runCleanup } from '../cleanup.js';
+import { reconcileRemovedRepositories } from '../cleanup.js';
 import { processHubSpotQueue } from '../hubspot.js';
+import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphanCleanupWorkflow.js';
 import { jsonErr, secHeaders, validateCSRF } from '../security.js';
 import { finishSyncJob, markSyncJobRunning, startSyncJob, type SyncJobStatus } from '../syncJobs.js';
 
@@ -29,23 +30,6 @@ async function finishRepositoryInventory(env: Env, runId: string): Promise<SyncJ
     failedItems: result.errors,
     errorCode: result.errors > 0 ? 'repository_reconciliation_failed' : null,
     error: result.errors > 0 ? `${result.errors} repository reconciliation operation(s) failed.` : undefined,
-  });
-  return status;
-}
-
-async function finishOrphanCleanup(env: Env, runId: string): Promise<SyncJobStatus> {
-  const result = await runCleanup(env);
-  const status = result.errors > 0 ? 'failed' : 'succeeded';
-  await finishSyncJob(env.DB, runId, status, {
-    metrics: {
-      checked: result.checked,
-      flagged: result.flagged,
-      errors: result.errors,
-    },
-    completedItems: result.checked,
-    failedItems: result.errors,
-    errorCode: result.errors > 0 ? 'orphan_checks_failed' : null,
-    error: result.errors > 0 ? `${result.errors} orphan check(s) failed.` : undefined,
   });
   return status;
 }
@@ -78,7 +62,6 @@ async function executeRetry(
     await markSyncJobRunning(env.DB, runId);
     let status: SyncJobStatus;
     if (jobKey === 'repository_inventory') status = await finishRepositoryInventory(env, runId);
-    else if (jobKey === 'orphan_cleanup') status = await finishOrphanCleanup(env, runId);
     else if (jobKey === 'hubspot_contacts') status = await finishHubSpotContacts(env, runId);
     else throw new Error('Unsupported sync job retry');
     outcome = status === 'succeeded' ? 'succeeded' : 'failed';
@@ -143,7 +126,23 @@ export async function handleRetrySyncJob(
     }).catch(() => undefined);
     return jsonErr('Unable to record privileged action', 500, request);
   }
-  ctx.waitUntil(executeRetry(env, jobKey, retryRunId, principal));
+  if (jobKey === 'orphan_cleanup') {
+    const params = {
+      jobRunId: retryRunId,
+      pipelineRunId: retryRunId,
+      auditActor: {
+        githubUserId: principal.session.github_user_id,
+        githubLogin: principal.session.github_login,
+        role: principal.role,
+      },
+    };
+    ctx.waitUntil(
+      initializeOrphanCleanupRun(env, params)
+        .catch(error => failOrphanCleanupDispatch(env, params, error)),
+    );
+  } else {
+    ctx.waitUntil(executeRetry(env, jobKey, retryRunId, principal));
+  }
 
   return secHeaders(Response.json({
     ok: true,

@@ -1,4 +1,4 @@
-import type { Env } from './types.js';
+import type { Env, OrphanCleanupActor } from './types.js';
 import { getSession, type SessionUser, type UserRole } from './handlers/auth.js';
 
 const ROLE_LEVEL: Record<UserRole, number> = {
@@ -33,6 +33,23 @@ export async function recordPrivilegedAction(
   },
 ): Promise<void> {
   if (!principal.session) return;
+  return recordPrivilegedActionForActor(env, {
+    githubUserId: principal.session.github_user_id,
+    githubLogin: principal.session.github_login,
+    role: principal.role,
+  }, input);
+}
+
+export async function recordPrivilegedActionForActor(
+  env: Env,
+  actor: OrphanCleanupActor,
+  input: {
+    action: string;
+    targetType?: string;
+    targetId?: string;
+    outcome: 'accepted' | 'succeeded' | 'failed' | 'rejected';
+  },
+): Promise<void> {
   await env.DB.prepare(`
     INSERT INTO privileged_action_audit (
       id, github_user_id, github_login, role, action,
@@ -40,9 +57,9 @@ export async function recordPrivilegedAction(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     crypto.randomUUID(),
-    principal.session.github_user_id,
-    principal.session.github_login,
-    principal.role,
+    actor.githubUserId,
+    actor.githubLogin,
+    actor.role,
     input.action.slice(0, 100),
     input.targetType?.slice(0, 80) ?? null,
     input.targetId?.slice(0, 160) ?? null,

@@ -285,6 +285,10 @@ The status page exposes retry controls only to an authenticated administrator. `
 
 Only independently executable jobs currently support manual execution: repository inventory, orphan cleanup, and HubSpot contacts. An administrator can retry a failed job, rerun a completed job, or start a job with no recorded history. The server refuses the request while an instance of the same job is queued or running. Canonical stages that depend on pipeline state intentionally remain unavailable until they have a safe stage-resumption contract.
 
+Orphan cleanup is a single logical status-page run backed by a durable snapshot in `sync_work_items`. The `oasis-orphan-cleanup` Workflow processes at most 40 GitHub PR checks per instance, records a completion event for every slice, and dispatches the next deterministic instance until the snapshot is exhausted. This deliberately stays below the Workers Free 50-external-subrequest ceiling while preserving ten requests of operational headroom. A `401` or `403` stops the run immediately and leaves all unattempted items deferred for inspection; individual transport or non-authentication HTTP failures are recorded against their PR and the remaining snapshot continues.
+
+Both the retained four-hour legacy schedule and the administrator retry endpoint dispatch this bounded Workflow. The legacy parent remains running with `cleanup_pending: true` until the final slice finishes, then inherits the cleanup outcome. The canonical pipeline continues using its complete per-repository inventories and does not duplicate PR-by-PR cleanup calls. Deployment requires the production-only `ORPHAN_CLEANUP_WORKFLOW` binding in `wrangler.toml`; preview remains read-only and does not receive that binding. No new D1 migration is required because the implementation reuses the sync observability tables from migration `0007`.
+
 To assign or change a role, first obtain the immutable GitHub user ID from GitHub, then execute a parameterized equivalent of this upsert against the target environment:
 
 ```sql

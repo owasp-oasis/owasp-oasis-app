@@ -1,6 +1,7 @@
 import type { Env } from './types.js';
-import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
+import { reconcileRemovedRepositories } from './cleanup.js';
 import { processHubSpotQueue } from './hubspot.js';
+import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from './orphanCleanupWorkflow.js';
 import { runSync } from './sync.js';
 import {
   finishSyncJob,
@@ -119,48 +120,54 @@ export async function runTrackedLegacySync(env: Env): Promise<LegacySyncExecutio
     stats: syncResult.stats,
   }));
 
-  const cleanupRunId = await startSyncJob(env.DB, {
-    jobKey: 'orphan_cleanup',
-    pipelineRunId,
-    trigger: 'scheduled',
-    mode: 'legacy',
-  });
+  const parentMetrics = {
+    ...syncMetrics,
+    repository_errors: repositoryErrors,
+    sync_errors: syncErrors,
+    cleanup_pending: true,
+  };
+  await env.DB.prepare(
+    'UPDATE sync_job_runs SET metrics_json = ? WHERE id = ?',
+  ).bind(JSON.stringify(parentMetrics), parentRunId).run();
+
+  let cleanupRunId: string | null = null;
   try {
-    const cleanup = await runCleanup(env);
-    cleanupErrors = cleanup.errors;
-    await finishSyncJob(env.DB, cleanupRunId, cleanup.errors > 0 ? 'failed' : 'succeeded', {
-      metrics: {
-        checked: cleanup.checked,
-        flagged: cleanup.flagged,
-        errors: cleanup.errors,
-      },
-      completedItems: cleanup.checked,
-      failedItems: cleanup.errors,
-      errorCode: cleanup.errors > 0 ? 'orphan_checks_failed' : null,
-      error: cleanup.errors > 0 ? `${cleanup.errors} orphan check(s) failed.` : undefined,
+    cleanupRunId = await startSyncJob(env.DB, {
+      jobKey: 'orphan_cleanup',
+      pipelineRunId,
+      trigger: 'scheduled',
+      mode: 'legacy',
+      status: 'queued',
+    });
+    const workflowInstanceId = await initializeOrphanCleanupRun(env, {
+      jobRunId: cleanupRunId,
+      pipelineRunId,
+      legacyParentRunId: parentRunId,
     });
     console.log(JSON.stringify({
-      event: 'legacy_orphan_cleanup_complete',
+      event: 'legacy_orphan_cleanup_dispatched',
       pipeline_run_id: pipelineRunId,
-      result: cleanup,
+      job_run_id: cleanupRunId,
+      workflow_instance_id: workflowInstanceId,
     }));
   } catch (error) {
     cleanupErrors = 1;
-    await finishSyncJob(env.DB, cleanupRunId, 'failed', { errorCode: 'orphan_cleanup_exception', error });
-    console.error(JSON.stringify({ event: 'legacy_orphan_cleanup_failed', pipeline_run_id: pipelineRunId }));
+    if (cleanupRunId) {
+      await failOrphanCleanupDispatch(env, {
+        jobRunId: cleanupRunId,
+        pipelineRunId,
+        legacyParentRunId: parentRunId,
+      }, error);
+    } else {
+      await finishSyncJob(env.DB, parentRunId, 'failed', {
+        metrics: { ...parentMetrics, cleanup_pending: false, cleanup_errors: 1 },
+        errorCode: 'orphan_cleanup_dispatch_failed',
+        error,
+      });
+    }
   }
 
   const ok = repositoryErrors === 0 && syncErrors === 0 && cleanupErrors === 0;
-  await finishSyncJob(env.DB, parentRunId, ok ? 'succeeded' : 'failed', {
-    metrics: {
-      ...syncMetrics,
-      repository_errors: repositoryErrors,
-      sync_errors: syncErrors,
-      cleanup_errors: cleanupErrors,
-    },
-    errorCode: ok ? null : 'legacy_pipeline_incomplete',
-    error: ok ? undefined : 'At least one canonical synchronization stage did not complete successfully.',
-  });
 
   await recordDailyBudget(env.DB, {
     key: 'workflow_steps',
