@@ -148,6 +148,10 @@ describe('privacy-safe administrative analytics', () => {
     expect(memberResponse.status).toBe(403);
 
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    await env.DB.prepare(`
+      INSERT INTO analytics_collection_days (metric_date, status, attempts, updated_at)
+      VALUES ('2020-01-01', 'failed', 1, '2020-01-02T00:00:00.000Z')
+    `).run();
     const adminCsrf = makeCsrf();
     const adminResponse = await handleAdminAnalyticsCollect(telemetryRequest(
       '/api/admin/analytics/collect', {}, adminCsrf,
@@ -157,12 +161,12 @@ describe('privacy-safe administrative analytics', () => {
     await expect(adminResponse.json()).resolves.toEqual(expect.objectContaining({
       ok: true,
       configuration_required: true,
-      remaining_days: 30,
+      remaining_days: 7,
     }));
     const checkpoints = await env.DB.prepare(`
       SELECT status, COUNT(*) AS count FROM analytics_collection_days GROUP BY status
     `).all();
-    expect(checkpoints.results).toEqual([{ status: 'pending', count: 30 }]);
+    expect(checkpoints.results).toEqual([{ status: 'pending', count: 7 }]);
     const audit = await env.DB.prepare(`
       SELECT github_login, role, action, outcome FROM privileged_action_audit
     `).first();
@@ -196,7 +200,7 @@ describe('privacy-safe administrative analytics', () => {
 
     const result = await runAnalyticsCollector(productionEnv, 'manual');
     expect(result).toEqual(expect.objectContaining({
-      started: true, processed_days: 5, failed_days: 0, remaining_days: 25,
+      started: true, processed_days: 5, failed_days: 0, remaining_days: 2,
     }));
     const archive = await env.DB.prepare(`
       SELECT COUNT(*) AS days, SUM(requests_estimate) AS requests,
@@ -208,7 +212,7 @@ describe('privacy-safe administrative analytics', () => {
       SELECT status, COUNT(*) AS count FROM analytics_collection_days GROUP BY status
     `).all();
     expect(checkpoints.results).toEqual(expect.arrayContaining([
-      { status: 'pending', count: 25 },
+      { status: 'pending', count: 2 },
       { status: 'succeeded', count: 5 },
     ]));
     const run = await env.DB.prepare(

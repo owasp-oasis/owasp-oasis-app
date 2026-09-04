@@ -53,7 +53,7 @@ Initial implementation on `feat/admin-analytics-dashboard` includes:
 
 - D1 migration `0010_admin_analytics.sql`, with 400 days of detailed daily retention and two-day anonymous idempotency receipts.
 - First-party page-view, normalized-route, navigation-duration, review-open, active-heartbeat, review-close, and successful-vote aggregates.
-- A daily 03:45 UTC collector that archives five closed Cloudflare days per execution and initially checkpoints the previous 30 days.
+- A daily 03:45 UTC collector that archives five closed Cloudflare days per execution and initially checkpoints the seven days available under the zone's current API retention.
 - Admin-role authorization on both dashboard reads and manual collection; `ADMIN_SECRET` is not accepted by these routes.
 - Day/week/month ranges, preceding-period comparisons, freshness, collection checkpoints, route aggregates, Cloudflare request/cache/status aggregates, engagement cohort suppression, and operation-budget history.
 - Preview collection no-ops because preview and production share D1; production and local tests collect, preventing preview traffic from polluting production history.
