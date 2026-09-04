@@ -468,13 +468,11 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token. Requires only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
 | `CLOUDFLARE_ANALYTICS_TOKEN` | Cloudflare API token used only by the production daily archive. Scope it to the OASIS zone with Analytics Read permission. |
-| `CLOUDFLARE_ZONE_ID` | Zone identifier queried by the analytics archive. Stored as a Worker secret to keep deployment configuration environment-neutral. |
 
-Enable the production archive interactively; never place either value in a committed file:
+The non-secret `CLOUDFLARE_ZONE_ID` is committed under `[env.production.vars]` in `wrangler.toml` so Git-based deployments preserve it. Set only the production Analytics API token interactively:
 
 ```bash
 npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
-npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
 ```
 
 The collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a 30-day backfill. An administrator can inspect or retry it from `/workspace/status` and can inspect the resulting aggregates at `/admin/analytics`. Preview telemetry intentionally no-ops because preview shares the production D1 database.

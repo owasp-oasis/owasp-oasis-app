@@ -299,9 +299,9 @@ export default function AdminAnalytics() {
             </p>
           ) : !payload.configuration.cloudflare_ready && (
             <p className="analytics-callout" id="cloudflare-collection-guidance">
-              Cloudflare archive collection requires both the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> and{' '}
-              <code>CLOUDFLARE_ZONE_ID</code> Worker secrets. One or both is not configured. First-party
-              page and engagement collection is active in this environment.
+              Cloudflare archive collection requires the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> Worker
+              secret and the <code>CLOUDFLARE_ZONE_ID</code> Worker variable. One or both is not configured.
+              First-party page and engagement collection is active in this environment.
             </p>
           )}
           {collectionError && <p className="analytics-message analytics-message--error" role="alert">{collectionError}</p>}
