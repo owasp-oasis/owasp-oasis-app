@@ -132,6 +132,7 @@ export default function AdminAnalytics() {
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [collectionError, setCollectionError] = useState('')
 
   const load = useCallback(async () => {
     if (user?.role !== 'admin') return
@@ -156,7 +157,7 @@ export default function AdminAnalytics() {
 
   const collect = useCallback(async () => {
     setCollecting(true)
-    setError('')
+    setCollectionError('')
     setNotice('')
     try {
       const csrfResponse = await fetch('/api/csrf', { credentials: 'include', cache: 'no-store' })
@@ -181,7 +182,7 @@ export default function AdminAnalytics() {
       }
       await load()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Collection failed.')
+      setCollectionError(caught instanceof Error ? caught.message : 'Collection failed.')
     } finally {
       setCollecting(false)
     }
@@ -232,7 +233,6 @@ export default function AdminAnalytics() {
       </section>
 
       {error && <p className="analytics-message analytics-message--error" role="alert">{error}</p>}
-      {notice && <p className="analytics-message analytics-message--success" role="status">{notice}</p>}
       {!payload && !error && <p className="analytics-state">Loading analytics…</p>}
 
       {payload && <>
@@ -278,28 +278,40 @@ export default function AdminAnalytics() {
         <section className="analytics-panel">
           <div className="analytics-section-heading">
             <div><h2>Cloudflare archive</h2><p>Closed UTC days, collected in bounded batches of five.</p></div>
-            <button type="button" className="btn btn-primary" disabled={collecting} onClick={() => void collect()}>
-              {collecting ? 'Collecting…' : 'Collect now'}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={collecting || payload.configuration.reads_shared_production_data}
+              aria-describedby={payload.configuration.reads_shared_production_data || !payload.configuration.cloudflare_ready
+                ? 'cloudflare-collection-guidance'
+                : undefined}
+              title={payload.configuration.reads_shared_production_data ? 'Run collection from the production analytics page.' : undefined}
+              onClick={() => void collect()}
+            >
+              {collecting ? 'Collecting…' : payload.configuration.reads_shared_production_data ? 'Production only' : 'Collect now'}
             </button>
           </div>
           {payload.configuration.reads_shared_production_data ? (
-            <p className="analytics-callout">
+            <p className="analytics-callout" id="cloudflare-collection-guidance">
               Preview displays analytics from the D1 database shared with production. Preview traffic
               and review activity are not recorded, so testing does not alter production metrics.
-              Cloudflare archive credentials are configured and evaluated only by the production Worker.
+              Run collection from the production analytics page; its results will also appear here.
             </p>
           ) : !payload.configuration.cloudflare_ready && (
-            <p className="analytics-callout">
-              Cloudflare archive collection needs the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> and{' '}
-              <code>CLOUDFLARE_ZONE_ID</code> Worker secrets. First-party page and engagement collection
-              is active in this environment.
+            <p className="analytics-callout" id="cloudflare-collection-guidance">
+              Cloudflare archive collection requires both the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> and{' '}
+              <code>CLOUDFLARE_ZONE_ID</code> Worker secrets. One or both is not configured. First-party
+              page and engagement collection is active in this environment.
             </p>
           )}
+          {collectionError && <p className="analytics-message analytics-message--error" role="alert">{collectionError}</p>}
+          {notice && <p className="analytics-message analytics-message--success" role="status">{notice}</p>}
           <div className="analytics-collection-counts">
             {['pending', 'running', 'succeeded', 'failed'].map(status => <span key={status}><strong>{collectionCounts.get(status) ?? 0}</strong> {status}</span>)}
           </div>
-          <details><summary>Collection day history</summary>
+          <details open={payload.collection.days.length === 0}><summary>Collection day history ({payload.collection.days.length})</summary>
             <div className="analytics-table analytics-table--collection" role="table">
+              {payload.collection.days.length === 0 && <p className="analytics-empty-state">No collection days have been queued yet.</p>}
               {payload.collection.days.map(row => <div className="analytics-row" role="row" key={String(row.metric_date)}>
                 <time>{String(row.metric_date)}</time><span className={`analytics-status analytics-status--${row.status}`}>{String(row.status)}</span>
                 <span>{formatNumber(number(row, 'attempts'))} attempt(s)</span><span>{row.error_summary ? String(row.error_summary) : '—'}</span>

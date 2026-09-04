@@ -42,6 +42,7 @@
 .analytics-status--failed { color: #8b1d26; background: #fff0f1; }
 .analytics-status--pending, .analytics-status--running { color: #755500; background: #fff8d6; }
 .analytics-table--collection .analytics-row, .analytics-table--budgets .analytics-row { grid-template-columns: 120px 160px 140px minmax(240px, 1fr); }
+.analytics-empty-state { margin: 0; padding: 1rem; color: var(--ink-soft); }
 @media (max-width: 760px) {
   .analytics-header { align-items: stretch; flex-direction: column; }
   .analytics-header nav { width: fit-content; }
