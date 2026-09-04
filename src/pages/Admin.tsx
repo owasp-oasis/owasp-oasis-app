@@ -208,7 +208,7 @@ export default function Admin() {
                   const github = draftGitHub[entry.id] ?? entry.github
                   const unchanged = selectedRole === (entry.access_role ?? 'member')
                     && github.trim().replace(/^@/, '') === entry.github
-                  const disabled = entry.is_self || savingId === entry.id
+                  const disabled = !entry.can_assign_role || savingId === entry.id
                   return (
                     <tr key={entry.id}>
                       <td data-label="User">
@@ -235,7 +235,7 @@ export default function Admin() {
                         >
                           {ROLES.map(role => <option key={role} value={role}>{role}</option>)}
                         </select>
-                        {!entry.is_self && !entry.github && (
+                        {entry.can_assign_role && !entry.github && (
                           <>
                             <label className="admin-github-label" htmlFor={`github-${entry.id}`}>GitHub username</label>
                             <input
@@ -256,7 +256,7 @@ export default function Admin() {
                             />
                           </>
                         )}
-                        {entry.is_self && <span className="admin-muted">Your own role is locked</span>}
+                        {!entry.can_assign_role && <span className="admin-muted">Your own role is locked</span>}
                       </td>
                       <td data-label="Action">
                         <button

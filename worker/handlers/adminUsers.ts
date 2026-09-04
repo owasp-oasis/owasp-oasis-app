@@ -148,9 +148,15 @@ export async function handleAdminUsers(request: Request, env: Env): Promise<Resp
       countStatement.bind(...countBindings).first<{ count: number }>(),
     ]);
     const total = countRow?.count ?? 0;
+    const currentUserId = principal.session.github_user_id;
+    const currentLogin = principal.session.github_login.toLowerCase();
     const users = (rows.results ?? []).map(user => {
-      const isSelf = user.github_user_id === principal.session?.github_user_id
-        || user.github.toLowerCase() === principal.session?.github_login.toLowerCase();
+      const isSelf = (
+        user.github_user_id !== null
+        && currentUserId !== null
+        && user.github_user_id === currentUserId
+      )
+        || user.github.toLowerCase() === currentLogin;
       return {
         ...user,
         is_self: isSelf,
