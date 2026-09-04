@@ -283,8 +283,10 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
       },
       freshness: freshness ?? {},
       configuration: {
+        environment: env.ENVIRONMENT,
         cloudflare_ready: Boolean(env.CLOUDFLARE_ANALYTICS_TOKEN && env.CLOUDFLARE_ZONE_ID),
-        first_party_collection: true,
+        first_party_collection: env.ENVIRONMENT !== 'preview',
+        reads_shared_production_data: env.ENVIRONMENT === 'preview',
         detailed_retention_days: 400,
       },
       site: {

@@ -30,8 +30,10 @@ interface AnalyticsPayload {
     engagement_date?: string | null
   }
   configuration: {
+    environment: string
     cloudflare_ready: boolean
     first_party_collection: boolean
+    reads_shared_production_data: boolean
     detailed_retention_days: number
   }
   site: {
@@ -280,7 +282,19 @@ export default function AdminAnalytics() {
               {collecting ? 'Collecting…' : 'Collect now'}
             </button>
           </div>
-          {!payload.configuration.cloudflare_ready && <p className="analytics-callout">Collection needs the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> and <code>CLOUDFLARE_ZONE_ID</code> Worker secrets. First-party page and engagement collection is already active.</p>}
+          {payload.configuration.reads_shared_production_data ? (
+            <p className="analytics-callout">
+              Preview displays analytics from the D1 database shared with production. Preview traffic
+              and review activity are not recorded, so testing does not alter production metrics.
+              Cloudflare archive credentials are configured and evaluated only by the production Worker.
+            </p>
+          ) : !payload.configuration.cloudflare_ready && (
+            <p className="analytics-callout">
+              Cloudflare archive collection needs the <code>CLOUDFLARE_ANALYTICS_TOKEN</code> and{' '}
+              <code>CLOUDFLARE_ZONE_ID</code> Worker secrets. First-party page and engagement collection
+              is active in this environment.
+            </p>
+          )}
           <div className="analytics-collection-counts">
             {['pending', 'running', 'succeeded', 'failed'].map(status => <span key={status}><strong>{collectionCounts.get(status) ?? 0}</strong> {status}</span>)}
           </div>
