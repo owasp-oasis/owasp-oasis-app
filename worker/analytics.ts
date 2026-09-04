@@ -325,8 +325,16 @@ async function executeAnalyticsCollector(
   // Retention is enforced even when the external archive is not configured or
   // temporarily failing, so first-party aggregates cannot grow indefinitely.
   await pruneAnalytics(env.DB);
+  // Materialize the backfill queue before checking external credentials. This
+  // makes missing configuration visible in the dashboard instead of presenting
+  // an empty history that looks like the Collect action was ignored.
+  await seedCollectionDays(env.DB);
   if (!env.CLOUDFLARE_ANALYTICS_TOKEN || !env.CLOUDFLARE_ZONE_ID) {
     const message = 'CLOUDFLARE_ANALYTICS_TOKEN and CLOUDFLARE_ZONE_ID must be configured.';
+    const remaining = await env.DB.prepare(`
+      SELECT COUNT(*) AS count FROM analytics_collection_days
+       WHERE status IN ('pending', 'failed') AND attempts < 5
+    `).first<{ count: number }>();
     await finishSyncJob(env.DB, runId, 'deferred', {
       errorCode: 'analytics_configuration_required', error: message,
     });
@@ -335,12 +343,11 @@ async function executeAnalyticsCollector(
       job_run_id: runId,
       processed_days: 0,
       failed_days: 0,
-      remaining_days: 0,
+      remaining_days: remaining?.count ?? 0,
       configuration_required: true,
     };
   }
 
-  await seedCollectionDays(env.DB);
   const staleBefore = new Date(Date.now() - 30 * 60_000).toISOString();
   await env.DB.prepare(`
     UPDATE analytics_collection_days

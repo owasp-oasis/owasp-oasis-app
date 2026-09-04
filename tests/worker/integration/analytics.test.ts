@@ -157,7 +157,12 @@ describe('privacy-safe administrative analytics', () => {
     await expect(adminResponse.json()).resolves.toEqual(expect.objectContaining({
       ok: true,
       configuration_required: true,
+      remaining_days: 30,
     }));
+    const checkpoints = await env.DB.prepare(`
+      SELECT status, COUNT(*) AS count FROM analytics_collection_days GROUP BY status
+    `).all();
+    expect(checkpoints.results).toEqual([{ status: 'pending', count: 30 }]);
     const audit = await env.DB.prepare(`
       SELECT github_login, role, action, outcome FROM privileged_action_audit
     `).first();
