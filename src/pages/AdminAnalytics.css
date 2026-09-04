@@ -35,6 +35,7 @@
 .analytics-row:last-child { border-bottom: 0; }
 .analytics-row--heading { color: var(--ink-soft); background: var(--gray-100); font-size: .72rem; font-weight: 750; text-transform: uppercase; }
 .analytics-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.analytics-action-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; }
 .analytics-collection-counts { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
 .analytics-collection-counts span { padding: .45rem .65rem; background: var(--gray-100); border-radius: 7px; text-transform: capitalize; }
 .analytics-status { width: fit-content; padding: .2rem .45rem; border-radius: 999px; text-transform: capitalize; }

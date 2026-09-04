@@ -175,7 +175,7 @@ wrangler secret list --name owasp-oasis-app-preview
 
 The non-secret `CLOUDFLARE_ZONE_ID` is versioned in `[env.production.vars]` in `wrangler.toml`. This prevents a Wrangler deployment from deleting a value that was added only through the dashboard.
 
-After setting the analytics token and deploying migration `0010_admin_analytics.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect now** once to verify access and start the bounded seven-day backfill supported by the zone's current Cloudflare API retention; subsequent collection runs daily at 03:45 UTC and preserve the aggregates in D1. The status-page `cloudflare_analytics` job records each execution and allows an administrator to retry it independently.
+After setting the analytics token and deploying migrations through `0011_historical_analytics_backfill.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect recent days** to verify the scheduled adaptive collector. Use **Discover & backfill older data** to ask Cloudflare for the zone's daily-rollup capability and retention before any older dates are queued. Each invocation processes at most five dates. The status page tracks `cloudflare_analytics` and `cloudflare_analytics_backfill` separately and lets an administrator retry either job independently.
 
 Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 

@@ -45,20 +45,22 @@ Development and promotion policy:
 - Keep unrelated work out of an active preview candidate, and reconcile `preview` with the resulting `main` after production promotion.
 - Prune merged feature branches after verifying their commits are reachable from `main`; preserve an archive tag only when it has intentional historical value.
 
-## In implementation: administrative analytics
+## Implemented: administrative analytics
 
-The status page tracks job health and operational budgets. Site analytics remain a separate, admin-only product at `/admin/analytics`; the collector alone appears on the status page as an independently runnable job.
+The status page tracks job health and operational budgets. Site analytics remain a separate, admin-only product at `/admin/analytics`; the recent collector and historical backfill appear as independently runnable status jobs.
 
 Initial implementation on `feat/admin-analytics-dashboard` includes:
 
 - D1 migration `0010_admin_analytics.sql`, with 400 days of detailed daily retention and two-day anonymous idempotency receipts.
+- D1 migration `0011_historical_analytics_backfill.sql`, with per-date source and metric-coverage metadata plus persisted Cloudflare dataset capability discovery.
 - First-party page-view, normalized-route, navigation-duration, review-open, active-heartbeat, review-close, and successful-vote aggregates.
 - A daily 03:45 UTC collector that archives five closed Cloudflare days per execution and initially checkpoints the seven days available under the zone's current API retention.
+- A separate admin-triggered daily-rollup backfill that discovers the zone/plan retention, queues only eligible days 8–30, and processes at most five days per execution without interrupting the scheduled collector.
 - Admin-role authorization on both dashboard reads and manual collection; `ADMIN_SECRET` is not accepted by these routes.
 - Day/week/month ranges, preceding-period comparisons, freshness, collection checkpoints, route aggregates, Cloudflare request/cache/status aggregates, engagement cohort suppression, and operation-budget history.
 - Preview collection no-ops because preview and production share D1; production and local tests collect, preventing preview traffic from polluting production history.
 
-Production activation requires migration `0010`, the `CLOUDFLARE_ANALYTICS_TOKEN` production Worker secret, the versioned `CLOUDFLARE_ZONE_ID` production variable, and confirmation of the first successful collection from the dashboard or status page.
+Production activation requires migrations through `0011`, the `CLOUDFLARE_ANALYTICS_TOKEN` production Worker secret, the versioned `CLOUDFLARE_ZONE_ID` production variable, and confirmation of the first successful recent collection and capability-discovered historical run from the dashboard or status page.
 
 ### Daily Cloudflare analytics archive
 

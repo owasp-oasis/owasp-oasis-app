@@ -2,6 +2,7 @@ import {
   recordEngagementEvent,
   recordPageView,
   runAnalyticsCollector,
+  runHistoricalAnalyticsBackfill,
   type EngagementEventType,
 } from '../analytics.js';
 import { getRequestPrincipal, recordPrivilegedAction, roleAllows } from '../authorization.js';
@@ -135,6 +136,15 @@ async function requireAdmin(request: Request, env: Env) {
   return { error: null, principal };
 }
 
+async function analyticsJobIsActive(env: Env, jobKey: string): Promise<boolean> {
+  const active = await env.DB.prepare(`
+    SELECT 1 AS active FROM sync_job_runs
+     WHERE job_key = ? AND mode = 'live' AND status IN ('queued', 'running')
+     LIMIT 1
+  `).bind(jobKey).first<{ active: number }>();
+  return active?.active === 1;
+}
+
 export async function handleAdminAnalytics(request: Request, env: Env): Promise<Response> {
   const authorization = await requireAdmin(request, env);
   if (authorization.error) return authorization.error;
@@ -159,7 +169,7 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
       siteSeries, routeTotals, siteCurrent, sitePrevious, cloudflareSeries,
       cloudflareCurrent, cloudflarePrevious, collectionDays, collectionCounts,
       engagementSeries, engagementCurrent, voters, projectEngagement,
-      projectVoters, budgets, freshness,
+      projectVoters, budgets, freshness, capability, cloudflareSources,
     ] = await Promise.all([
       env.DB.prepare(`
         SELECT ${siteBucket} AS bucket, SUM(page_views) AS page_views,
@@ -216,7 +226,7 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
           FROM analytics_daily_cloudflare WHERE metric_date BETWEEN ? AND ?
       `).bind(previousFrom, previousTo).first(),
       env.DB.prepare(`
-        SELECT metric_date, status, attempts, started_at, finished_at, error_summary
+        SELECT metric_date, status, source_dataset, attempts, started_at, finished_at, error_summary
           FROM analytics_collection_days ORDER BY metric_date DESC LIMIT 100
       `).all(),
       env.DB.prepare(`
@@ -263,6 +273,20 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
           (SELECT MAX(metric_date) FROM analytics_daily_cloudflare) AS cloudflare_date,
           (SELECT MAX(metric_date) FROM analytics_daily_engagement) AS engagement_date
       `).first(),
+      env.DB.prepare(`
+        SELECT dataset_key, enabled, not_older_than_seconds, max_duration_seconds,
+               max_page_size, available_fields_json, checked_at, error_summary
+          FROM analytics_dataset_capabilities
+         WHERE dataset_key = 'httpRequests1dGroups'
+      `).first(),
+      env.DB.prepare(`
+        SELECT source_dataset, COUNT(*) AS days,
+               MIN(visits_available) AS visits_complete,
+               MIN(statuses_available) AS statuses_complete,
+               MIN(cache_available) AS cache_complete
+          FROM analytics_daily_cloudflare WHERE metric_date BETWEEN ? AND ?
+         GROUP BY source_dataset ORDER BY source_dataset
+      `).bind(from, to).all(),
     ]);
 
     const voterCount = voters?.count ?? 0;
@@ -296,6 +320,19 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
       cloudflare: {
         current: cloudflareCurrent ?? {}, previous: cloudflarePrevious ?? {},
         series: cloudflareSeries.results ?? [], source_is_estimated: true,
+        historical_capability: capability ? {
+          enabled: capability.enabled,
+          not_older_than_seconds: capability.not_older_than_seconds,
+          max_duration_seconds: capability.max_duration_seconds,
+          max_page_size: capability.max_page_size,
+          checked_at: capability.checked_at,
+          error_summary: capability.error_summary,
+          available_fields: (() => {
+            try { return JSON.parse(String(capability.available_fields_json ?? '[]')); }
+            catch { return []; }
+          })(),
+        } : null,
+        sources: cloudflareSources.results ?? [],
       },
       engagement: privacySuppressed ? null : {
         current: engagementCurrent ?? {}, series: engagementSeries.results ?? [],
@@ -309,7 +346,7 @@ export async function handleAdminAnalytics(request: Request, env: Env): Promise<
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/no such table:\s*(?:main\.)?analytics_/i.test(message)) {
-      return jsonErr('Analytics schema is not available yet. Apply D1 migration 0010.', 503, request);
+      return jsonErr('Analytics schema is not available yet. Apply D1 migrations through 0011.', 503, request);
     }
     console.error(JSON.stringify({ event: 'admin_analytics_query_failed', error: message.slice(0, 300) }));
     return jsonErr('Failed to load analytics.', 500, request);
@@ -321,9 +358,27 @@ export async function handleAdminAnalyticsCollect(request: Request, env: Env): P
   if (authorization.error) return authorization.error;
   if (!validateCSRF(request)) return jsonErr('Invalid security token', 403, request);
   if (env.ENVIRONMENT !== 'production') return jsonErr('Cloudflare analytics collection is production-only', 409, request);
+  if (await analyticsJobIsActive(env, 'cloudflare_analytics')) {
+    return jsonErr('Recent analytics collection is already running', 409, request);
+  }
   await recordPrivilegedAction(env, authorization.principal, {
     action: 'analytics.collect', targetType: 'analytics', targetId: 'cloudflare', outcome: 'accepted',
   });
   const result = await runAnalyticsCollector(env, 'manual');
+  return jsonOk({ ...result }, request, { cache: 'no-store' });
+}
+
+export async function handleAdminAnalyticsBackfill(request: Request, env: Env): Promise<Response> {
+  const authorization = await requireAdmin(request, env);
+  if (authorization.error) return authorization.error;
+  if (!validateCSRF(request)) return jsonErr('Invalid security token', 403, request);
+  if (env.ENVIRONMENT !== 'production') return jsonErr('Cloudflare analytics collection is production-only', 409, request);
+  if (await analyticsJobIsActive(env, 'cloudflare_analytics_backfill')) {
+    return jsonErr('Historical analytics backfill is already running', 409, request);
+  }
+  await recordPrivilegedAction(env, authorization.principal, {
+    action: 'analytics.backfill', targetType: 'analytics', targetId: 'cloudflare-historical', outcome: 'accepted',
+  });
+  const result = await runHistoricalAnalyticsBackfill(env, 'manual');
   return jsonOk({ ...result }, request, { cache: 'no-store' });
 }

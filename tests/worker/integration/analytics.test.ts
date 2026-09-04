@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { runAnalyticsCollector } from '../../../worker/analytics.js';
-import { handleAdminAnalytics, handleAdminAnalyticsCollect } from '../../../worker/handlers/analytics.js';
+import { runAnalyticsCollector, runHistoricalAnalyticsBackfill } from '../../../worker/analytics.js';
+import {
+  handleAdminAnalytics,
+  handleAdminAnalyticsBackfill,
+  handleAdminAnalyticsCollect,
+} from '../../../worker/handlers/analytics.js';
 import type { Env } from '../../../worker/types.js';
 import { fetchMock } from './fetchMock.js';
 import {
@@ -219,5 +223,90 @@ describe('privacy-safe administrative analytics', () => {
       'SELECT status, trigger_type, category FROM sync_job_runs WHERE id = ?',
     ).bind(result.job_run_id).first();
     expect(run).toEqual({ status: 'succeeded', trigger_type: 'manual', category: 'analytics' });
+  });
+
+  it('discovers rollup retention before safely backfilling five older days', async () => {
+    fetchMock.when(request => request.url === 'https://api.cloudflare.com/client/v4/graphql')
+      .respondWith(Response.json({
+        data: { viewer: { zones: [{
+          settings: { httpRequests1dGroups: {
+            enabled: true,
+            notOlderThan: 31 * 86_400,
+            maxDuration: 31 * 86_400,
+            maxPageSize: 10_000,
+            availableFields: [
+              'dimensions_date', 'sum_requests', 'sum_bytes', 'sum_cachedRequests',
+            ],
+          } },
+          daily: [{
+            dimensions: { date: '2026-08-01' },
+            sum: { requests: 100, bytes: 2048, cachedRequests: 75 },
+          }],
+        }] } },
+      }));
+    const productionEnv = {
+      ...env,
+      ENVIRONMENT: 'production',
+      CLOUDFLARE_ANALYTICS_TOKEN: 'test-analytics-token',
+      CLOUDFLARE_ZONE_ID: 'test-zone-id',
+    } as Env;
+
+    const result = await runHistoricalAnalyticsBackfill(productionEnv, 'manual');
+    expect(result).toEqual(expect.objectContaining({
+      started: true,
+      capability_enabled: true,
+      eligible_days: 30,
+      processed_days: 5,
+      failed_days: 0,
+      remaining_days: 18,
+    }));
+    const archive = await env.DB.prepare(`
+      SELECT COUNT(*) AS days, SUM(requests_estimate) AS requests,
+             SUM(cache_hits_estimate) AS hits, MIN(source_is_estimated) AS exact,
+             MIN(visits_available) AS visits, MIN(statuses_available) AS statuses,
+             MIN(cache_available) AS cache
+        FROM analytics_daily_cloudflare
+       WHERE source_dataset = 'daily_rollup'
+    `).first();
+    expect(archive).toEqual({
+      days: 5, requests: 500, hits: 375, exact: 0, visits: 0, statuses: 0, cache: 1,
+    });
+    const capability = await env.DB.prepare(`
+      SELECT enabled, not_older_than_seconds, error_summary
+        FROM analytics_dataset_capabilities WHERE dataset_key = 'httpRequests1dGroups'
+    `).first();
+    expect(capability).toEqual({ enabled: 1, not_older_than_seconds: 31 * 86_400, error_summary: null });
+  });
+
+  it('queues no historical dates when capability discovery says the rollup is unavailable', async () => {
+    fetchMock.when(request => request.url === 'https://api.cloudflare.com/client/v4/graphql')
+      .respondWith(Response.json({
+        data: { viewer: { zones: [{
+          settings: { httpRequests1dGroups: {
+            enabled: false, availableFields: [], notOlderThan: 0,
+          } },
+        }] } },
+      }));
+    const productionEnv = {
+      ...env,
+      ENVIRONMENT: 'production',
+      CLOUDFLARE_ANALYTICS_TOKEN: 'test-analytics-token',
+      CLOUDFLARE_ZONE_ID: 'test-zone-id',
+    } as Env;
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const csrf = makeCsrf();
+    const response = await handleAdminAnalyticsBackfill(telemetryRequest(
+      '/api/admin/analytics/backfill', {}, csrf,
+      buildCookieHeader(admin.sessionCookie, admin.tokenCookie),
+    ), productionEnv);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      ok: true, capability_enabled: false, processed_days: 0, remaining_days: 0,
+    }));
+    const queued = await env.DB.prepare(`
+      SELECT COUNT(*) AS count FROM analytics_collection_days
+       WHERE source_dataset = 'daily_rollup'
+    `).first<{ count: number }>();
+    expect(queued?.count).toBe(0);
   });
 });
