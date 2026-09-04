@@ -25,6 +25,7 @@ import {
 } from '../security.js';
 import { getSession } from './auth.js';
 import { ORG } from '../github.js';
+import { recordSubmittedVote } from '../analytics.js';
 
 /* ─── POST /api/vote ─────────────────────────────────────────── */
 export async function handleVote(request: Request, env: Env): Promise<Response> {
@@ -350,13 +351,27 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   }
 
   // Insert user_votes record
+  let voteRecorded = false;
   try {
     await env.DB.prepare(
       `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, commentId, now).run();
+    voteRecorded = true;
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
+  }
+
+  if (voteRecorded) {
+    try {
+      await recordSubmittedVote(env.DB, pr.repo_id, now);
+    } catch (err) {
+      // Analytics must not change the authoritative vote outcome.
+      console.error(JSON.stringify({
+        event: 'engagement_vote_metric_failed',
+        error: (err as Error)?.message ?? 'unknown_error',
+      }));
+    }
   }
 
   return jsonOk({ comment_id: commentId, decision: decisionKey, parent_pr_id: resolvedParentId }, request);

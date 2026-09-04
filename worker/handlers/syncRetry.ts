@@ -7,6 +7,7 @@ import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphan
 import { jsonErr, secHeaders, validateCSRF } from '../security.js';
 import { startShadowSync } from '../shadowSync.js';
 import { finishSyncJob, startSyncJob } from '../syncJobs.js';
+import { runAnalyticsCollector } from '../analytics.js';
 
 const MANUAL_JOB_KEYS = new Set<ManualSyncJobKey>([
   'repository_inventory',
@@ -28,13 +29,15 @@ const TRIGGERABLE_JOB_KEYS = new Set([
   ...PARENT_JOB_KEYS,
   'orphan_cleanup',
   'hubspot_contacts',
+  'cloudflare_analytics',
 ]);
-type PipelineTarget = 'legacy' | 'canonical' | 'shadow' | 'integration';
+type PipelineTarget = 'legacy' | 'canonical' | 'shadow' | 'integration' | 'analytics';
 
 interface RetryTarget { id: string }
 
 function isPipelineTarget(value: unknown): value is PipelineTarget {
-  return value === 'legacy' || value === 'canonical' || value === 'shadow' || value === 'integration';
+  return value === 'legacy' || value === 'canonical' || value === 'shadow'
+    || value === 'integration' || value === 'analytics';
 }
 
 async function requestedPipeline(request: Request, jobKey: string): Promise<PipelineTarget> {
@@ -46,6 +49,7 @@ async function requestedPipeline(request: Request, jobKey: string): Promise<Pipe
   if (jobKey === 'legacy_workspace_sync') return 'legacy';
   if (jobKey === 'shadow_sync_dispatch') return 'shadow';
   if (jobKey === 'hubspot_contacts') return 'integration';
+  if (jobKey === 'cloudflare_analytics') return 'analytics';
   return 'canonical';
 }
 
@@ -117,7 +121,9 @@ export async function handleRetrySyncJob(
     || (jobKey === 'canonical_workspace_sync' && pipeline !== 'canonical')
     || (jobKey === 'shadow_sync_dispatch' && pipeline !== 'shadow')
     || (jobKey === 'hubspot_contacts' && pipeline !== 'integration')
-    || (pipeline === 'integration' && jobKey !== 'hubspot_contacts');
+    || (jobKey === 'cloudflare_analytics' && pipeline !== 'analytics')
+    || (pipeline === 'integration' && jobKey !== 'hubspot_contacts')
+    || (pipeline === 'analytics' && jobKey !== 'cloudflare_analytics');
   if (pipelineMismatch) return jsonErr('Job does not belong to the requested pipeline', 400, request);
   const mode = pipeline === 'legacy' ? 'legacy' : pipeline === 'shadow' ? 'shadow' : 'live';
   const retriedRunId = await latestRunId(env, jobKey, mode);
@@ -160,6 +166,30 @@ export async function handleRetrySyncJob(
       reason: dispatch.reason,
       execution_scope: 'workspace_pipeline',
     }, { status: dispatch.started ? 202 : 409 }), request);
+  }
+
+  if (jobKey === 'cloudflare_analytics') {
+    const active = await env.DB.prepare(`
+      SELECT id FROM sync_job_runs
+       WHERE job_key = 'cloudflare_analytics' AND mode = 'live'
+         AND status IN ('queued', 'running')
+       ORDER BY started_at DESC LIMIT 1
+    `).first<{ id: string }>();
+    if (active) return jsonErr('This analytics collection job is already running', 409, request);
+    await recordPrivilegedAction(env, principal, {
+      action: 'sync_job.retry', targetType: 'sync_job', targetId: 'analytics:cloudflare_analytics', outcome: 'accepted',
+    });
+    const result = await runAnalyticsCollector(env, 'manual');
+    return secHeaders(Response.json({
+      ok: true,
+      accepted: true,
+      job_key: jobKey,
+      pipeline,
+      retried_run_id: retriedRunId,
+      retry_run_id: result.job_run_id,
+      configuration_required: result.configuration_required,
+      execution_scope: 'analytics_collection',
+    }, { status: 202 }), request);
   }
 
   if (pipeline !== 'integration') {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './Admin.css'
 
@@ -160,6 +160,10 @@ export default function Admin() {
           Grant application roles to registered users. Every change is verified against GitHub,
           authorized again on the server, and recorded in the privileged-action audit log.
         </p>
+        <nav className="admin-section-nav" aria-label="Administration sections">
+          <Link to="/admin" aria-current="page">User access</Link>
+          <Link to="/admin/analytics">Analytics</Link>
+        </nav>
       </header>
 
       <section className="admin-panel" aria-labelledby="registered-users-heading">

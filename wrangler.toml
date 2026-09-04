@@ -99,7 +99,7 @@ ENVIRONMENT        = "production"
 OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
 
 [env.production.triggers]
-crons = ["0 */4 * * *", "15 * * * *"]
+crons = ["0 */4 * * *", "15 * * * *", "45 3 * * *"]
 
 # The production canonical writer is disabled in D1 until an administrator
 # accepts a manual canary and enables its schedule.

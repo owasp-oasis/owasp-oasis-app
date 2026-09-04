@@ -52,6 +52,15 @@ import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js'
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
 import { handleAdminUserRole, handleAdminUsers } from './handlers/adminUsers.js';
+import {
+  handleAdminAnalytics,
+  handleAdminAnalyticsCollect,
+  handleAnalyticsEngagement,
+  handleAnalyticsPageView,
+} from './handlers/analytics.js';
+import { runAnalyticsCollector } from './analytics.js';
+
+const ANALYTICS_CRON = '45 3 * * *';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -174,6 +183,20 @@ export default {
       const adminUserRoleMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)\/role$/);
       if (method === 'POST' && adminUserRoleMatch) {
         return await handleAdminUserRole(request, env, Number.parseInt(adminUserRoleMatch[1], 10));
+      }
+
+      /* ── Privacy-safe analytics ────────────────────────────────── */
+      if (method === 'POST' && url.pathname === '/api/analytics/pageview') {
+        return await handleAnalyticsPageView(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/analytics/engagement') {
+        return await handleAnalyticsEngagement(request, env);
+      }
+      if (method === 'GET' && url.pathname === '/api/admin/analytics') {
+        return await handleAdminAnalytics(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/admin/analytics/collect') {
+        return await handleAdminAnalyticsCollect(request, env);
       }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */
@@ -299,6 +322,11 @@ export default {
 
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    if (event.cron === ANALYTICS_CRON && env.ENVIRONMENT === 'production') {
+      const result = await runAnalyticsCollector(env, 'scheduled');
+      console.log(JSON.stringify({ event: 'cloudflare_analytics_collection_complete', ...result }));
+      return;
+    }
     if (event.cron === HUBSPOT_SYNC_CRON) {
       const dispatch = await runTrackedHubSpot(env, 'scheduled');
       console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));

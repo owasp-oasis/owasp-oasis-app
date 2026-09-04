@@ -12,6 +12,8 @@ export interface Env {
   ADMIN_SECRET: string;
   HUBSPOT_TOKEN?: string;
   HUBSPOT_PROPERTY_MAP?: string;
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
+  CLOUDFLARE_ZONE_ID?: string;
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
   OAUTH_CALLBACK_URL: string;
