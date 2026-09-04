@@ -8,7 +8,10 @@ import {
 } from './syncJobs.js';
 
 const GRAPHQL_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
-const BACKFILL_DAYS = 30;
+// The zone's current httpRequestsAdaptiveGroups retention rejects queries more
+// than eight days old. Keep the initial queue to seven complete UTC days so a
+// run never spends its bounded batch on dates the API cannot return.
+const BACKFILL_DAYS = 7;
 const COLLECTION_BATCH_DAYS = 5;
 const DETAIL_RETENTION_DAYS = 400;
 const RECEIPT_RETENTION_DAYS = 2;
@@ -216,6 +219,13 @@ async function seedCollectionDays(db: D1Database, reference = new Date()): Promi
   if (statements.length > 0) await db.batch(statements);
 }
 
+async function pruneExpiredCollectionQueue(db: D1Database, reference = new Date()): Promise<void> {
+  await db.prepare(`
+    DELETE FROM analytics_collection_days
+     WHERE metric_date < ? AND status IN ('pending', 'failed')
+  `).bind(utcDateDaysAgo(BACKFILL_DAYS, reference)).run();
+}
+
 async function collectCloudflareDay(env: Env, date: string): Promise<{
   requests: number;
   visits: number;
@@ -329,6 +339,7 @@ async function executeAnalyticsCollector(
   // makes missing configuration visible in the dashboard instead of presenting
   // an empty history that looks like the Collect action was ignored.
   await seedCollectionDays(env.DB);
+  await pruneExpiredCollectionQueue(env.DB);
   if (!env.CLOUDFLARE_ANALYTICS_TOKEN || !env.CLOUDFLARE_ZONE_ID) {
     const message = 'CLOUDFLARE_ANALYTICS_TOKEN and CLOUDFLARE_ZONE_ID must be configured.';
     const remaining = await env.DB.prepare(`
