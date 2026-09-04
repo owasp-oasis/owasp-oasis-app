@@ -336,12 +336,21 @@ CREATE TABLE IF NOT EXISTS analytics_daily_cloudflare (
   response_2xx INTEGER NOT NULL DEFAULT 0, response_3xx INTEGER NOT NULL DEFAULT 0,
   response_4xx INTEGER NOT NULL DEFAULT 0, response_5xx INTEGER NOT NULL DEFAULT 0,
   cache_hits_estimate INTEGER NOT NULL DEFAULT 0, cache_misses_estimate INTEGER NOT NULL DEFAULT 0,
-  sample_interval REAL, source_is_estimated INTEGER NOT NULL DEFAULT 1, collected_at TEXT NOT NULL
+  sample_interval REAL, source_is_estimated INTEGER NOT NULL DEFAULT 1, collected_at TEXT NOT NULL,
+  source_dataset TEXT NOT NULL DEFAULT 'adaptive', visits_available INTEGER NOT NULL DEFAULT 1,
+  statuses_available INTEGER NOT NULL DEFAULT 1, cache_available INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS analytics_collection_days (
   metric_date TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
-  started_at TEXT, finished_at TEXT, error_summary TEXT, updated_at TEXT NOT NULL
+  started_at TEXT, finished_at TEXT, error_summary TEXT, updated_at TEXT NOT NULL,
+  source_dataset TEXT NOT NULL DEFAULT 'adaptive'
+);
+
+CREATE TABLE IF NOT EXISTS analytics_dataset_capabilities (
+  dataset_key TEXT PRIMARY KEY, enabled INTEGER NOT NULL, not_older_than_seconds INTEGER,
+  max_duration_seconds INTEGER, max_page_size INTEGER, available_fields_json TEXT NOT NULL DEFAULT '[]',
+  checked_at TEXT NOT NULL, error_summary TEXT
 );
 
 CREATE TABLE IF NOT EXISTS analytics_daily_engagement (
@@ -370,6 +379,7 @@ CREATE TABLE IF NOT EXISTS analytics_event_receipts (
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'analytics_dataset_capabilities',
     'analytics_event_receipts',
     'analytics_daily_engagement',
     'analytics_collection_days',

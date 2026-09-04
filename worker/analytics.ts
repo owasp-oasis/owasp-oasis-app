@@ -12,6 +12,7 @@ const GRAPHQL_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 // than eight days old. Keep the initial queue to seven complete UTC days so a
 // run never spends its bounded batch on dates the API cannot return.
 const BACKFILL_DAYS = 7;
+const HISTORICAL_BACKFILL_DAYS = 30;
 const COLLECTION_BATCH_DAYS = 5;
 const DETAIL_RETENTION_DAYS = 400;
 const RECEIPT_RETENTION_DAYS = 2;
@@ -32,10 +33,31 @@ interface CloudflareGraphQLResponse {
         totals?: CloudflareGroup[];
         statuses?: CloudflareGroup[];
         cache?: CloudflareGroup[];
+        daily?: Array<{
+          dimensions?: { date?: string };
+          sum?: {
+            requests?: number;
+            visits?: number;
+            bytes?: number;
+            cachedRequests?: number;
+            responseStatusMap?: Array<{ edgeResponseStatus?: number; requests?: number }>;
+          };
+        }>;
+        settings?: {
+          httpRequests1dGroups?: CloudflareDatasetSettings;
+        };
       }>;
     };
   };
   errors?: Array<{ message?: string }>;
+}
+
+interface CloudflareDatasetSettings {
+  enabled?: boolean;
+  availableFields?: string[];
+  notOlderThan?: number;
+  maxDuration?: number;
+  maxPageSize?: number;
 }
 
 export interface AnalyticsCollectorResult {
@@ -45,6 +67,12 @@ export interface AnalyticsCollectorResult {
   failed_days: number;
   remaining_days: number;
   configuration_required: boolean;
+}
+
+export interface HistoricalAnalyticsBackfillResult extends AnalyticsCollectorResult {
+  capability_enabled: boolean;
+  capability_error: boolean;
+  eligible_days: number;
 }
 
 function isoNow(): string {
@@ -212,8 +240,8 @@ async function seedCollectionDays(db: D1Database, reference = new Date()): Promi
   const statements: D1PreparedStatement[] = [];
   for (let daysAgo = BACKFILL_DAYS; daysAgo >= 1; daysAgo--) {
     statements.push(db.prepare(`
-      INSERT OR IGNORE INTO analytics_collection_days (metric_date, status, updated_at)
-      VALUES (?, 'pending', ?)
+      INSERT OR IGNORE INTO analytics_collection_days (metric_date, status, source_dataset, updated_at)
+      VALUES (?, 'pending', 'adaptive', ?)
     `).bind(utcDateDaysAgo(daysAgo, reference), now));
   }
   if (statements.length > 0) await db.batch(statements);
@@ -222,8 +250,32 @@ async function seedCollectionDays(db: D1Database, reference = new Date()): Promi
 async function pruneExpiredCollectionQueue(db: D1Database, reference = new Date()): Promise<void> {
   await db.prepare(`
     DELETE FROM analytics_collection_days
-     WHERE metric_date < ? AND status IN ('pending', 'failed')
+     WHERE source_dataset = 'adaptive' AND metric_date < ? AND status IN ('pending', 'failed')
   `).bind(utcDateDaysAgo(BACKFILL_DAYS, reference)).run();
+}
+
+async function cloudflareGraphQL(
+  env: Env,
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<CloudflareGraphQLResponse> {
+  const response = await fetch(GRAPHQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.CLOUDFLARE_ANALYTICS_TOKEN}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Rate-Limit-Type': 'account-based',
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Cloudflare Analytics API returned HTTP ${response.status}`);
+  const payload = await response.json() as CloudflareGraphQLResponse;
+  if (payload.errors?.length) {
+    throw new Error(`Cloudflare Analytics query failed: ${payload.errors.map(error => error.message ?? 'unknown error').join('; ')}`);
+  }
+  return payload;
 }
 
 async function collectCloudflareDay(env: Env, date: string): Promise<{
@@ -260,29 +312,11 @@ async function collectCloudflareDay(env: Env, date: string): Promise<{
       }
     }
   `;
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_ANALYTICS_TOKEN}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-Rate-Limit-Type': 'account-based',
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        zoneTag: env.CLOUDFLARE_ZONE_ID,
-        start: `${date}T00:00:00.000Z`,
-        end: endOfUtcDate(date),
-      },
-    }),
-    signal: AbortSignal.timeout(15_000),
+  const payload = await cloudflareGraphQL(env, query, {
+    zoneTag: env.CLOUDFLARE_ZONE_ID,
+    start: `${date}T00:00:00.000Z`,
+    end: endOfUtcDate(date),
   });
-  if (!response.ok) throw new Error(`Cloudflare Analytics API returned HTTP ${response.status}`);
-  const payload = await response.json() as CloudflareGraphQLResponse;
-  if (payload.errors?.length) {
-    throw new Error(`Cloudflare Analytics query failed: ${payload.errors.map(error => error.message ?? 'unknown error').join('; ')}`);
-  }
   const zone = payload.data?.viewer?.zones?.[0];
   if (!zone) throw new Error('Cloudflare Analytics query returned no matching zone');
   const total = zone.totals?.[0];
@@ -316,6 +350,112 @@ async function collectCloudflareDay(env: Env, date: string): Promise<{
   };
 }
 
+async function discoverDailyRollup(env: Env): Promise<CloudflareDatasetSettings> {
+  const query = `
+    query OASISHistoricalCapability($zoneTag: string) {
+      viewer {
+        zones(filter: { zoneTag: $zoneTag }) {
+          settings {
+            httpRequests1dGroups {
+              enabled
+              availableFields
+              notOlderThan
+              maxDuration
+              maxPageSize
+            }
+          }
+        }
+      }
+    }
+  `;
+  const payload = await cloudflareGraphQL(env, query, { zoneTag: env.CLOUDFLARE_ZONE_ID });
+  const settings = payload.data?.viewer?.zones?.[0]?.settings?.httpRequests1dGroups;
+  if (!settings) throw new Error('Cloudflare did not return httpRequests1dGroups capability settings');
+  return settings;
+}
+
+function supportsField(fields: Set<string>, field: string): boolean {
+  const qualified = `sum_${field}`;
+  return fields.has(field)
+    || fields.has(qualified)
+    || [...fields].some(candidate => candidate.startsWith(`${qualified}_`));
+}
+
+async function collectCloudflareDailyRollup(
+  env: Env,
+  date: string,
+  settings: CloudflareDatasetSettings,
+): Promise<{
+  requests: number;
+  visits: number;
+  bytes: number;
+  response2xx: number;
+  response3xx: number;
+  response4xx: number;
+  response5xx: number;
+  cacheHits: number;
+  cacheMisses: number;
+  visitsAvailable: boolean;
+  statusesAvailable: boolean;
+  cacheAvailable: boolean;
+}> {
+  const fields = new Set(settings.availableFields ?? []);
+  if (!supportsField(fields, 'requests') || !supportsField(fields, 'bytes')) {
+    throw new Error('Cloudflare daily rollup does not expose required request and byte totals');
+  }
+  const visitsAvailable = supportsField(fields, 'visits');
+  const cacheAvailable = supportsField(fields, 'cachedRequests');
+  const statusesAvailable = supportsField(fields, 'responseStatusMap');
+  const optional = [
+    visitsAvailable ? 'visits' : '',
+    cacheAvailable ? 'cachedRequests' : '',
+    statusesAvailable ? 'responseStatusMap { edgeResponseStatus requests }' : '',
+  ].filter(Boolean).join('\n');
+  const query = `
+    query OASISHistoricalDay($zoneTag: string, $date: Date) {
+      viewer {
+        zones(filter: { zoneTag: $zoneTag }) {
+          daily: httpRequests1dGroups(
+            limit: 1
+            filter: { date_geq: $date, date_leq: $date }
+          ) {
+            dimensions { date }
+            sum {
+              requests
+              bytes
+              ${optional}
+            }
+          }
+        }
+      }
+    }
+  `;
+  const payload = await cloudflareGraphQL(env, query, { zoneTag: env.CLOUDFLARE_ZONE_ID, date });
+  const day = payload.data?.viewer?.zones?.[0]?.daily?.[0];
+  if (!day) throw new Error(`Cloudflare daily rollup returned no data for ${date}`);
+  const requests = finiteNonNegative(day.sum?.requests);
+  const statuses = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 };
+  for (const entry of day.sum?.responseStatusMap ?? []) {
+    const key = statusClass(finiteNonNegative(entry.edgeResponseStatus));
+    if (key) statuses[key] += finiteNonNegative(entry.requests);
+  }
+  const cacheHits = cacheAvailable ? finiteNonNegative(day.sum?.cachedRequests) : 0;
+  return {
+    requests,
+    visits: visitsAvailable ? finiteNonNegative(day.sum?.visits) : 0,
+    bytes: finiteNonNegative(day.sum?.bytes),
+    response2xx: statuses['2xx'],
+    response3xx: statuses['3xx'],
+    response4xx: statuses['4xx'],
+    response5xx: statuses['5xx'],
+    cacheHits,
+    cacheMisses: cacheAvailable ? Math.max(0, requests - cacheHits) : 0,
+    visitsAvailable,
+    statusesAvailable,
+    cacheAvailable,
+  };
+}
+
 async function pruneAnalytics(db: D1Database): Promise<void> {
   const detailCutoff = utcDateDaysAgo(DETAIL_RETENTION_DAYS);
   const now = isoNow();
@@ -344,7 +484,8 @@ async function executeAnalyticsCollector(
     const message = 'CLOUDFLARE_ANALYTICS_TOKEN and CLOUDFLARE_ZONE_ID must be configured.';
     const remaining = await env.DB.prepare(`
       SELECT COUNT(*) AS count FROM analytics_collection_days
-       WHERE status IN ('pending', 'failed') AND attempts < 5
+       WHERE source_dataset = 'adaptive'
+         AND status IN ('pending', 'failed') AND attempts < 5
     `).first<{ count: number }>();
     await finishSyncJob(env.DB, runId, 'deferred', {
       errorCode: 'analytics_configuration_required', error: message,
@@ -364,11 +505,12 @@ async function executeAnalyticsCollector(
     UPDATE analytics_collection_days
        SET status = 'failed', finished_at = ?,
            error_summary = 'Collection lease expired before completion', updated_at = ?
-     WHERE status = 'running' AND updated_at < ?
+     WHERE source_dataset = 'adaptive' AND status = 'running' AND updated_at < ?
   `).bind(isoNow(), isoNow(), staleBefore).run();
   const pending = await env.DB.prepare(`
     SELECT metric_date FROM analytics_collection_days
-     WHERE status IN ('pending', 'failed') AND attempts < 5
+     WHERE source_dataset = 'adaptive'
+       AND status IN ('pending', 'failed') AND attempts < 5
      ORDER BY metric_date ASC LIMIT ?
   `).bind(COLLECTION_BATCH_DAYS).all<{ metric_date: string }>();
   let processed = 0;
@@ -382,6 +524,7 @@ async function executeAnalyticsCollector(
          SET status = 'running', attempts = attempts + 1, started_at = ?,
              finished_at = NULL, error_summary = NULL, updated_at = ?
        WHERE metric_date = ? AND status IN ('pending', 'failed') AND attempts < 5
+         AND source_dataset = 'adaptive'
     `).bind(startedAt, startedAt, row.metric_date).run();
     if ((claim.meta.changes ?? 0) !== 1) continue;
     d1Writes++;
@@ -395,8 +538,9 @@ async function executeAnalyticsCollector(
             metric_date, requests_estimate, visits_estimate, response_bytes,
             response_2xx, response_3xx, response_4xx, response_5xx,
             cache_hits_estimate, cache_misses_estimate, sample_interval,
-            source_is_estimated, collected_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            source_is_estimated, source_dataset, visits_available,
+            statuses_available, cache_available, collected_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'adaptive', 1, 1, 1, ?)
           ON CONFLICT(metric_date) DO UPDATE SET
             requests_estimate = excluded.requests_estimate,
             visits_estimate = excluded.visits_estimate,
@@ -409,6 +553,10 @@ async function executeAnalyticsCollector(
             cache_misses_estimate = excluded.cache_misses_estimate,
             sample_interval = excluded.sample_interval,
             source_is_estimated = excluded.source_is_estimated,
+            source_dataset = excluded.source_dataset,
+            visits_available = excluded.visits_available,
+            statuses_available = excluded.statuses_available,
+            cache_available = excluded.cache_available,
             collected_at = excluded.collected_at
         `).bind(
           row.metric_date, metrics.requests, metrics.visits, metrics.bytes,
@@ -419,6 +567,7 @@ async function executeAnalyticsCollector(
           UPDATE analytics_collection_days
              SET status = 'succeeded', finished_at = ?, error_summary = NULL, updated_at = ?
            WHERE metric_date = ?
+             AND source_dataset = 'adaptive'
         `).bind(completedAt, completedAt, row.metric_date),
       ]);
       d1Writes += 2;
@@ -429,6 +578,7 @@ async function executeAnalyticsCollector(
         UPDATE analytics_collection_days
            SET status = 'failed', finished_at = ?, error_summary = ?, updated_at = ?
          WHERE metric_date = ?
+           AND source_dataset = 'adaptive'
       `).bind(completedAt, safeErrorSummary(error), completedAt, row.metric_date).run();
       await recordSyncJobEvent(env.DB, runId, {
         type: 'analytics_day_failed', entityType: 'date', entityId: row.metric_date,
@@ -440,7 +590,8 @@ async function executeAnalyticsCollector(
   }
   const remaining = await env.DB.prepare(`
     SELECT COUNT(*) AS count FROM analytics_collection_days
-     WHERE status IN ('pending', 'failed') AND attempts < 5
+     WHERE source_dataset = 'adaptive'
+       AND status IN ('pending', 'failed') AND attempts < 5
   `).first<{ count: number }>();
   await Promise.all([
     recordDailyBudget(env.DB, {
@@ -492,6 +643,268 @@ export async function runAnalyticsCollector(
     } catch (finishError) {
       console.error(JSON.stringify({
         event: 'analytics_collector_finish_failed',
+        error: safeErrorSummary(finishError),
+      }));
+    }
+    throw error;
+  }
+}
+
+async function persistDailyRollupCapability(
+  db: D1Database,
+  settings: CloudflareDatasetSettings | null,
+  error?: unknown,
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO analytics_dataset_capabilities (
+      dataset_key, enabled, not_older_than_seconds, max_duration_seconds,
+      max_page_size, available_fields_json, checked_at, error_summary
+    ) VALUES ('httpRequests1dGroups', ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(dataset_key) DO UPDATE SET
+      enabled = excluded.enabled,
+      not_older_than_seconds = excluded.not_older_than_seconds,
+      max_duration_seconds = excluded.max_duration_seconds,
+      max_page_size = excluded.max_page_size,
+      available_fields_json = excluded.available_fields_json,
+      checked_at = excluded.checked_at,
+      error_summary = excluded.error_summary
+  `).bind(
+    settings?.enabled === true ? 1 : 0,
+    typeof settings?.notOlderThan === 'number' ? settings.notOlderThan : null,
+    typeof settings?.maxDuration === 'number' ? settings.maxDuration : null,
+    typeof settings?.maxPageSize === 'number' ? settings.maxPageSize : null,
+    JSON.stringify(settings?.availableFields ?? []),
+    isoNow(),
+    error === undefined ? null : safeErrorSummary(error),
+  ).run();
+}
+
+async function seedHistoricalCollectionDays(
+  db: D1Database,
+  eligibleDays: number,
+  reference = new Date(),
+): Promise<void> {
+  const now = reference.toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (let daysAgo = eligibleDays; daysAgo > BACKFILL_DAYS; daysAgo--) {
+    statements.push(db.prepare(`
+      INSERT OR IGNORE INTO analytics_collection_days (
+        metric_date, status, source_dataset, updated_at
+      ) VALUES (?, 'pending', 'daily_rollup', ?)
+    `).bind(utcDateDaysAgo(daysAgo, reference), now));
+  }
+  if (statements.length > 0) await db.batch(statements);
+}
+
+async function executeHistoricalAnalyticsBackfill(
+  env: Env,
+  runId: string,
+): Promise<HistoricalAnalyticsBackfillResult> {
+  await pruneAnalytics(env.DB);
+  if (!env.CLOUDFLARE_ANALYTICS_TOKEN || !env.CLOUDFLARE_ZONE_ID) {
+    const message = 'CLOUDFLARE_ANALYTICS_TOKEN and CLOUDFLARE_ZONE_ID must be configured.';
+    await finishSyncJob(env.DB, runId, 'deferred', {
+      errorCode: 'analytics_configuration_required', error: message,
+    });
+    return {
+      started: false, job_run_id: runId, processed_days: 0, failed_days: 0,
+      remaining_days: 0, configuration_required: true, capability_enabled: false,
+      capability_error: false, eligible_days: 0,
+    };
+  }
+
+  let settings: CloudflareDatasetSettings;
+  try {
+    settings = await discoverDailyRollup(env);
+    await persistDailyRollupCapability(env.DB, settings);
+  } catch (error) {
+    await persistDailyRollupCapability(env.DB, null, error);
+    await finishSyncJob(env.DB, runId, 'failed', {
+      errorCode: 'analytics_capability_discovery_failed', error,
+      metrics: { graphql_queries: 1 },
+    });
+    return {
+      started: true, job_run_id: runId, processed_days: 0, failed_days: 1,
+      remaining_days: 0, configuration_required: false, capability_enabled: false,
+      capability_error: true, eligible_days: 0,
+    };
+  }
+
+  const retentionSeconds = typeof settings.notOlderThan === 'number'
+    ? Math.max(0, settings.notOlderThan)
+    : 0;
+  // Keep one full day of safety inside Cloudflare's discovered boundary.
+  const eligibleDays = Math.min(
+    HISTORICAL_BACKFILL_DAYS,
+    Math.max(0, Math.floor(retentionSeconds / 86_400) - 1),
+  );
+  await recordSyncJobEvent(env.DB, runId, {
+    type: 'analytics_capability_discovered', entityType: 'dataset',
+    entityId: 'httpRequests1dGroups',
+    details: {
+      enabled: settings.enabled === true,
+      retention_seconds: retentionSeconds,
+      eligible_days: eligibleDays,
+      available_fields: settings.availableFields?.length ?? 0,
+    },
+  });
+  if (settings.enabled !== true || eligibleDays <= BACKFILL_DAYS) {
+    await finishSyncJob(env.DB, runId, 'deferred', {
+      errorCode: 'historical_analytics_unavailable',
+      error: settings.enabled !== true
+        ? 'Cloudflare daily rollup analytics is not enabled for this zone.'
+        : 'Cloudflare daily rollup retention does not extend beyond the recent adaptive collector.',
+      metrics: { graphql_queries: 1, eligible_days: eligibleDays },
+    });
+    return {
+      started: true, job_run_id: runId, processed_days: 0, failed_days: 0,
+      remaining_days: 0, configuration_required: false,
+      capability_enabled: settings.enabled === true, capability_error: false,
+      eligible_days: eligibleDays,
+    };
+  }
+
+  await seedHistoricalCollectionDays(env.DB, eligibleDays);
+  const staleBefore = new Date(Date.now() - 30 * 60_000).toISOString();
+  await env.DB.prepare(`
+    UPDATE analytics_collection_days
+       SET status = 'failed', finished_at = ?,
+           error_summary = 'Collection lease expired before completion', updated_at = ?
+     WHERE source_dataset = 'daily_rollup' AND status = 'running' AND updated_at < ?
+  `).bind(isoNow(), isoNow(), staleBefore).run();
+  const pending = await env.DB.prepare(`
+    SELECT metric_date FROM analytics_collection_days
+     WHERE source_dataset = 'daily_rollup'
+       AND status IN ('pending', 'failed') AND attempts < 5
+     ORDER BY metric_date ASC LIMIT ?
+  `).bind(COLLECTION_BATCH_DAYS).all<{ metric_date: string }>();
+
+  let processed = 0;
+  let failed = 0;
+  let d1Writes = 3;
+  let graphqlQueries = 1;
+  for (const row of pending.results ?? []) {
+    const startedAt = isoNow();
+    const claim = await env.DB.prepare(`
+      UPDATE analytics_collection_days
+         SET status = 'running', attempts = attempts + 1, started_at = ?,
+             finished_at = NULL, error_summary = NULL, updated_at = ?
+       WHERE metric_date = ? AND source_dataset = 'daily_rollup'
+         AND status IN ('pending', 'failed') AND attempts < 5
+    `).bind(startedAt, startedAt, row.metric_date).run();
+    if ((claim.meta.changes ?? 0) !== 1) continue;
+    d1Writes++;
+    graphqlQueries++;
+    try {
+      const metrics = await collectCloudflareDailyRollup(env, row.metric_date, settings);
+      const completedAt = isoNow();
+      await env.DB.batch([
+        env.DB.prepare(`
+          INSERT INTO analytics_daily_cloudflare (
+            metric_date, requests_estimate, visits_estimate, response_bytes,
+            response_2xx, response_3xx, response_4xx, response_5xx,
+            cache_hits_estimate, cache_misses_estimate, sample_interval,
+            source_is_estimated, source_dataset, visits_available,
+            statuses_available, cache_available, collected_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, 'daily_rollup', ?, ?, ?, ?)
+          ON CONFLICT(metric_date) DO UPDATE SET
+            requests_estimate = excluded.requests_estimate,
+            visits_estimate = excluded.visits_estimate,
+            response_bytes = excluded.response_bytes,
+            response_2xx = excluded.response_2xx,
+            response_3xx = excluded.response_3xx,
+            response_4xx = excluded.response_4xx,
+            response_5xx = excluded.response_5xx,
+            cache_hits_estimate = excluded.cache_hits_estimate,
+            cache_misses_estimate = excluded.cache_misses_estimate,
+            sample_interval = excluded.sample_interval,
+            source_is_estimated = excluded.source_is_estimated,
+            source_dataset = excluded.source_dataset,
+            visits_available = excluded.visits_available,
+            statuses_available = excluded.statuses_available,
+            cache_available = excluded.cache_available,
+            collected_at = excluded.collected_at
+        `).bind(
+          row.metric_date, metrics.requests, metrics.visits, metrics.bytes,
+          metrics.response2xx, metrics.response3xx, metrics.response4xx, metrics.response5xx,
+          metrics.cacheHits, metrics.cacheMisses,
+          metrics.visitsAvailable ? 1 : 0, metrics.statusesAvailable ? 1 : 0,
+          metrics.cacheAvailable ? 1 : 0, completedAt,
+        ),
+        env.DB.prepare(`
+          UPDATE analytics_collection_days
+             SET status = 'succeeded', finished_at = ?, error_summary = NULL, updated_at = ?
+           WHERE metric_date = ? AND source_dataset = 'daily_rollup'
+        `).bind(completedAt, completedAt, row.metric_date),
+      ]);
+      d1Writes += 2;
+      processed++;
+    } catch (error) {
+      const completedAt = isoNow();
+      await env.DB.prepare(`
+        UPDATE analytics_collection_days
+           SET status = 'failed', finished_at = ?, error_summary = ?, updated_at = ?
+         WHERE metric_date = ? AND source_dataset = 'daily_rollup'
+      `).bind(completedAt, safeErrorSummary(error), completedAt, row.metric_date).run();
+      await recordSyncJobEvent(env.DB, runId, {
+        type: 'analytics_day_failed', entityType: 'date', entityId: row.metric_date,
+        message: safeErrorSummary(error), responseStatus: null,
+      });
+      d1Writes += 2;
+      failed++;
+    }
+  }
+  const remaining = await env.DB.prepare(`
+    SELECT COUNT(*) AS count FROM analytics_collection_days
+     WHERE source_dataset = 'daily_rollup'
+       AND status IN ('pending', 'failed') AND attempts < 5
+  `).first<{ count: number }>();
+  await Promise.all([
+    recordDailyBudget(env.DB, {
+      key: 'cloudflare_graphql_queries', label: 'Cloudflare Analytics GraphQL queries',
+      unit: 'queries', limit: 300, consumedDelta: graphqlQueries,
+    }),
+    recordDailyBudget(env.DB, {
+      key: 'analytics_d1_writes', label: 'Analytics D1 writes', unit: 'writes',
+      consumedDelta: d1Writes,
+    }),
+  ]);
+  await finishSyncJob(env.DB, runId, failed > 0 ? 'failed' : 'succeeded', {
+    metrics: {
+      processed_days: processed, failed_days: failed,
+      remaining_days: remaining?.count ?? 0, graphql_queries: graphqlQueries,
+      eligible_days: eligibleDays,
+    },
+    completedItems: processed,
+    failedItems: failed,
+    errorCode: failed > 0 ? 'historical_analytics_days_failed' : null,
+    error: failed > 0 ? `${failed} historical analytics day(s) failed to collect` : undefined,
+  });
+  return {
+    started: true, job_run_id: runId, processed_days: processed,
+    failed_days: failed, remaining_days: remaining?.count ?? 0,
+    configuration_required: false, capability_enabled: true, capability_error: false,
+    eligible_days: eligibleDays,
+  };
+}
+
+export async function runHistoricalAnalyticsBackfill(
+  env: Env,
+  trigger: 'scheduled' | 'manual',
+): Promise<HistoricalAnalyticsBackfillResult> {
+  const runId = await startSyncJob(env.DB, {
+    jobKey: 'cloudflare_analytics_backfill', trigger, mode: 'live', status: 'running',
+  });
+  try {
+    return await executeHistoricalAnalyticsBackfill(env, runId);
+  } catch (error) {
+    try {
+      await finishSyncJob(env.DB, runId, 'failed', {
+        errorCode: 'historical_analytics_backfill_failed', error: safeErrorSummary(error),
+      });
+    } catch (finishError) {
+      console.error(JSON.stringify({
+        event: 'historical_analytics_backfill_finish_failed',
         error: safeErrorSummary(finishError),
       }));
     }

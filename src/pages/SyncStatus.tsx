@@ -505,7 +505,7 @@ export default function SyncStatus() {
           status: aggregatePipelineStatus(jobs, pipelineRunId !== null),
         }
       }),
-      integration: jobs.filter(job => job.category !== 'workspace' && job.key !== 'cloudflare_analytics'),
+      integration: jobs.filter(job => job.category === 'integration'),
       analytics: jobs.filter(job => job.category === 'analytics'),
     }
   }, [payload])

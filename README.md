@@ -475,7 +475,7 @@ The non-secret `CLOUDFLARE_ZONE_ID` is committed under `[env.production.vars]` i
 npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
 ```
 
-The collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a seven-day backfill that fits the zone's current Cloudflare API retention. Once archived in D1, daily aggregates remain available for the application's longer retention period. An administrator can inspect or retry the collector from `/workspace/status` and inspect its aggregates at `/admin/analytics`. Preview telemetry intentionally no-ops because preview shares the production D1 database.
+The adaptive collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a seven-day queue that fits that dataset's short retention. A separate admin-triggered historical job first discovers the zone's `httpRequests1dGroups` capability and retention, then archives at most five eligible older days per run. It never guesses a retention window, and each date records its source dataset and available metric families. Once archived in D1, daily aggregates remain available for the application's longer retention period. Administrators can inspect or retry both jobs from `/workspace/status` and inspect their aggregates at `/admin/analytics`. Preview collection is disabled because preview shares the production D1 database.
 
 `HUBSPOT_PROPERTY_MAP` is a non-secret JSON environment variable that maps OASIS fields to existing HubSpot custom-property internal names. Supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`; omitted fields are not sent. For example: `{"github":"oasis_github","role":"oasis_role","source":"oasis_source"}`.
 

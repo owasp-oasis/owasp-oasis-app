@@ -47,6 +47,7 @@ export const SYNC_JOBS: readonly SyncJobDefinition[] = [
   { key: 'orphan_cleanup', label: 'Orphan cleanup', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'hubspot_contacts', label: 'HubSpot contacts', category: 'integration', schedule: 'Hourly at :15', criticalForWorkspace: false, retryable: true },
   { key: 'cloudflare_analytics', label: 'Cloudflare analytics archive', category: 'analytics', schedule: 'Daily at 03:45 UTC', criticalForWorkspace: false, retryable: true },
+  { key: 'cloudflare_analytics_backfill', label: 'Historical Cloudflare backfill', category: 'analytics', schedule: 'Admin-triggered capability discovery and backfill', criticalForWorkspace: false, retryable: true },
 ] as const;
 
 const JOB_BY_KEY = new Map(SYNC_JOBS.map(job => [job.key, job]));
