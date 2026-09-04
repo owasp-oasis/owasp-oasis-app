@@ -17,6 +17,8 @@ import NewsLaunch from './pages/NewsLaunch'
 import SyncStatus, { SyncRunDetail } from './pages/SyncStatus'
 import FixCostCalculator from './pages/FixCostCalculator'
 import Admin from './pages/Admin'
+import AdminAnalytics from './pages/AdminAnalytics'
+import AnalyticsTracker from './components/AnalyticsTracker'
 
 function AppShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
@@ -25,6 +27,7 @@ function AppShell() {
 
   return (
     <>
+      <AnalyticsTracker />
       {!isStandalone && <PreviewBanner />}
       {!isStandalone && <Nav onOpenOnboarding={() => setOnboardingOpen(true)} />}
       <main>
@@ -45,6 +48,7 @@ function AppShell() {
           <Route path="/workspace/status/runs/:runId" element={<SyncRunDetail />} />
           {/* Listed only for authenticated administrators in the account menu. */}
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/analytics" element={<AdminAnalytics />} />
           <Route path="/support" element={<Support />} />
           <Route path="/sponsors" element={<Sponsors />} />
           <Route path="/brand" element={<BrandGuide />} />

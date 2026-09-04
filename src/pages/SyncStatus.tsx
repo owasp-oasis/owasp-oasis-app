@@ -506,6 +506,7 @@ export default function SyncStatus() {
         }
       }),
       integration: jobs.filter(job => job.category !== 'workspace' && job.key !== 'cloudflare_analytics'),
+      analytics: jobs.filter(job => job.category === 'analytics'),
     }
   }, [payload])
 
@@ -767,7 +768,14 @@ export default function SyncStatus() {
               <div className="sync-job-list">
                 {groups.integration.map(job => renderJob(job, `integration:${job.key}`, 'integration'))}
               </div>
-              <p className="sync-planned-note">Cloudflare analytics archiving remains a planned dashboard capability and is not presented as an executable job.</p>
+            </section>
+
+            <section>
+              <h2 className="sync-section-title">Analytics collection</h2>
+              <p className="sync-section-description">Daily, privacy-safe Cloudflare aggregates archived for long-range reporting.</p>
+              <div className="sync-job-list">
+                {groups.analytics.map(job => renderJob(job, `analytics:${job.key}`, 'analytics'))}
+              </div>
             </section>
           </>
         )}

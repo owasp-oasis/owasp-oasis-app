@@ -444,7 +444,7 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 
 ## Secrets
 
-Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured.
+Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured. The daily analytics archive is enabled only in production when both Cloudflare analytics secrets are configured.
 
 ```bash
 # Set secrets on the preview worker
@@ -467,6 +467,17 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token. Requires only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Cloudflare API token used only by the production daily archive. Scope it to the OASIS zone with Analytics Read permission. |
+| `CLOUDFLARE_ZONE_ID` | Zone identifier queried by the analytics archive. Stored as a Worker secret to keep deployment configuration environment-neutral. |
+
+Enable the production archive interactively; never place either value in a committed file:
+
+```bash
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
+npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
+```
+
+The collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a 30-day backfill. An administrator can inspect or retry it from `/workspace/status` and can inspect the resulting aggregates at `/admin/analytics`. Preview telemetry intentionally no-ops because preview shares the production D1 database.
 
 `HUBSPOT_PROPERTY_MAP` is a non-secret JSON environment variable that maps OASIS fields to existing HubSpot custom-property internal names. Supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`; omitted fields are not sent. For example: `{"github":"oasis_github","role":"oasis_role","source":"oasis_source"}`.
 

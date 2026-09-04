@@ -9,7 +9,7 @@ This file is the durable backlog for work that is planned, partially implemented
 - Keep production changes atomic, independently revertible, and documented with verification and rollback scope.
 - Start development from current `main` on a short-lived branch such as `feat/new-feature-name`; use PRs for every transition into `preview` or `main`.
 - Keep the legacy Workspace cron authoritative until the shadow Workflow repeatedly produces the same result and is explicitly approved for cutover.
-- Develop the analytics dashboard on its own feature branch after sync status is operational and stable.
+- Develop and validate the analytics dashboard on its own feature branch after sync status is operational and stable.
 - Never expose a username or other user-identifying value in administrative analytics. Usernames may appear only in the user's own profile and the existing contributor panel.
 - Administrative engagement metrics must be aggregate-only. Do not provide individual event rows, stable user pseudonyms, or low-cardinality slices that allow an administrator to infer a person's identity.
 - Apply D1 migrations before or with the Worker version that consumes them. Public operational pages must degrade gracefully if code and schema briefly differ during rollout.
@@ -45,13 +45,24 @@ Development and promotion policy:
 - Keep unrelated work out of an active preview candidate, and reconcile `preview` with the resulting `main` after production promotion.
 - Prune merged feature branches after verifying their commits are reachable from `main`; preserve an archive tag only when it has intentional historical value.
 
-## Planned feature branch: administrative analytics
+## In implementation: administrative analytics
 
-The status page tracks job health and operational budgets. Site analytics are a separate administrative product and must not be added to the status-page feature branch.
+The status page tracks job health and operational budgets. Site analytics remain a separate, admin-only product at `/admin/analytics`; the collector alone appears on the status page as an independently runnable job.
+
+Initial implementation on `feat/admin-analytics-dashboard` includes:
+
+- D1 migration `0010_admin_analytics.sql`, with 400 days of detailed daily retention and two-day anonymous idempotency receipts.
+- First-party page-view, normalized-route, navigation-duration, review-open, active-heartbeat, review-close, and successful-vote aggregates.
+- A daily 03:45 UTC collector that archives five closed Cloudflare days per execution and initially checkpoints the previous 30 days.
+- Admin-role authorization on both dashboard reads and manual collection; `ADMIN_SECRET` is not accepted by these routes.
+- Day/week/month ranges, preceding-period comparisons, freshness, collection checkpoints, route aggregates, Cloudflare request/cache/status aggregates, engagement cohort suppression, and operation-budget history.
+- Preview collection no-ops because preview and production share D1; production and local tests collect, preventing preview traffic from polluting production history.
+
+Production activation requires migration `0010`, the `CLOUDFLARE_ANALYTICS_TOKEN` and `CLOUDFLARE_ZONE_ID` production Worker secrets, and confirmation of the first successful collection from the dashboard or status page.
 
 ### Daily Cloudflare analytics archive
 
-Build a daily scheduled collector that queries Cloudflare's analytics APIs for closed time windows and stores aggregate history in D1 before Cloudflare's online retention expires.
+The initial collector queries Cloudflare's GraphQL Analytics API for closed time windows and stores aggregate history in D1 before Cloudflare's online retention expires.
 
 Required behavior:
 
@@ -61,7 +72,7 @@ Required behavior:
 - Track Cloudflare API calls, GraphQL/query cost where available, D1 reads/writes, and collector failures in the operational budget history.
 - Backfill the available Cloudflare retention window when the feature is first enabled.
 - Keep at least 100 days of detailed daily history. Define longer-term daily/monthly retention before launch so useful history survives beyond Cloudflare's native window.
-- Store aggregate request, visit, response-status, bandwidth, cache, bot, geography, and performance measures only when the source API and privacy rules support them.
+- Store aggregate request, visit, response-status, bandwidth, and cache measures. Bot and geography measures remain deferred until their source availability and privacy value are reviewed.
 - Never archive IP addresses, raw user agents, authentication cookies, full referrers, or URL query strings.
 - Normalize paths to approved route templates so identifiers and user-entered values cannot become analytics dimensions.
 - Use a checkpoint table and bounded retry/backfill queue so one failed day is visible and recoverable without duplicating totals.
@@ -71,7 +82,7 @@ Required behavior:
 - Create an unlisted, authenticated administrative route separate from `/workspace/status`.
 - Reuse the temporary server-enforced administrator role for initial access; do not put `ADMIN_SECRET` in browser code or local storage.
 - Support selectable date ranges, comparisons with the preceding period, and daily/weekly/monthly aggregation.
-- Show site usage, route usage, availability, error rates, cache performance, Worker performance, and operational-budget trends.
+- Show site usage, route usage, error rates, cache performance, first-party navigation performance, and operational-budget trends. Worker execution analytics remain a follow-up if a suitable aggregate API is available.
 - Clearly distinguish measured values from estimates supplied by Cloudflare.
 - Suppress empty, incomplete, or still-collecting periods rather than presenting them as zero.
 - Provide data freshness, collector status, and backfill state on every view.
@@ -85,9 +96,9 @@ Required behavior:
 - Define audit retention, inspection, and alerting rules; keep privileged action details free of tokens and sensitive payloads.
 - Migrate immutable GitHub user IDs and existing role grants without falling back to mutable logins after legacy sessions expire.
 
-## Planned feature branch: privacy-safe validation engagement metrics
+## In implementation: privacy-safe validation engagement metrics
 
-Current data is insufficient: OASIS records vote timestamps and authentication-session creation/expiry, but it does not record when a reviewer opens a PR, actively reviews it, becomes idle, or closes the panel. Review duration cannot currently be reconstructed reliably.
+The initial analytics implementation records review opens, bounded active heartbeats, review closes, and successful votes directly into daily project aggregates. It does not retain an event-to-user association. Distribution metrics that cannot be derived from aggregate totals remain future work and must preserve the same privacy boundary.
 
 Collection plan:
 

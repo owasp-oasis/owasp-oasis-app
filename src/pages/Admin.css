@@ -40,6 +40,10 @@
   color: var(--ink-soft);
 }
 
+.admin-section-nav { display: flex; width: fit-content; gap: .4rem; margin-top: 1rem; padding: .3rem; background: var(--gray-100); border-radius: 10px; }
+.admin-section-nav a { padding: .55rem .8rem; border-radius: 7px; font-weight: 700; }
+.admin-section-nav a[aria-current="page"] { background: var(--white); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
 .admin-panel {
   overflow: hidden;
   background: var(--white);
