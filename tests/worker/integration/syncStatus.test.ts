@@ -43,10 +43,9 @@ describe('public sync status', () => {
     const productionStatus = await getSyncStatus({ ...env, ENVIRONMENT: 'production' } as Env) as {
       jobs: Array<{ key: string; retryable: boolean }>;
     };
-    const executableJobs = productionStatus.jobs.filter(job => job.key !== 'cloudflare_analytics');
+    const executableJobs = productionStatus.jobs;
     expect(executableJobs.length).toBeGreaterThan(0);
     expect(executableJobs.every(job => job.retryable)).toBe(true);
-    expect(productionStatus.jobs.find(job => job.key === 'cloudflare_analytics')?.retryable).toBe(false);
   });
 
   it('derives the primary status from every child in the latest Workspace pipeline', async () => {
