@@ -91,6 +91,11 @@ Required behavior:
 
 ### Replace the temporary application-role layer
 
+The current implementation contract, role inheritance, server and React
+patterns, CSRF rules, audit expectations, test matrix, and known limitations
+are documented in `AUTHORIZATION.md`. New role-protected work must follow that
+contract while this replacement remains pending.
+
 - Replace the rudimentary D1 role assignment with a reviewed identity and permission model before administrative capabilities expand materially.
 - Define permissions as capabilities instead of continuing to hard-code role names at each endpoint.
 - Add an authenticated, audited role-administration workflow with protection against removing the final administrator.
