@@ -33,6 +33,7 @@ Exit criteria before cutover review:
 - Complete repeated production shadow runs without unhandled errors.
 - Reach three consecutive parity matches.
 - Inspect every mismatch category and document any intentional difference.
+- Use the aggregate parity difference categories on the status page to resolve every nonzero entity or field mismatch without exposing entity identifiers.
 - Confirm Workflow step, request, D1, and GitHub API budgets remain below their limits over the retained history.
 - Prove orphan cleanup, duplicate projection, contributor scoring, comment/reaction processing, and upstream merge detection match the legacy results.
 - Exercise rollback while the legacy cron remains available.
