@@ -47,6 +47,16 @@ interface AnalyticsPayload {
     previous: MetricRow
     series: MetricRow[]
     source_is_estimated: boolean
+    sources: MetricRow[]
+    historical_capability: null | {
+      enabled: number
+      not_older_than_seconds: number | null
+      max_duration_seconds: number | null
+      max_page_size: number | null
+      available_fields: string[]
+      checked_at: string
+      error_summary: string | null
+    }
   }
   engagement: null | {
     current: MetricRow
@@ -130,6 +140,7 @@ export default function AdminAnalytics() {
   const [payload, setPayload] = useState<AnalyticsPayload | null>(null)
   const [loading, setLoading] = useState(false)
   const [collecting, setCollecting] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [collectionError, setCollectionError] = useState('')
@@ -185,6 +196,43 @@ export default function AdminAnalytics() {
       setCollectionError(caught instanceof Error ? caught.message : 'Collection failed.')
     } finally {
       setCollecting(false)
+    }
+  }, [load])
+
+  const backfill = useCallback(async () => {
+    setBackfilling(true)
+    setCollectionError('')
+    setNotice('')
+    try {
+      const csrfResponse = await fetch('/api/csrf', { credentials: 'include', cache: 'no-store' })
+      const { token } = await csrfResponse.json() as { token?: string }
+      if (!csrfResponse.ok || !token) throw new Error('Could not create a security token.')
+      const response = await fetch('/api/admin/analytics/backfill', {
+        method: 'POST', credentials: 'include', headers: { 'x-csrf-token': token },
+      })
+      const data = await response.json() as {
+        ok?: boolean
+        error?: string
+        processed_days?: number
+        failed_days?: number
+        remaining_days?: number
+        capability_enabled?: boolean
+        capability_error?: boolean
+        eligible_days?: number
+      }
+      if (!response.ok || !data.ok) throw new Error(data.error ?? 'Historical backfill failed.')
+      if (data.capability_error) {
+        setCollectionError('Cloudflare capability discovery failed. Open the failed Historical Cloudflare backfill run on the status page for details.')
+      } else if (!data.capability_enabled) {
+        setNotice('Cloudflare daily rollup history is not available for this zone and plan. No dates were guessed or queued.')
+      } else {
+        setNotice(`Backfilled ${data.processed_days ?? 0} older day(s); ${data.failed_days ?? 0} failed and ${data.remaining_days ?? 0} remain queued within the discovered ${data.eligible_days ?? 0}-day window.`)
+      }
+      await load()
+    } catch (caught) {
+      setCollectionError(caught instanceof Error ? caught.message : 'Historical backfill failed.')
+    } finally {
+      setBackfilling(false)
     }
   }, [load])
 
@@ -278,18 +326,29 @@ export default function AdminAnalytics() {
         <section className="analytics-panel">
           <div className="analytics-section-heading">
             <div><h2>Cloudflare archive</h2><p>Closed UTC days, collected in bounded batches of five.</p></div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={collecting || payload.configuration.reads_shared_production_data}
-              aria-describedby={payload.configuration.reads_shared_production_data || !payload.configuration.cloudflare_ready
-                ? 'cloudflare-collection-guidance'
-                : undefined}
-              title={payload.configuration.reads_shared_production_data ? 'Run collection from the production analytics page.' : undefined}
-              onClick={() => void collect()}
-            >
-              {collecting ? 'Collecting…' : payload.configuration.reads_shared_production_data ? 'Production only' : 'Collect now'}
-            </button>
+            <div className="analytics-action-group">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={collecting || backfilling || payload.configuration.reads_shared_production_data}
+                aria-describedby={payload.configuration.reads_shared_production_data || !payload.configuration.cloudflare_ready
+                  ? 'cloudflare-collection-guidance'
+                  : undefined}
+                title={payload.configuration.reads_shared_production_data ? 'Run collection from the production analytics page.' : undefined}
+                onClick={() => void collect()}
+              >
+                {collecting ? 'Collecting…' : payload.configuration.reads_shared_production_data ? 'Production only' : 'Collect recent days'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={collecting || backfilling || payload.configuration.reads_shared_production_data}
+                title={payload.configuration.reads_shared_production_data ? 'Run backfill from the production analytics page.' : undefined}
+                onClick={() => void backfill()}
+              >
+                {backfilling ? 'Discovering…' : payload.configuration.reads_shared_production_data ? 'Production only' : 'Discover & backfill older data'}
+              </button>
+            </div>
           </div>
           {payload.configuration.reads_shared_production_data ? (
             <p className="analytics-callout" id="cloudflare-collection-guidance">
@@ -306,6 +365,22 @@ export default function AdminAnalytics() {
           )}
           {collectionError && <p className="analytics-message analytics-message--error" role="alert">{collectionError}</p>}
           {notice && <p className="analytics-message analytics-message--success" role="status">{notice}</p>}
+          {payload.cloudflare.historical_capability && <div className="analytics-callout">
+            <strong>Daily rollup capability:</strong>{' '}
+            {payload.cloudflare.historical_capability.enabled ? 'enabled' : 'unavailable'}.
+            {' '}Retention boundary: {payload.cloudflare.historical_capability.not_older_than_seconds === null
+              ? 'not reported'
+              : `${Math.floor(payload.cloudflare.historical_capability.not_older_than_seconds / 86400)} days`}.
+            {' '}Last checked {new Date(payload.cloudflare.historical_capability.checked_at).toLocaleString()}.
+            {payload.cloudflare.historical_capability.error_summary
+              ? ` ${payload.cloudflare.historical_capability.error_summary}`
+              : ''}
+          </div>}
+          {payload.cloudflare.sources.length > 0 && <p className="analytics-description">
+            Archived sources: {payload.cloudflare.sources.map(source => (
+              `${source.source_dataset === 'daily_rollup' ? 'daily rollup' : 'adaptive'} (${formatNumber(number(source, 'days'))} day(s))`
+            )).join(', ')}. Daily-rollup dates can omit visits, status classes, or cache totals when those fields are unavailable; unavailable values are stored with explicit coverage flags, not inferred.
+          </p>}
           <div className="analytics-collection-counts">
             {['pending', 'running', 'succeeded', 'failed'].map(status => <span key={status}><strong>{collectionCounts.get(status) ?? 0}</strong> {status}</span>)}
           </div>
@@ -314,7 +389,8 @@ export default function AdminAnalytics() {
               {payload.collection.days.length === 0 && <p className="analytics-empty-state">No collection days have been queued yet.</p>}
               {payload.collection.days.map(row => <div className="analytics-row" role="row" key={String(row.metric_date)}>
                 <time>{String(row.metric_date)}</time><span className={`analytics-status analytics-status--${row.status}`}>{String(row.status)}</span>
-                <span>{formatNumber(number(row, 'attempts'))} attempt(s)</span><span>{row.error_summary ? String(row.error_summary) : '—'}</span>
+                <span>{row.source_dataset === 'daily_rollup' ? 'Daily rollup' : 'Adaptive'} · {formatNumber(number(row, 'attempts'))} attempt(s)</span>
+                <span>{row.error_summary ? String(row.error_summary) : '—'}</span>
               </div>)}
             </div>
           </details>

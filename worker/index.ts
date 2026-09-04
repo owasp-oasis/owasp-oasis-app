@@ -54,6 +54,7 @@ import { handleCancelSyncRun } from './handlers/syncCancel.js';
 import { handleAdminUserRole, handleAdminUsers } from './handlers/adminUsers.js';
 import {
   handleAdminAnalytics,
+  handleAdminAnalyticsBackfill,
   handleAdminAnalyticsCollect,
   handleAnalyticsEngagement,
   handleAnalyticsPageView,
@@ -197,6 +198,9 @@ export default {
       }
       if (method === 'POST' && url.pathname === '/api/admin/analytics/collect') {
         return await handleAdminAnalyticsCollect(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/admin/analytics/backfill') {
+        return await handleAdminAnalyticsBackfill(request, env);
       }
 
       /* ── GET /api/admin/registrations ──────────────────────────── */

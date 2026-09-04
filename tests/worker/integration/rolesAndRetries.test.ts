@@ -281,6 +281,23 @@ describe('server-side roles and sync retries', () => {
     `).first();
     expect(analyticsRun).toEqual({ status: 'deferred', trigger_type: 'manual', mode: 'live' });
 
+    const historicalAnalytics = await handleRetrySyncJob(
+      retryRequest('cloudflare_analytics_backfill', admin.sessionCookie, admin.tokenCookie, csrf, 'analytics'),
+      productionEnv,
+      createExecutionContext(),
+      'cloudflare_analytics_backfill',
+    );
+    expect(historicalAnalytics.status).toBe(202);
+    await expect(historicalAnalytics.json()).resolves.toEqual(expect.objectContaining({
+      configuration_required: true,
+      execution_scope: 'analytics_collection',
+    }));
+    const historicalAnalyticsRun = await env.DB.prepare(`
+      SELECT status, trigger_type, mode FROM sync_job_runs
+       WHERE job_key = 'cloudflare_analytics_backfill' ORDER BY started_at DESC LIMIT 1
+    `).first();
+    expect(historicalAnalyticsRun).toEqual({ status: 'deferred', trigger_type: 'manual', mode: 'live' });
+
     const failedRunId = await startSyncJob(env.DB, {
       jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy',
     });
