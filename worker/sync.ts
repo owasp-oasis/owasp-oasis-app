@@ -14,6 +14,8 @@ import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './ty
 import {
   setSyncState, rebuildContributors, rebuildDuplicates, syncVotesFromComments,
   closeOneResolvedDuplicate,
+  clearPRReviewProjection,
+  reconcileCurrentParticipants,
   upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
   updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
@@ -234,7 +236,19 @@ async function processPR(
     mergedUpstream, detectionTool, syncStart,
   );
 
-  await upsertParticipants(db, pr.id, repoName, pr.number, participantMap);
+  // GitHub is authoritative for the per-PR review projection. Remove rows that
+  // disappeared upstream before inserting the freshly collected snapshot. The
+  // vote projection is reconciled after every repository has completed so an
+  // existing UI-cast vote can retain its original timestamp when its GitHub
+  // comment still exists.
+  await clearPRReviewProjection(db, pr.id);
+
+  const currentParticipants = new Map(
+    [...participantMap].filter(([, participant]) => (
+      participant.interactions > 0 || participant.non_oasis_interactions > 0
+    )),
+  );
+  await upsertParticipants(db, pr.id, repoName, pr.number, currentParticipants);
 
   // Write granular comment/reaction rows (used by rebuildContributors for bonus computation)
   if (commentRows.length > 0) {
@@ -419,9 +433,12 @@ export async function seedCommentReactionWorkItems(
       id, pipeline_run_id, job_run_id, job_key, entity_type, entity_id,
       payload_json, status, created_at, updated_at
     )
-    SELECT ? || ':reaction:' || CAST(id AS TEXT), ?, ?, 'comment_reactions',
-           'comment', CAST(id AS TEXT), '{}', 'pending', ?, ?
-      FROM pr_comments
+    SELECT ? || ':reaction:' || CAST(pc.id AS TEXT), ?, ?, 'comment_reactions',
+           'comment', CAST(pc.id AS TEXT), '{}', 'pending', ?, ?
+      FROM pr_comments pc
+      JOIN pull_requests pr ON pr.id = pc.pr_id
+      JOIN repos r ON r.id = pr.repo_id
+     WHERE pr.deleted = 0 AND r.active = 1
   `).bind(jobRunId, pipelineRunId, jobRunId, timestamp, timestamp).run();
   const row = await db.prepare(`
     SELECT COUNT(*) AS count FROM sync_work_items
@@ -547,6 +564,7 @@ export async function rebuildReactionDerivedCounts(db: D1Database): Promise<void
 
 /** Prepares database projections and resolved duplicate relationships without GitHub writes. */
 export async function prepareCanonicalProjections(env: Env): Promise<void> {
+  await reconcileCurrentParticipants(env.DB);
   await rebuildReactionDerivedCounts(env.DB);
   await syncVotesFromComments(env.DB);
   await rebuildDuplicates(env.DB, env.GITHUB_TOKEN, { skipGitHubMutations: true });

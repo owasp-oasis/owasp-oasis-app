@@ -699,10 +699,40 @@ async function projectShadowVotes(env: Env, pipelineRunId: string): Promise<numb
     SELECT payload_json FROM sync_shadow_entities
      WHERE pipeline_run_id = ? AND entity_type = 'comment'
   `).bind(pipelineRunId).all<{ payload_json: string }>();
-  let projected = 0;
+  const existingRows = await env.DB.prepare(`
+    SELECT github_login, pr_id, repo_name, pr_number, decision, parent_pr_id,
+           comment_id, voted_at
+      FROM user_votes
+  `).all<{
+    github_login: string;
+    pr_id: number;
+    repo_name: string;
+    pr_number: number;
+    decision: string;
+    parent_pr_id: number | null;
+    comment_id: number | null;
+    voted_at: string;
+  }>();
+  const existingVotes = new Map(
+    (existingRows.results ?? []).map(vote => [`${vote.github_login}:${vote.pr_id}`, vote]),
+  );
+  const commentsByVote = new Map<string, ShadowComment[]>();
   for (const row of rows.results ?? []) {
     const comment = JSON.parse(row.payload_json) as ShadowComment;
     if (isValidatorBot(comment.login)) continue;
+    const key = `${comment.login}:${comment.pr_id}`;
+    const comments = commentsByVote.get(key) ?? [];
+    comments.push(comment);
+    commentsByVote.set(key, comments);
+  }
+  let projected = 0;
+  for (const [key, candidates] of commentsByVote) {
+    candidates.sort((left, right) => (
+      left.created_at.localeCompare(right.created_at) || left.id - right.id
+    ));
+    const existing = existingVotes.get(key);
+    const comment = candidates.find(candidate => candidate.id === existing?.comment_id)
+      ?? candidates[0];
     const prRow = await env.DB.prepare(`
       SELECT payload_json FROM sync_shadow_entities
        WHERE pipeline_run_id = ? AND entity_type = 'pull_request' AND entity_id = ?
@@ -720,15 +750,17 @@ async function projectShadowVotes(env: Env, pipelineRunId: string): Promise<numb
         .find(candidate => Number(candidate['number']) === comment.duplicate_of);
       parentPrId = parent ? Number(parent['id']) : null;
     }
-    await putShadowEntity(env.DB, pipelineRunId, 'vote', `${comment.login}:${comment.pr_id}`, {
-      github_login: comment.login,
-      pr_id: comment.pr_id,
-      repo_name: comment.repo_name,
-      pr_number: comment.pr_number,
-      decision: comment.decision,
-      parent_pr_id: parentPrId,
+    const preserveExisting = existing
+      && (existing.comment_id === null || existing.comment_id === comment.id);
+    await putShadowEntity(env.DB, pipelineRunId, 'vote', key, {
+      github_login: preserveExisting ? existing.github_login : comment.login,
+      pr_id: preserveExisting ? existing.pr_id : comment.pr_id,
+      repo_name: preserveExisting ? existing.repo_name : comment.repo_name,
+      pr_number: preserveExisting ? existing.pr_number : comment.pr_number,
+      decision: preserveExisting ? existing.decision : comment.decision,
+      parent_pr_id: preserveExisting ? existing.parent_pr_id : parentPrId,
       comment_id: comment.id,
-      voted_at: comment.created_at,
+      voted_at: preserveExisting ? existing.voted_at : comment.created_at,
     }, Number(pr['repo_id']), comment.created_at);
     projected += 1;
   }
@@ -934,7 +966,11 @@ async function rebuildShadowContributors(env: Env, pipelineRunId: string): Promi
     const recentModified = recentBase * (1 + recentBonus.early_mover + recentBonus.early_bird + recentBonus.influencer);
     return { login, baseParts, base, modified, recentModified };
   });
-  const ranked = calculated.filter(entry => entry.recentModified > 0).sort((left, right) => right.recentModified - left.recentModified);
+  const ranked = calculated
+    .filter(entry => entry.recentModified > 0)
+    .sort((left, right) => (
+      right.recentModified - left.recentModified || left.login.localeCompare(right.login)
+    ));
   const rank = new Map(ranked.map((entry, index) => [entry.login, index + 1]));
   for (const entry of calculated) {
     const userParticipants = participants.filter(participant => participant['login'] === entry.login);
@@ -976,11 +1012,11 @@ async function rebuildShadowContributors(env: Env, pipelineRunId: string): Promi
 function canonicalEntityQueries(): Array<{ entityType: string; sql: string }> {
   return [
     { entityType: 'repository', sql: `SELECT CAST(id AS TEXT) AS entity_id, NULL AS source_updated_at, json_object('id',id,'name',name,'full_name',full_name,'description',description,'language',language,'stars',stars,'upstream_url',upstream_url,'active',active) AS payload_json FROM repos WHERE active = 1` },
-    { entityType: 'pull_request', sql: `SELECT CAST(id AS TEXT) AS entity_id, updated_at AS source_updated_at, json_object('id',id,'repo_id',repo_id,'repo_name',repo_name,'number',number,'title',title,'state',state,'author',author,'html_url',html_url,'comment_count',comment_count,'oasis_comment_count',oasis_comment_count,'non_oasis_comment_count',non_oasis_comment_count,'participants',participants,'consensus_accept',consensus_accept,'consensus_modify',consensus_modify,'consensus_reject',consensus_reject,'consensus_duplicate',consensus_duplicate,'duplicate_of',duplicate_of,'closed_as_duplicate',closed_as_duplicate,'merged_upstream',merged_upstream,'head_sha',head_sha,'merged_at',merged_at,'created_at',created_at,'updated_at',updated_at,'detection_tool',detection_tool,'deleted',deleted) AS payload_json FROM pull_requests WHERE deleted = 0` },
-    { entityType: 'comment', sql: `SELECT CAST(id AS TEXT) AS entity_id, created_at AS source_updated_at, json_object('id',id,'pr_id',pr_id,'repo_name',repo_name,'pr_number',pr_number,'login',login,'decision',decision,'duplicate_of',duplicate_of,'created_at',created_at,'pr_created_at',pr_created_at) AS payload_json FROM pr_comments` },
-    { entityType: 'reaction', sql: `SELECT CAST(comment_id AS TEXT)||':'||reactor||':'||content AS entity_id, NULL AS source_updated_at, json_object('comment_id',comment_id,'reactor',reactor,'content',content,'is_positive',is_positive) AS payload_json FROM comment_reactions` },
-    { entityType: 'participant', sql: `SELECT CAST(pr_id AS TEXT)||':'||login AS entity_id, NULL AS source_updated_at, json_object('pr_id',pr_id,'repo_name',repo_name,'pr_number',pr_number,'login',login,'interactions',interactions,'non_oasis_interactions',non_oasis_interactions,'decision',decision,'reactions_received',reactions_received) AS payload_json FROM pr_participants` },
-    { entityType: 'vote', sql: `SELECT github_login||':'||CAST(pr_id AS TEXT) AS entity_id, voted_at AS source_updated_at, json_object('github_login',github_login,'pr_id',pr_id,'repo_name',repo_name,'pr_number',pr_number,'decision',decision,'parent_pr_id',parent_pr_id,'comment_id',comment_id,'voted_at',voted_at) AS payload_json FROM user_votes` },
+    { entityType: 'pull_request', sql: `SELECT CAST(pr.id AS TEXT) AS entity_id, pr.updated_at AS source_updated_at, json_object('id',pr.id,'repo_id',pr.repo_id,'repo_name',pr.repo_name,'number',pr.number,'title',pr.title,'state',pr.state,'author',pr.author,'html_url',pr.html_url,'comment_count',pr.comment_count,'oasis_comment_count',pr.oasis_comment_count,'non_oasis_comment_count',pr.non_oasis_comment_count,'participants',pr.participants,'consensus_accept',pr.consensus_accept,'consensus_modify',pr.consensus_modify,'consensus_reject',pr.consensus_reject,'consensus_duplicate',pr.consensus_duplicate,'duplicate_of',pr.duplicate_of,'closed_as_duplicate',pr.closed_as_duplicate,'merged_upstream',pr.merged_upstream,'head_sha',pr.head_sha,'merged_at',pr.merged_at,'created_at',pr.created_at,'updated_at',pr.updated_at,'detection_tool',pr.detection_tool,'deleted',pr.deleted) AS payload_json FROM pull_requests pr JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
+    { entityType: 'comment', sql: `SELECT CAST(pc.id AS TEXT) AS entity_id, pc.created_at AS source_updated_at, json_object('id',pc.id,'pr_id',pc.pr_id,'repo_name',pc.repo_name,'pr_number',pc.pr_number,'login',pc.login,'decision',pc.decision,'duplicate_of',pc.duplicate_of,'created_at',pc.created_at,'pr_created_at',pc.pr_created_at) AS payload_json FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
+    { entityType: 'reaction', sql: `SELECT CAST(cr.comment_id AS TEXT)||':'||cr.reactor||':'||cr.content AS entity_id, NULL AS source_updated_at, json_object('comment_id',cr.comment_id,'reactor',cr.reactor,'content',cr.content,'is_positive',cr.is_positive) AS payload_json FROM comment_reactions cr JOIN pr_comments pc ON pc.id = cr.comment_id JOIN pull_requests pr ON pr.id = pc.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
+    { entityType: 'participant', sql: `SELECT CAST(pp.pr_id AS TEXT)||':'||pp.login AS entity_id, NULL AS source_updated_at, json_object('pr_id',pp.pr_id,'repo_name',pp.repo_name,'pr_number',pp.pr_number,'login',pp.login,'interactions',pp.interactions,'non_oasis_interactions',pp.non_oasis_interactions,'decision',pp.decision,'reactions_received',pp.reactions_received) AS payload_json FROM pr_participants pp JOIN pull_requests pr ON pr.id = pp.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
+    { entityType: 'vote', sql: `SELECT uv.github_login||':'||CAST(uv.pr_id AS TEXT) AS entity_id, uv.voted_at AS source_updated_at, json_object('github_login',uv.github_login,'pr_id',uv.pr_id,'repo_name',uv.repo_name,'pr_number',uv.pr_number,'decision',uv.decision,'parent_pr_id',uv.parent_pr_id,'comment_id',uv.comment_id,'voted_at',uv.voted_at) AS payload_json FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
     { entityType: 'contributor', sql: `SELECT login AS entity_id, NULL AS source_updated_at, json_object('login',login,'avatar_url',avatar_url,'prs_worked',prs_worked,'total_interactions',total_interactions,'non_oasis_interactions',non_oasis_interactions,'reactions_received',reactions_received,'reactions_given',reactions_given,'accepts',accepts,'modifies',modifies,'rejects',rejects,'duplicates',duplicates,'comment_score',comment_score,'peer_score',peer_score,'reaction_score',reaction_score,'trust_score',trust_score,'base_reputation',base_reputation,'modified_reputation',modified_reputation,'rank_90d',rank_90d,'rank_90d_oldest_activity',rank_90d_oldest_activity) AS payload_json FROM contributors` },
   ];
 }

@@ -222,6 +222,43 @@ export async function upsertParticipants(
   }
 }
 
+/** Clears the GitHub-derived review snapshot for one PR before replacement. */
+export async function clearPRReviewProjection(db: D1Database, prId: number): Promise<void> {
+  await db.batch([
+    db.prepare(`
+      DELETE FROM comment_reactions
+       WHERE comment_id IN (SELECT id FROM pr_comments WHERE pr_id = ?)
+    `).bind(prId),
+    db.prepare('DELETE FROM pr_comments WHERE pr_id = ?').bind(prId),
+    db.prepare('DELETE FROM pr_participants WHERE pr_id = ?').bind(prId),
+  ]);
+}
+
+/** Removes current participant rows that no longer have a valid review source. */
+export async function reconcileCurrentParticipants(db: D1Database): Promise<number> {
+  const result = await db.prepare(`
+    DELETE FROM pr_participants
+     WHERE pr_id IN (
+       SELECT pr.id
+         FROM pull_requests pr
+         JOIN repos r ON r.id = pr.repo_id
+        WHERE pr.deleted = 0 AND r.active = 1
+     )
+       AND (
+         (interactions = 0 AND COALESCE(non_oasis_interactions, 0) = 0)
+         OR (
+           decision IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM pr_comments pc
+              WHERE pc.pr_id = pr_participants.pr_id
+                AND pc.login = pr_participants.login
+           )
+         )
+       )
+  `).run();
+  return result.meta.changes ?? 0;
+}
+
 /**
  * Upsert per-comment records into pr_comments.
  * Called after each PR is processed in sync; only OASIS-template comments are stored here.
@@ -270,12 +307,30 @@ export async function updateRepoPRCount(db: D1Database, repoId: number, syncStar
  *   - Insert a corresponding user_votes record
  *   - For duplicate decisions, resolve the parent PR number to its database ID
  *   - Skip validator bots (they shouldn't have user_votes entries)
- *   - Use INSERT OR IGNORE to preserve existing UI-cast votes (which are timestamped at vote time, not comment time)
+ *   - Preserve existing UI-cast votes (which are timestamped at vote time, not comment time)
+ *   - Backfill the GitHub comment ID on older imported votes that predate that column
+ *   - Remove votes for current PRs when their corresponding GitHub comment no longer exists
  *
  * This ensures user_votes stays in sync with pr_comments, so both tables
  * reflect the same source of truth from GitHub.
  */
 export async function syncVotesFromComments(db: D1Database): Promise<void> {
+  await db.prepare(`
+    DELETE FROM user_votes
+     WHERE pr_id IN (
+       SELECT pr.id
+         FROM pull_requests pr
+         JOIN repos r ON r.id = pr.repo_id
+        WHERE pr.deleted = 0 AND r.active = 1
+     )
+       AND NOT EXISTS (
+         SELECT 1 FROM pr_comments pc
+          WHERE pc.pr_id = user_votes.pr_id
+            AND pc.login = user_votes.github_login
+            AND (user_votes.comment_id IS NULL OR pc.id = user_votes.comment_id)
+       )
+  `).run();
+
   // Fetch all OASIS-template comments that aren't from validator bots or automated accounts
   const comments = await db.prepare(`
     SELECT
@@ -290,7 +345,9 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       pc.created_at
     FROM pr_comments pc
     JOIN pull_requests pr ON pr.id = pc.pr_id
-    WHERE pc.decision IS NOT NULL
+    JOIN repos r ON r.id = pr.repo_id
+    WHERE pc.decision IS NOT NULL AND pr.deleted = 0 AND r.active = 1
+    ORDER BY pc.created_at, pc.id
   `).all<{
     id: number;
     login: string;
@@ -317,11 +374,17 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       parentPrId = parentPr?.id ?? null;
     }
 
-    // INSERT OR IGNORE preserves any existing UI-cast votes (they have higher priority)
+    // Existing UI-cast votes have higher priority. Only fill missing source
+    // linkage on legacy imports; do not replace their decision or timestamp.
     await db.prepare(`
-      INSERT OR IGNORE INTO user_votes
-        (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, voted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(github_login, pr_id) DO UPDATE SET
+        comment_id = CASE
+          WHEN user_votes.comment_id IS NULL THEN excluded.comment_id
+          ELSE user_votes.comment_id
+        END
     `).bind(
       comment.login,
       comment.pr_id,
@@ -329,6 +392,7 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       comment.pr_number,
       comment.decision,
       parentPrId,
+      comment.id,
       comment.created_at,
     ).run();
   }
@@ -573,10 +637,12 @@ async function computeBonuses(
       SUM(CASE WHEN cr.is_positive = 1 THEN 1 ELSE 0 END)         AS positive_reactions,
       SUM(CASE WHEN cr.is_positive = 0 THEN 1 ELSE 0 END)         AS negative_reactions
     FROM pr_comments pc
+    JOIN pull_requests pr ON pr.id = pc.pr_id
+    JOIN repos r ON r.id = pr.repo_id
     LEFT JOIN comment_reactions cr ON cr.comment_id = pc.id
-    WHERE pc.created_at >= ?
+    WHERE pc.created_at >= ? AND pr.deleted = 0 AND r.active = 1
     GROUP BY pc.id
-    ORDER BY pc.pr_id, pc.created_at ASC
+    ORDER BY pc.pr_id, pc.created_at ASC, pc.id ASC
   `).bind(sinceDate).all<CommentRow>();
 
   const comments = commentRes.results;
@@ -666,7 +732,9 @@ async function computeBaseScores(
   const commentScoreRes = await db.prepare(`
     SELECT login, COUNT(*) AS comment_score
     FROM pr_comments pc
-    WHERE pc.created_at >= ?
+    JOIN pull_requests pr ON pr.id = pc.pr_id
+    JOIN repos r ON r.id = pr.repo_id
+    WHERE pc.created_at >= ? AND pr.deleted = 0 AND r.active = 1
     GROUP BY login
   `).bind(sinceDate).all<{ login: string; comment_score: number }>();
 
@@ -683,7 +751,9 @@ async function computeBaseScores(
       ) AS peer_score
     FROM comment_reactions cr
     JOIN pr_comments pc ON cr.comment_id = pc.id
-    WHERE pc.created_at >= ?
+    JOIN pull_requests pr ON pr.id = pc.pr_id
+    JOIN repos r ON r.id = pr.repo_id
+    WHERE pc.created_at >= ? AND pr.deleted = 0 AND r.active = 1
     GROUP BY pc.login
   `).bind(sinceDate).all<{ login: string; peer_score: number }>();
 
@@ -694,7 +764,10 @@ async function computeBaseScores(
       MIN(COUNT(*), 5) * 0.25 AS reaction_score
     FROM comment_reactions cr
     JOIN pr_comments pc2 ON cr.comment_id = pc2.id
+    JOIN pull_requests pr ON pr.id = pc2.pr_id
+    JOIN repos r ON r.id = pr.repo_id
     WHERE cr.reactor != pc2.login AND pc2.created_at >= ?
+      AND pr.deleted = 0 AND r.active = 1
     GROUP BY cr.reactor
   `).bind(sinceDate).all<{ login: string; reaction_score: number }>();
 
@@ -704,8 +777,10 @@ async function computeBaseScores(
       COUNT(*) * 10 AS trust_score
     FROM pr_participants ppart
     JOIN pull_requests pr ON ppart.pr_id = pr.id
+    JOIN repos r ON r.id = pr.repo_id
     JOIN pr_comments pc3 ON pc3.pr_id = pr.id AND pc3.login = ppart.login
     WHERE ppart.decision = 'accept' AND pr.merged_upstream = 1 AND pc3.created_at >= ?
+      AND pr.deleted = 0 AND r.active = 1
     GROUP BY ppart.login
   `).bind(sinceDate).all<{ login: string; trust_score: number }>();
 
@@ -796,7 +871,7 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
   // Sort by 90-day modified_reputation DESC; only entries with d90_modified > 0 get a rank
   const ranked = entries
     .filter(e => e.d90_modified > 0)
-    .sort((a, b) => b.d90_modified - a.d90_modified);
+    .sort((a, b) => b.d90_modified - a.d90_modified || a.login.localeCompare(b.login));
 
   const rankMap = new Map<string, number>();
   for (let i = 0; i < ranked.length; i++) {
@@ -807,10 +882,12 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
   // For each login that has 90-day activity, find their oldest comment in the window
   if (ranked.length > 0) {
     const oldestRes = await db.prepare(`
-      SELECT login, MIN(created_at) AS oldest
-      FROM pr_comments
-      WHERE created_at >= ?
-      GROUP BY login
+      SELECT pc.login, MIN(pc.created_at) AS oldest
+      FROM pr_comments pc
+      JOIN pull_requests pr ON pr.id = pc.pr_id
+      JOIN repos r ON r.id = pr.repo_id
+      WHERE pc.created_at >= ? AND pr.deleted = 0 AND r.active = 1
+      GROUP BY pc.login
     `).bind(now90d).all<{ login: string; oldest: string }>();
 
     for (const row of oldestRes.results) {
@@ -826,13 +903,26 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
     SELECT cr.reactor AS login, COUNT(*) AS reactions_given
     FROM comment_reactions cr
     JOIN pr_comments pc ON cr.comment_id = pc.id
-    WHERE cr.reactor != pc.login
+    JOIN pull_requests pr ON pr.id = pc.pr_id
+    JOIN repos r ON r.id = pr.repo_id
+    WHERE cr.reactor != pc.login AND pr.deleted = 0 AND r.active = 1
     GROUP BY cr.reactor
   `).all<{ login: string; reactions_given: number }>();
 
   const reactionsGivenMap = new Map<string, number>();
   for (const r of reactionsGivenRes.results) {
     reactionsGivenMap.set(r.login, r.reactions_given ?? 0);
+  }
+
+  // Contributors is a derived projection of the current public-fork
+  // inventory. Remove rows that are now backed only by inactive repositories
+  // or deleted pull requests; registered-user identity lives elsewhere.
+  const existingContributors = await db.prepare('SELECT login FROM contributors')
+    .all<{ login: string }>();
+  for (const contributor of existingContributors.results ?? []) {
+    if (!allLogins.has(contributor.login)) {
+      await db.prepare('DELETE FROM contributors WHERE login = ?').bind(contributor.login).run();
+    }
   }
 
   // ── Write back to contributors table ─────────────────────────
@@ -861,7 +951,10 @@ export async function rebuildContributors(db: D1Database, syncStart: string): Pr
         SUM(CASE WHEN decision = 'modify' THEN 1 ELSE 0 END)        AS modifies,
         SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END)        AS rejects,
         SUM(CASE WHEN decision = 'duplicate' THEN 1 ELSE 0 END)     AS duplicates
-      FROM pr_participants WHERE login = ?
+      FROM pr_participants ppart
+      JOIN pull_requests pr ON pr.id = ppart.pr_id
+      JOIN repos r ON r.id = pr.repo_id
+      WHERE ppart.login = ? AND pr.deleted = 0 AND r.active = 1
     `).bind(entry.login).first<{
       prs_worked: number;
       total_interactions: number;
