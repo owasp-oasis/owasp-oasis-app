@@ -157,7 +157,6 @@ wrangler secret put GITHUB_TOKEN --name owasp-oasis
 wrangler secret put ADMIN_SECRET  --name owasp-oasis
 wrangler secret put HUBSPOT_TOKEN --name owasp-oasis
 npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
-npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
 
 # List secrets on a worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -173,9 +172,10 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token used to create and update contacts. Grant only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
 | `CLOUDFLARE_ANALYTICS_TOKEN` | Production-only API token for the daily GraphQL analytics archive. Scope it to the OASIS zone with Analytics Read permission. |
-| `CLOUDFLARE_ZONE_ID` | Zone identifier used by the production analytics query. |
 
-After setting the analytics secrets and deploying migration `0010_admin_analytics.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect now** once to verify access and start the bounded 30-day backfill; subsequent collection runs daily at 03:45 UTC. The status-page `cloudflare_analytics` job records each execution and allows an administrator to retry it independently.
+The non-secret `CLOUDFLARE_ZONE_ID` is versioned in `[env.production.vars]` in `wrangler.toml`. This prevents a Wrangler deployment from deleting a value that was added only through the dashboard.
+
+After setting the analytics token and deploying migration `0010_admin_analytics.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect now** once to verify access and start the bounded 30-day backfill; subsequent collection runs daily at 03:45 UTC. The status-page `cloudflare_analytics` job records each execution and allows an administrator to retry it independently.
 
 Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 
