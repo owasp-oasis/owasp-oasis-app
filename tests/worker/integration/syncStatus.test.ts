@@ -115,6 +115,43 @@ describe('public sync status', () => {
     expect(await canonicalCutoverEligible(env.DB)).toBe(true);
   });
 
+  it('exposes only aggregate parity categories without entity identifiers', async () => {
+    const now = new Date().toISOString();
+    await env.DB.prepare(`
+      INSERT INTO sync_parity_runs (
+        pipeline_run_id, canonical_cutoff_at, status, comparable_entities,
+        matched_entities, difference_count, created_at
+      ) VALUES ('parity-diagnostics', ?, 'mismatch', 12, 9, 3, ?)
+    `).bind(now, now).run();
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO sync_parity_differences (
+          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
+        ) VALUES ('parity-diagnostics', 'pull_request', 'sensitive-pr-1', 'field_mismatch', '["state"]', ?)
+      `).bind(now),
+      env.DB.prepare(`
+        INSERT INTO sync_parity_differences (
+          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
+        ) VALUES ('parity-diagnostics', 'pull_request', 'sensitive-pr-2', 'field_mismatch', '["state"]', ?)
+      `).bind(now),
+      env.DB.prepare(`
+        INSERT INTO sync_parity_differences (
+          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
+        ) VALUES ('parity-diagnostics', 'vote', 'sensitive-user:1', 'missing_in_shadow', '[]', ?)
+      `).bind(now),
+    ]);
+
+    const status = await getSyncStatus(env) as {
+      shadow: { difference_summary: Array<Record<string, unknown>> };
+    };
+    expect(status.shadow.difference_summary).toEqual([
+      { entity_type: 'pull_request', difference_type: 'field_mismatch', fields: ['state'], count: 2 },
+      { entity_type: 'vote', difference_type: 'missing_in_shadow', fields: [], count: 1 },
+    ]);
+    expect(JSON.stringify(status.shadow.difference_summary)).not.toContain('sensitive-pr');
+    expect(JSON.stringify(status.shadow.difference_summary)).not.toContain('sensitive-user');
+  });
+
   it('returns baseline health instead of 500 while the observability migration is pending', async () => {
     await env.DB.prepare('DROP TABLE sync_parity_runs').run();
     try {

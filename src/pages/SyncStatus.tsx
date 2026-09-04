@@ -64,6 +64,12 @@ interface SyncStatusPayload {
     required_consecutive_matches: number
     eligible_for_cutover: boolean
     compared_at: string | null
+    difference_summary: Array<{
+      entity_type: string
+      difference_type: string
+      fields: string[]
+      count: number
+    }>
   }
   budgets: Array<{
     budget_date?: string
@@ -629,12 +635,35 @@ export default function SyncStatus() {
                 <StatusPill status={payload.shadow?.status ?? 'unknown'} />
               </div>
               {payload.shadow ? (
-                <dl className="sync-summary-grid">
-                  <div><dt>Consecutive matches</dt><dd>{payload.shadow.consecutive_matches} / {payload.shadow.required_consecutive_matches}</dd></div>
-                  <div><dt>Compared entities</dt><dd>{payload.shadow.comparable_entities}</dd></div>
-                  <div><dt>Differences</dt><dd>{payload.shadow.difference_count}</dd></div>
-                  <div><dt>Cutover eligibility</dt><dd>{payload.shadow.eligible_for_cutover ? 'Eligible for review' : 'Not eligible'}</dd></div>
-                </dl>
+                <>
+                  <dl className="sync-summary-grid">
+                    <div><dt>Consecutive matches</dt><dd>{payload.shadow.consecutive_matches} / {payload.shadow.required_consecutive_matches}</dd></div>
+                    <div><dt>Compared entities</dt><dd>{payload.shadow.comparable_entities}</dd></div>
+                    <div><dt>Differences</dt><dd>{payload.shadow.difference_count}</dd></div>
+                    <div><dt>Cutover eligibility</dt><dd>{payload.shadow.eligible_for_cutover ? 'Eligible for review' : 'Not eligible'}</dd></div>
+                  </dl>
+                  {(payload.shadow.difference_summary?.length ?? 0) > 0 && (
+                    <details className="sync-parity-differences">
+                      <summary>Difference categories ({payload.shadow.difference_count})</summary>
+                      <div className="sync-history-table" role="table" aria-label="Shadow parity difference categories">
+                        <div className="sync-history-row sync-history-row--heading" role="row">
+                          <span>Entity</span><span>Difference</span><span>Fields</span><span>Count</span><span>Share</span>
+                        </div>
+                        {(payload.shadow.difference_summary ?? []).map((difference, index) => (
+                          <div className="sync-history-row" role="row" key={`${difference.entity_type}-${difference.difference_type}-${index}`}>
+                            <span>{difference.entity_type.replace(/_/g, ' ')}</span>
+                            <span>{difference.difference_type.replace(/_/g, ' ')}</span>
+                            <code>{difference.fields.length > 0 ? difference.fields.join(', ') : '—'}</code>
+                            <span>{difference.count}</span>
+                            <span>{payload.shadow && payload.shadow.difference_count > 0
+                              ? `${Math.round(difference.count / payload.shadow.difference_count * 100)}%`
+                              : '—'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
               ) : <p>The shadow system has not completed its first comparison.</p>}
             </article>
 

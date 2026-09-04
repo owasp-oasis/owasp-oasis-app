@@ -33,6 +33,7 @@ Exit criteria before cutover review:
 - Complete repeated production shadow runs without unhandled errors.
 - Reach three consecutive parity matches.
 - Inspect every mismatch category and document any intentional difference.
+- Use the aggregate parity difference categories on the status page to resolve every nonzero entity or field mismatch without exposing entity identifiers.
 - Confirm Workflow step, request, D1, and GitHub API budgets remain below their limits over the retained history.
 - Prove orphan cleanup, duplicate projection, contributor scoring, comment/reaction processing, and upstream merge detection match the legacy results.
 - Exercise rollback while the legacy cron remains available.
@@ -90,6 +91,11 @@ Required behavior:
 - Provide data freshness, collector status, and backfill state on every view.
 
 ### Replace the temporary application-role layer
+
+The current implementation contract, role inheritance, server and React
+patterns, CSRF rules, audit expectations, test matrix, and known limitations
+are documented in `AUTHORIZATION.md`. New role-protected work must follow that
+contract while this replacement remains pending.
 
 - Replace the rudimentary D1 role assignment with a reviewed identity and permission model before administrative capabilities expand materially.
 - Define permissions as capabilities instead of continuing to hard-code role names at each endpoint.
