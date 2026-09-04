@@ -4,6 +4,7 @@ import { SELF } from './testWorker.js';
 import { applySchema, cleanDB } from './helpers.js';
 import {
   finishSyncJob,
+  aggregateSyncJobStatuses,
   getSyncStatus,
   getOrStartSyncJob,
   pruneSyncJobHistory,
@@ -42,10 +43,58 @@ describe('public sync status', () => {
     const productionStatus = await getSyncStatus({ ...env, ENVIRONMENT: 'production' } as Env) as {
       jobs: Array<{ key: string; retryable: boolean }>;
     };
-    const executableJobs = productionStatus.jobs.filter(job => job.key !== 'cloudflare_analytics');
+    const executableJobs = productionStatus.jobs;
     expect(executableJobs.length).toBeGreaterThan(0);
     expect(executableJobs.every(job => job.retryable)).toBe(true);
-    expect(productionStatus.jobs.find(job => job.key === 'cloudflare_analytics')?.retryable).toBe(false);
+  });
+
+  it('derives the primary status from every child in the latest Workspace pipeline', async () => {
+    expect(aggregateSyncJobStatuses(['queued', 'queued'])).toBe('queued');
+    expect(aggregateSyncJobStatuses(['succeeded', 'queued'])).toBe('running');
+    expect(aggregateSyncJobStatuses(['succeeded', 'failed'])).toBe('failed');
+    expect(aggregateSyncJobStatuses(['succeeded', 'succeeded'])).toBe('succeeded');
+
+    const pipelineRunId = crypto.randomUUID();
+    await startSyncJob(env.DB, {
+      jobKey: 'canonical_workspace_sync', pipelineRunId, trigger: 'manual', mode: 'live',
+    });
+    const childJobKeys = [
+      'repository_inventory',
+      'pull_request_catalog',
+      'upstream_merge_status',
+      'pull_request_comments',
+      'comment_reactions',
+      'vote_projection',
+      'duplicate_resolution',
+      'contributor_scores',
+      'orphan_cleanup',
+    ];
+    const childIds: string[] = [];
+    for (const jobKey of childJobKeys) {
+      childIds.push(await startSyncJob(env.DB, {
+        jobKey, pipelineRunId, trigger: 'continuation', mode: 'live', status: 'queued',
+      }));
+    }
+
+    const readOverallStatus = async (): Promise<string> => {
+      const status = await getSyncStatus(env) as { overall: { status: string } };
+      return status.overall.status;
+    };
+    await expect(readOverallStatus()).resolves.toBe('queued');
+
+    await env.DB.prepare("UPDATE sync_job_runs SET status = 'running' WHERE id = ?")
+      .bind(childIds[0]).run();
+    await expect(readOverallStatus()).resolves.toBe('running');
+
+    await env.DB.prepare(`
+      UPDATE sync_job_runs SET status = CASE WHEN id = ? THEN 'failed' ELSE 'succeeded' END
+       WHERE pipeline_run_id = ? AND job_key <> 'canonical_workspace_sync'
+    `).bind(childIds[0], pipelineRunId).run();
+    await expect(readOverallStatus()).resolves.toBe('failed');
+
+    await env.DB.prepare("UPDATE sync_job_runs SET status = 'succeeded' WHERE id = ?")
+      .bind(childIds[0]).run();
+    await expect(readOverallStatus()).resolves.toBe('succeeded');
   });
 
   it('requires three consecutive matching parity runs before scheduled cutover', async () => {
@@ -131,7 +180,7 @@ describe('public sync status', () => {
     const pipelineRunId = 'shadow-11111111-1111-4111-8111-111111111111';
     const options = {
       jobKey: 'repository_inventory',
-      trigger: 'workflow' as const,
+      trigger: 'continuation' as const,
       mode: 'shadow' as const,
       pipelineRunId,
     };

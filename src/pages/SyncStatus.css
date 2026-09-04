@@ -8,6 +8,9 @@
 .sync-status-hero p { max-width: 760px; margin: 8px 0 0; }
 .sync-page-actions { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .sync-page-actions button { border: 1px solid var(--line-strong); background: var(--white); color: var(--blue-dark); border-radius: 8px; padding: 8px 14px; font-weight: 700; }
+.sync-page-actions .sync-cancel-button { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+.sync-page-actions .sync-cancel-button:hover { background: #fee2e2; }
+.sync-page-actions .sync-cancel-button:disabled { cursor: wait; opacity: .6; }
 .sync-back-link { font-weight: 700; }
 .sync-error, .sync-run-error { color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; }
 .sync-action-success { color: #06703a; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }

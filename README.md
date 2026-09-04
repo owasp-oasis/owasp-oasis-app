@@ -17,17 +17,50 @@ preview   ← staging     — auto-deploys to preview.owasp-oasis.org on push
 
 Deployment is handled by **Cloudflare Git integration**. GitHub Actions validates pushes and pull requests but has no Cloudflare credentials and never deploys.
 
-### Recommended workflow
+### Required development workflow
 
-```
-preview  ←── feature/your-feature   (open PR, merge to preview to test)
-   └──→ main                        (merge preview to main to go live)
+All new work starts from the latest `main` on a short-lived, purpose-named branch. Use `feat/new-feature-name` for a feature; use the equivalent `fix/`, `chore/`, or `docs/` prefix when that more accurately describes the change.
+
+```bash
+git switch main
+git pull --ff-only
+git switch -c feat/new-feature-name
 ```
 
-1. Branch off `preview` for your work
-2. Open a PR into `preview` — get a review
-3. Merge → auto-deploys to `preview.owasp-oasis.org` for testing
-4. When ready for production, open a PR from `preview` into `main`
+Keep commits atomic and independently reversible. Commit messages must explain the reason for the change, resulting behavior, verification performed, and rollback scope. Before requesting review, run the complete local check unless the PR documents why a check cannot run:
+
+```bash
+npm run check
+```
+
+Choose one promotion path based on the validation the change requires:
+
+#### Local validation is sufficient
+
+```text
+main → feat/new-feature-name → pull request → main
+```
+
+1. Develop and test on `feat/new-feature-name`.
+2. Push the feature branch and open a PR from `feat/new-feature-name` into `main`.
+3. Merge only after local checks, required GitHub checks, and review pass.
+4. The merge to `main` triggers the production deployment through Cloudflare Git integration.
+
+#### Remote preview validation is required
+
+```text
+main → feat/new-feature-name → pull request → preview → pull request → main
+```
+
+1. Develop and test locally on `feat/new-feature-name`.
+2. Open a PR from `feat/new-feature-name` into `preview`.
+3. Merge after review; Cloudflare deploys the resulting `preview` branch to `preview.owasp-oasis.org`.
+4. Complete remote testing against the preview deployment. Apply fixes on the feature branch and merge them through follow-up `feat/new-feature-name` → `preview` PRs; ensure the final preview build passes.
+5. Open a PR from `preview` into `main`, documenting the remote evidence and rollback plan.
+6. Merge the `preview` → `main` PR only after remote validation and required checks pass.
+7. Reconcile `preview` back to the resulting `main` tip after promotion so both long-lived branches start the next feature from the same commit.
+
+Do not develop directly on `preview`, push directly to either long-lived branch, or mix unrelated features into a preview promotion. If `main` changes while preview validation is underway, bring the updated `main` into the feature/preview candidate through a reviewed PR and repeat the affected remote checks before promotion.
 
 ---
 
@@ -411,7 +444,7 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 
 ## Secrets
 
-Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured.
+Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured. The daily analytics archive is enabled only in production when both Cloudflare analytics secrets are configured.
 
 ```bash
 # Set secrets on the preview worker
@@ -434,6 +467,17 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token. Requires only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Cloudflare API token used only by the production daily archive. Scope it to the OASIS zone with Analytics Read permission. |
+| `CLOUDFLARE_ZONE_ID` | Zone identifier queried by the analytics archive. Stored as a Worker secret to keep deployment configuration environment-neutral. |
+
+Enable the production archive interactively; never place either value in a committed file:
+
+```bash
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
+npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
+```
+
+The collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a 30-day backfill. An administrator can inspect or retry it from `/workspace/status` and can inspect the resulting aggregates at `/admin/analytics`. Preview telemetry intentionally no-ops because preview shares the production D1 database.
 
 `HUBSPOT_PROPERTY_MAP` is a non-secret JSON environment variable that maps OASIS fields to existing HubSpot custom-property internal names. Supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`; omitted fields are not sent. For example: `{"github":"oasis_github","role":"oasis_role","source":"oasis_source"}`.
 

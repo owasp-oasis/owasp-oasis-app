@@ -23,7 +23,7 @@ function retryRequest(
   sessionCookie?: string,
   tokenCookie?: string,
   csrf?: string,
-  pipeline?: 'legacy' | 'canonical' | 'shadow' | 'integration',
+  pipeline?: 'legacy' | 'canonical' | 'shadow' | 'integration' | 'analytics',
 ): Request {
   const headers = new Headers();
   if (sessionCookie && tokenCookie) {
@@ -263,6 +263,23 @@ describe('server-side roles and sync retries', () => {
        WHERE job_key = 'hubspot_contacts' ORDER BY started_at DESC LIMIT 1
     `).first<{ status: string; trigger_type: string; mode: string }>();
     expect(firstHubSpotRun).toEqual({ status: 'failed', trigger_type: 'manual', mode: 'live' });
+
+    const analytics = await handleRetrySyncJob(
+      retryRequest('cloudflare_analytics', admin.sessionCookie, admin.tokenCookie, csrf, 'analytics'),
+      productionEnv,
+      createExecutionContext(),
+      'cloudflare_analytics',
+    );
+    expect(analytics.status).toBe(202);
+    await expect(analytics.json()).resolves.toEqual(expect.objectContaining({
+      configuration_required: true,
+      execution_scope: 'analytics_collection',
+    }));
+    const analyticsRun = await env.DB.prepare(`
+      SELECT status, trigger_type, mode FROM sync_job_runs
+       WHERE job_key = 'cloudflare_analytics' ORDER BY started_at DESC LIMIT 1
+    `).first();
+    expect(analyticsRun).toEqual({ status: 'deferred', trigger_type: 'manual', mode: 'live' });
 
     const failedRunId = await startSyncJob(env.DB, {
       jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy',

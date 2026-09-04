@@ -440,7 +440,7 @@ export async function runSyncOneCommentReaction(
     UPDATE sync_work_items
        SET status = 'pending', leased_at = NULL, lease_expires_at = NULL, updated_at = ?
      WHERE pipeline_run_id = ? AND job_key = 'comment_reactions'
-       AND status = 'processing' AND lease_expires_at <= ?
+       AND status = 'leased' AND lease_expires_at <= ?
   `).bind(now, pipelineRunId, now).run();
   const item = await env.DB.prepare(`
     SELECT wi.id, wi.entity_id, pc.repo_name, pc.login
@@ -462,7 +462,7 @@ export async function runSyncOneCommentReaction(
   const claimedAt = new Date().toISOString();
   const claim = await env.DB.prepare(`
     UPDATE sync_work_items
-       SET status = 'processing', attempts = attempts + 1, leased_at = ?,
+       SET status = 'leased', attempts = attempts + 1, leased_at = ?,
            lease_expires_at = ?, updated_at = ?
      WHERE id = ? AND status = 'pending'
   `).bind(

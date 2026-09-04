@@ -46,11 +46,22 @@ export const SYNC_JOBS: readonly SyncJobDefinition[] = [
   { key: 'contributor_scores', label: 'Contributor scores', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'orphan_cleanup', label: 'Orphan cleanup', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'hubspot_contacts', label: 'HubSpot contacts', category: 'integration', schedule: 'Hourly at :15', criticalForWorkspace: false, retryable: true },
-  { key: 'cloudflare_analytics', label: 'Cloudflare analytics archive', category: 'analytics', schedule: 'Daily (planned)', criticalForWorkspace: false, retryable: false },
+  { key: 'cloudflare_analytics', label: 'Cloudflare analytics archive', category: 'analytics', schedule: 'Daily at 03:45 UTC', criticalForWorkspace: false, retryable: true },
 ] as const;
 
 const JOB_BY_KEY = new Map(SYNC_JOBS.map(job => [job.key, job]));
 const TERMINAL_INCOMPLETE: readonly SyncJobStatus[] = ['failed', 'skipped', 'deferred', 'interrupted'];
+const WORKSPACE_CHILD_JOB_KEYS = new Set([
+  'repository_inventory',
+  'pull_request_catalog',
+  'upstream_merge_status',
+  'pull_request_comments',
+  'comment_reactions',
+  'vote_projection',
+  'duplicate_resolution',
+  'contributor_scores',
+  'orphan_cleanup',
+]);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -124,6 +135,7 @@ export async function resumeSyncJob(db: D1Database, jobRunId: string): Promise<v
            completed_items = 0, failed_items = 0, metrics_json = '{}',
            error_code = NULL, error_summary = NULL
      WHERE id = ?
+       AND NOT (status = 'failed' AND error_code = 'cancelled_by_admin')
   `).bind(jobRunId).run();
 }
 
@@ -148,6 +160,7 @@ export async function finishSyncJob(
        SET status = ?, finished_at = ?, duration_ms = ?, metrics_json = ?,
            completed_items = ?, failed_items = ?, error_code = ?, error_summary = ?
      WHERE id = ?
+       AND NOT (status = 'failed' AND error_code = 'cancelled_by_admin')
   `).bind(
     status,
     finishedAt,
@@ -169,6 +182,14 @@ export async function markSyncJobRunning(db: D1Database, jobRunId: string, expec
   `).bind(expectedItems, nowIso(), jobRunId).run();
 }
 
+export async function isSyncJobActive(db: D1Database, jobRunId: string): Promise<boolean> {
+  const row = await db.prepare(`
+    SELECT 1 AS active FROM sync_job_runs
+     WHERE id = ? AND status IN ('queued', 'running')
+  `).bind(jobRunId).first<{ active: number }>();
+  return row?.active === 1;
+}
+
 export async function incrementSyncJobProgress(
   db: D1Database,
   jobRunId: string,
@@ -178,8 +199,20 @@ export async function incrementSyncJobProgress(
   await db.prepare(`
     UPDATE sync_job_runs
        SET completed_items = completed_items + ?, failed_items = failed_items + ?
-     WHERE id = ?
+     WHERE id = ? AND status IN ('queued', 'running')
   `).bind(completedDelta, failedDelta, jobRunId).run();
+}
+
+export function aggregateSyncJobStatuses(
+  statuses: readonly SyncJobStatus[],
+  expectedCount = statuses.length,
+): 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown' {
+  if (statuses.length === 0) return 'unknown';
+  if (statuses.length < expectedCount) return 'running';
+  if (statuses.every(status => status === 'queued')) return 'queued';
+  if (statuses.some(status => status === 'queued' || status === 'running')) return 'running';
+  if (statuses.every(status => status === 'succeeded')) return 'succeeded';
+  return 'failed';
 }
 
 export async function recordSyncJobEvent(
@@ -395,15 +428,23 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
   const state = new Map((stateRows.results ?? []).map(row => [row.key, row.value]));
   const lastSuccessAt = state.get('last_synced_at') ?? null;
   const running = state.get('sync_running') === '1';
-  const ageMs = lastSuccessAt ? Date.now() - Date.parse(lastSuccessAt) : Number.POSITIVE_INFINITY;
-  const latestLegacy = (runRows.results ?? []).find(row => row.job_key === 'legacy_workspace_sync');
-  const latestCanonical = (runRows.results ?? []).find(row => row.job_key === 'canonical_workspace_sync');
-  const latestWorkspace = latestCanonical ?? latestLegacy;
-  let overallStatus: 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown' = 'unknown';
-  if (running) overallStatus = 'running';
-  else if (latestWorkspace?.status === 'failed') overallStatus = 'degraded';
-  else if (lastSuccessAt && ageMs > 8 * 3_600_000) overallStatus = 'stale';
-  else if (lastSuccessAt) overallStatus = 'healthy';
+  const workspaceParents = (runRows.results ?? []).filter(row => (
+    row.job_key === 'legacy_workspace_sync' || row.job_key === 'canonical_workspace_sync'
+  ));
+  const latestWorkspace = workspaceParents.sort(
+    (left, right) => Date.parse(right.started_at) - Date.parse(left.started_at),
+  )[0];
+  const latestWorkspaceChildren = latestWorkspace
+    ? (runRows.results ?? []).filter(row => (
+        row.pipeline_run_id === latestWorkspace.pipeline_run_id
+        && row.mode === latestWorkspace.mode
+        && WORKSPACE_CHILD_JOB_KEYS.has(row.job_key)
+      ))
+    : [];
+  const overallStatus = aggregateSyncJobStatuses(
+    latestWorkspaceChildren.map(row => row.status),
+    WORKSPACE_CHILD_JOB_KEYS.size,
+  );
 
   const byJob = new Map<string, JobRunRow[]>();
   for (const row of runRows.results ?? []) {
@@ -507,14 +548,7 @@ async function getPreMigrationSyncStatus(env: Env): Promise<Record<string, unkno
   const state = new Map((stateRows.results ?? []).map(row => [row.key, row.value]));
   const lastSuccessAt = state.get('last_synced_at') ?? null;
   const running = state.get('sync_running') === '1';
-  const ageMs = lastSuccessAt ? Date.now() - Date.parse(lastSuccessAt) : Number.POSITIVE_INFINITY;
-  const overallStatus = running
-    ? 'running'
-    : lastSuccessAt && ageMs > 8 * 3_600_000
-      ? 'stale'
-      : lastSuccessAt
-        ? 'healthy'
-        : 'unknown';
+  const overallStatus = running ? 'running' : 'unknown';
 
   return {
     generated_at: nowIso(),

@@ -17,6 +17,16 @@ Both workers share a single D1 database (`oasis-db`) and a single KV namespace (
 
 Deployment is triggered automatically by **Cloudflare Git integration**. GitHub Actions runs validation only and has no Cloudflare deployment credentials.
 
+### Branch-driven promotion
+
+`main` is the development base and production branch. New work must start on a short-lived branch such as `feat/new-feature-name` and pass `npm run check` locally before review.
+
+- When local validation is sufficient, open `feat/new-feature-name` → `main`.
+- When a live Cloudflare environment is required, open `feat/new-feature-name` → `preview`, validate the deployed preview, then open `preview` → `main`.
+- After production promotion, reconcile `preview` to the resulting `main` tip.
+
+All transitions into `preview` or `main` use pull requests. Do not push directly to either deployment branch or combine unrelated changes in one preview promotion. The complete contributor workflow, including handling changes to `main` during preview validation, is documented in [README.md](./README.md#required-development-workflow).
+
 ---
 
 ## Prerequisites
@@ -146,6 +156,8 @@ wrangler secret put HUBSPOT_TOKEN --name owasp-oasis-app-preview
 wrangler secret put GITHUB_TOKEN --name owasp-oasis
 wrangler secret put ADMIN_SECRET  --name owasp-oasis
 wrangler secret put HUBSPOT_TOKEN --name owasp-oasis
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
+npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
 
 # List secrets on a worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -160,6 +172,10 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in (vote, react). |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token used to create and update contacts. Grant only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Production-only API token for the daily GraphQL analytics archive. Scope it to the OASIS zone with Analytics Read permission. |
+| `CLOUDFLARE_ZONE_ID` | Zone identifier used by the production analytics query. |
+
+After setting the analytics secrets and deploying migration `0010_admin_analytics.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect now** once to verify access and start the bounded 30-day backfill; subsequent collection runs daily at 03:45 UTC. The status-page `cloudflare_analytics` job records each execution and allows an administrator to retry it independently.
 
 Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 
@@ -227,6 +243,11 @@ node export-db.js
 | `user_roles` | Temporary GitHub-ID-backed application role assignments |
 | `privileged_action_audit` | Append-only outcome log for role-protected server actions |
 | `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
+| `analytics_daily_routes` | Daily normalized route, page-view, navigation-duration, and response-class aggregates; no visitor identifiers |
+| `analytics_daily_cloudflare` | Daily estimated Cloudflare request, visit, response, bandwidth, and cache aggregates |
+| `analytics_collection_days` | Idempotent daily archive checkpoint and retry state |
+| `analytics_daily_engagement` | Daily project-level review and vote aggregates; no user identifier |
+| `analytics_event_receipts` | Anonymous random idempotency keys retained for two days |
 
 ---
 

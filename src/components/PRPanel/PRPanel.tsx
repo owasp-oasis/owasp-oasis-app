@@ -14,6 +14,7 @@ import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
 import './PRPanel.css'
+import { trackReviewEngagement } from '../../analytics'
 
 /* ── Shared PR type (from leaderboard API) ───────────────────── */
 export interface PanelPR {
@@ -155,6 +156,34 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   }, [pr])
 
   useEffect(() => { fetchDetails() }, [fetchDetails])
+
+  // Record aggregate active-review time without sending a login or stable user
+  // identifier. Hidden or idle tabs do not accrue active seconds.
+  useEffect(() => {
+    if (!pr || !user) return
+    const prId = pr.id
+    let lastActivity = Date.now()
+    let lastTick = Date.now()
+    const noteActivity = () => { lastActivity = Date.now() }
+    const activityEvents: Array<keyof DocumentEventMap> = [
+      'keydown', 'pointerdown', 'touchstart', 'wheel',
+    ]
+    activityEvents.forEach(type => document.addEventListener(type, noteActivity, { passive: true }))
+    trackReviewEngagement(prId, 'review_opened')
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      const intervalSeconds = Math.min(30, Math.max(1, Math.round((now - lastTick) / 1000)))
+      if (document.visibilityState === 'visible' && now - lastActivity <= 45_000) {
+        trackReviewEngagement(prId, 'review_heartbeat', intervalSeconds)
+      }
+      lastTick = now
+    }, 30_000)
+    return () => {
+      window.clearInterval(timer)
+      activityEvents.forEach(type => document.removeEventListener(type, noteActivity))
+      trackReviewEngagement(prId, 'review_closed')
+    }
+  }, [pr, user])
 
   // Close on Escape
   useEffect(() => {

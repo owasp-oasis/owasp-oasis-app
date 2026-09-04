@@ -285,7 +285,8 @@ CREATE TABLE IF NOT EXISTS sync_job_events (
 CREATE TABLE IF NOT EXISTS sync_work_items (
   id TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, job_run_id TEXT NOT NULL,
   job_key TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
-  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT, status TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'leased', 'succeeded', 'failed', 'deferred')),
   attempts INTEGER NOT NULL DEFAULT 0, leased_at TEXT, lease_expires_at TEXT,
   last_error_code TEXT, last_error_summary TEXT, created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)
@@ -319,6 +320,40 @@ CREATE TABLE IF NOT EXISTS sync_daily_budgets (
   remaining INTEGER, reset_at TEXT, updated_at TEXT NOT NULL,
   PRIMARY KEY(budget_date, budget_key)
 );
+
+CREATE TABLE IF NOT EXISTS analytics_daily_routes (
+  metric_date TEXT NOT NULL, route_key TEXT NOT NULL, page_views INTEGER NOT NULL DEFAULT 0,
+  navigation_count INTEGER NOT NULL DEFAULT 0, load_ms_sum INTEGER NOT NULL DEFAULT 0,
+  load_ms_max INTEGER NOT NULL DEFAULT 0, response_2xx INTEGER NOT NULL DEFAULT 0,
+  response_3xx INTEGER NOT NULL DEFAULT 0, response_4xx INTEGER NOT NULL DEFAULT 0,
+  response_5xx INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+  PRIMARY KEY(metric_date, route_key)
+);
+
+CREATE TABLE IF NOT EXISTS analytics_daily_cloudflare (
+  metric_date TEXT PRIMARY KEY, requests_estimate INTEGER NOT NULL DEFAULT 0,
+  visits_estimate INTEGER NOT NULL DEFAULT 0, response_bytes INTEGER NOT NULL DEFAULT 0,
+  response_2xx INTEGER NOT NULL DEFAULT 0, response_3xx INTEGER NOT NULL DEFAULT 0,
+  response_4xx INTEGER NOT NULL DEFAULT 0, response_5xx INTEGER NOT NULL DEFAULT 0,
+  cache_hits_estimate INTEGER NOT NULL DEFAULT 0, cache_misses_estimate INTEGER NOT NULL DEFAULT 0,
+  sample_interval REAL, source_is_estimated INTEGER NOT NULL DEFAULT 1, collected_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS analytics_collection_days (
+  metric_date TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT, finished_at TEXT, error_summary TEXT, updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS analytics_daily_engagement (
+  metric_date TEXT NOT NULL, repo_id INTEGER NOT NULL, review_opens INTEGER NOT NULL DEFAULT 0,
+  review_closes INTEGER NOT NULL DEFAULT 0, active_seconds INTEGER NOT NULL DEFAULT 0,
+  votes_submitted INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+  PRIMARY KEY(metric_date, repo_id)
+);
+
+CREATE TABLE IF NOT EXISTS analytics_event_receipts (
+  event_id TEXT PRIMARY KEY, event_date TEXT NOT NULL, expires_at TEXT NOT NULL
+);
   `;
 
   // Split by semicolon and execute each statement
@@ -335,6 +370,11 @@ CREATE TABLE IF NOT EXISTS sync_daily_budgets (
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'analytics_event_receipts',
+    'analytics_daily_engagement',
+    'analytics_collection_days',
+    'analytics_daily_cloudflare',
+    'analytics_daily_routes',
     'sync_parity_differences',
     'sync_parity_runs',
     'sync_shadow_entities',

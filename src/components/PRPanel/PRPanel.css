@@ -827,6 +827,8 @@
 }
 .prp-reaction-btn:hover { background: var(--blue-soft); border-color: var(--blue); }
 .prp-reaction-btn--active { background: var(--blue-soft); border-color: var(--blue); }
+.prp-reaction-btn:disabled { cursor: default; opacity: 0.55; }
+.prp-reaction-btn--active:disabled { opacity: 1; }
 .prp-reaction-count { color: var(--muted); }
 
 .prp-reaction-note {

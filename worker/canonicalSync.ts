@@ -17,6 +17,7 @@ import {
   finishSyncJob,
   incrementSyncJobProgress,
   interruptExpiredSyncJobs,
+  isSyncJobActive,
   markSyncJobRunning,
   pruneSyncJobHistory,
   recordDailyBudget,
@@ -159,22 +160,37 @@ async function continueCanonical(
   suffix: string,
 ): Promise<string> {
   if (!env.CANONICAL_SYNC_WORKFLOW) throw new Error('Workspace synchronization Workflow binding is unavailable');
+  const parent = await env.DB.prepare(`
+    SELECT id FROM sync_job_runs
+     WHERE pipeline_run_id = ?
+       AND job_key IN ('legacy_workspace_sync', 'canonical_workspace_sync')
+     ORDER BY created_at LIMIT 1
+  `).bind(params.pipelineRunId).first<{ id: string }>();
+  if (!parent || !await isSyncJobActive(env.DB, parent.id)) {
+    throw new NonRetryableError('Workspace synchronization was cancelled');
+  }
   const id = workflowInstanceId(params.pipelineRunId, suffix);
+  let createdId: string;
   try {
     const instance = await env.CANONICAL_SYNC_WORKFLOW.create({
       id,
       params,
       retention: { successRetention: '1 day', errorRetention: '3 days' },
     });
-    return instance.id;
+    createdId = instance.id;
   } catch (error) {
     try {
-      await env.CANONICAL_SYNC_WORKFLOW.get(id);
-      return id;
+      const instance = await env.CANONICAL_SYNC_WORKFLOW.get(id);
+      createdId = instance.id;
     } catch {
       throw error;
     }
   }
+  await env.DB.prepare(`
+    UPDATE sync_job_runs SET workflow_instance_id = ?
+     WHERE pipeline_run_id = ? AND status IN ('queued', 'running')
+  `).bind(createdId, params.pipelineRunId).run();
+  return createdId;
 }
 
 async function createPipelineJobs(
@@ -526,6 +542,8 @@ export class CanonicalSyncWorkflow extends WorkflowEntrypoint<Env, CanonicalSync
     step: WorkflowStep,
   ): Promise<Record<string, number | boolean>> {
     const kind = pipelineKind(event.payload);
+    const parent = await parentRunId(this.env.DB, event.payload.pipelineRunId, kind);
+    if (!await isSyncJobActive(this.env.DB, parent)) return { done: true, cancelled: true };
     const today = nowIso().slice(0, 10);
     const budget = await this.env.DB.prepare(`
       SELECT consumed FROM sync_daily_budgets
@@ -575,6 +593,7 @@ export class CanonicalSyncWorkflow extends WorkflowEntrypoint<Env, CanonicalSync
         });
         return result;
       } catch (error) {
+        if (error instanceof NonRetryableError) throw error;
         if (context.attempt <= RETRY_LIMIT) throw error;
         await failPipeline(this.env, event.payload.pipelineRunId, kind, error);
         throw new NonRetryableError(error instanceof Error ? error.message : 'Workspace pipeline failed');

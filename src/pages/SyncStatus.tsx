@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './SyncStatus.css'
 
-type OverallStatus = 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown'
+type OverallStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown'
 type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'deferred' | 'interrupted'
 
 interface PublicRun {
@@ -192,6 +192,43 @@ function scopeJobToMode(job: PublicJob, mode: PublicRun['mode']): PublicJob {
   }
 }
 
+function scopeJobToPipeline(
+  job: PublicJob,
+  mode: PublicRun['mode'],
+  pipelineRunId: string | null,
+): PublicJob {
+  const recentRuns = job.recent_runs.filter(run => run.mode === mode)
+  const latestRun = pipelineRunId
+    ? recentRuns.find(run => run.pipeline_run_id === pipelineRunId) ?? null
+    : null
+  return {
+    ...job,
+    status: latestRun?.status ?? 'unknown',
+    latest_run: latestRun,
+    recent_runs: recentRuns,
+  }
+}
+
+function newestPipelineRunId(jobs: readonly PublicJob[], mode: PublicRun['mode']): string | null {
+  const runs = jobs.flatMap(job => job.recent_runs.filter(run => run.mode === mode && run.pipeline_run_id))
+  runs.sort((left, right) => Date.parse(right.started_at) - Date.parse(left.started_at))
+  return runs[0]?.pipeline_run_id ?? null
+}
+
+function aggregatePipelineStatus(
+  jobs: readonly PublicJob[],
+  hasPipeline: boolean,
+): RunStatus | 'unknown' {
+  if (!hasPipeline) return 'unknown'
+  const statuses = jobs.map(job => job.status)
+  if (statuses.every(status => status === 'queued')) return 'queued'
+  if (statuses.some(status => status === 'queued' || status === 'running' || status === 'unknown')) {
+    return 'running'
+  }
+  if (statuses.every(status => status === 'succeeded')) return 'succeeded'
+  return 'failed'
+}
+
 const RETRYABLE_STATUSES: readonly string[] = ['failed', 'skipped', 'deferred', 'interrupted']
 const STATUS_RETURN_VIEW_KEY = 'oasis.sync-status.return-view'
 
@@ -229,18 +266,57 @@ function clearStatusReturnView(): void {
 
 export function SyncRunDetail() {
   const { runId = '' } = useParams()
+  const { user } = useAuth()
   const [detail, setDetail] = useState<RunDetailPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch(`/api/sync/status/runs/${encodeURIComponent(runId)}`)
-      .then(async response => {
-        if (!response.ok) throw new Error(`Unable to load run (${response.status})`)
-        return response.json() as Promise<RunDetailPayload>
+  const loadDetail = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sync/status/runs/${encodeURIComponent(runId)}`, {
+        cache: 'no-store',
       })
-      .then(setDetail)
-      .catch(reason => setError(reason instanceof Error ? reason.message : 'Unable to load run'))
+      if (!response.ok) throw new Error(`Unable to load run (${response.status})`)
+      setDetail(await response.json() as RunDetailPayload)
+      setError(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to load run')
+    }
   }, [runId])
+
+  useEffect(() => { void loadDetail() }, [loadDetail])
+
+  const cancelRun = useCallback(async () => {
+    if (!window.confirm('Cancel this run? Coupled jobs in the same pipeline will also be marked failed.')) return
+    setCancelling(true)
+    setActionMessage(null)
+    setError(null)
+    try {
+      const csrfResponse = await fetch('/api/csrf', { credentials: 'include', cache: 'no-store' })
+      if (!csrfResponse.ok) throw new Error('Unable to obtain a security token')
+      const { token } = await csrfResponse.json() as { token: string }
+      const response = await fetch(`/api/admin/sync/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-csrf-token': token },
+      })
+      const result = await response.json() as {
+        error?: string
+        pipeline_run_id?: string | null
+        workflow_termination?: string
+      }
+      if (!response.ok) throw new Error(result.error ?? `Cancel request returned ${response.status}`)
+      setActionMessage(result.pipeline_run_id
+        ? 'The run and its active pipeline jobs were cancelled and resolved as failed.'
+        : 'The run was cancelled and resolved as failed.')
+      await loadDetail()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to cancel the sync run')
+    } finally {
+      setCancelling(false)
+    }
+  }, [loadDetail, runId])
 
   return (
     <div className="sync-status-page">
@@ -252,7 +328,20 @@ export function SyncRunDetail() {
         </div>
       </div>
       <section className="section"><div className="container">
-        <Link className="sync-back-link" to="/workspace/status">← All sync jobs</Link>
+        <div className="sync-page-actions">
+          <Link className="sync-back-link" to="/workspace/status">← All sync jobs</Link>
+          {user?.role === 'admin' && detail && (detail.run.status === 'queued' || detail.run.status === 'running') && (
+            <button
+              type="button"
+              className="sync-cancel-button"
+              disabled={cancelling}
+              onClick={() => void cancelRun()}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel run'}
+            </button>
+          )}
+        </div>
+        {actionMessage && <div className="sync-action-success" role="status">{actionMessage}</div>}
         {error && <div className="sync-error">{error}</div>}
         {!detail && !error && <p>Loading run…</p>}
         {detail && (
@@ -398,16 +487,26 @@ export default function SyncStatus() {
     return {
       pipelines: WORKSPACE_PIPELINES.map(pipeline => {
         const parent = byKey.get(pipeline.parentJobKey)
+        const scopedParent = parent ? scopeJobToMode(parent, pipeline.mode) : null
+        const availableChildren = WORKSPACE_PIPELINE_JOB_KEYS.flatMap(jobKey => {
+          const job = byKey.get(jobKey)
+          return job ? [job] : []
+        })
+        const pipelineRunId = pipeline.key === 'shadow'
+          ? scopedParent?.latest_run?.pipeline_run_id
+            ? `shadow-${scopedParent.latest_run.pipeline_run_id}`
+            : newestPipelineRunId(availableChildren, pipeline.mode)
+          : scopedParent?.latest_run?.pipeline_run_id ?? null
+        const jobs = availableChildren.map(job => scopeJobToPipeline(job, pipeline.mode, pipelineRunId))
         return {
           ...pipeline,
-          parent: parent ? scopeJobToMode(parent, pipeline.mode) : null,
-          jobs: WORKSPACE_PIPELINE_JOB_KEYS.flatMap(jobKey => {
-            const job = byKey.get(jobKey)
-            return job ? [scopeJobToMode(job, pipeline.mode)] : []
-          }),
+          parent: scopedParent,
+          jobs,
+          status: aggregatePipelineStatus(jobs, pipelineRunId !== null),
         }
       }),
       integration: jobs.filter(job => job.category !== 'workspace' && job.key !== 'cloudflare_analytics'),
+      analytics: jobs.filter(job => job.category === 'analytics'),
     }
   }, [payload])
 
@@ -620,7 +719,7 @@ export default function SyncStatus() {
                         <strong>{pipeline.title}</strong>
                         <small>{pipeline.description}</small>
                       </span>
-                      <StatusPill status={pipeline.parent?.status ?? 'unknown'} />
+                      <StatusPill status={pipeline.status} />
                     </summary>
                     <div className="sync-pipeline-body">
                       {pipeline.parent?.latest_run ? (
@@ -669,7 +768,14 @@ export default function SyncStatus() {
               <div className="sync-job-list">
                 {groups.integration.map(job => renderJob(job, `integration:${job.key}`, 'integration'))}
               </div>
-              <p className="sync-planned-note">Cloudflare analytics archiving remains a planned dashboard capability and is not presented as an executable job.</p>
+            </section>
+
+            <section>
+              <h2 className="sync-section-title">Analytics collection</h2>
+              <p className="sync-section-description">Daily, privacy-safe Cloudflare aggregates archived for long-range reporting.</p>
+              <div className="sync-job-list">
+                {groups.analytics.map(job => renderJob(job, `analytics:${job.key}`, 'analytics'))}
+              </div>
             </section>
           </>
         )}

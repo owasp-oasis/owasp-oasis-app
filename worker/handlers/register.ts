@@ -4,7 +4,7 @@
 
 import type { Env } from '../types.js';
 import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
-import { vEmail, vName, vGitHub, vRole, parseBody, hashString } from '../validation.js';
+import { vEmail, vName, vGitHubAccount, vRole, parseBody, hashString } from '../validation.js';
 import { isEmailRegistered } from '../db.js';
 import {
   enqueueHubSpotSync,
@@ -30,13 +30,13 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
   const emailRes = vEmail(body['email']);
   if (!emailRes.ok) return jsonErr(emailRes.error, 400, request);
 
-  const ghRes = vGitHub(body['github'] ?? '');
-  if (!ghRes.ok) return jsonErr(ghRes.error, 400, request);
-
   // Accept both 'role' and 'type' fields for compatibility
   const roleVal = body['role'] ?? body['type'] ?? '';
   const roleRes = vRole(roleVal);
   if (!roleRes.ok) return jsonErr(roleRes.error, 400, request);
+
+  const ghRes = await vGitHubAccount(body['github'] ?? '', env.GITHUB_TOKEN);
+  if (!ghRes.ok) return jsonErr(ghRes.error, ghRes.status ?? 400, request);
 
   const submittedAt = new Date().toISOString();
   const submission: HubSpotSubmission = {
