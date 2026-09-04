@@ -99,6 +99,44 @@ describe('administrator user role management', () => {
     expect(body.users[0]).not.toHaveProperty('ip_hash');
   });
 
+  it('does not mistake unrelated null identities for a legacy administrator', async () => {
+    await insertTestRegistration(env, {
+      email: 'admin@example.org', github: 'humor4fun', role: 'administrator',
+    });
+    await insertTestRegistration(env, {
+      email: 'target@example.org', github: 'target-user', role: 'validator',
+    });
+    await insertTestRegistration(env, {
+      email: 'legacy@example.org', github: '', role: 'validator',
+    });
+    const legacyAdmin = await createTestSession(env, {
+      github_user_id: null,
+      github_login: 'humor4fun',
+    });
+
+    const response = await SELF.fetch(adminRequest('/api/admin/users', legacyAdmin));
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      users: Array<{ email: string; github_user_id: number | null; is_self: boolean; can_assign_role: boolean }>;
+    };
+    const byEmail = new Map(body.users.map(user => [user.email, user]));
+    expect(byEmail.get('admin@example.org')).toEqual(expect.objectContaining({
+      github_user_id: 7505051,
+      is_self: true,
+      can_assign_role: false,
+    }));
+    expect(byEmail.get('target@example.org')).toEqual(expect.objectContaining({
+      github_user_id: null,
+      is_self: false,
+      can_assign_role: true,
+    }));
+    expect(byEmail.get('legacy@example.org')).toEqual(expect.objectContaining({
+      github_user_id: null,
+      is_self: false,
+      can_assign_role: true,
+    }));
+  });
+
   it('requires both admin authorization and a valid CSRF token to assign a role', async () => {
     await insertTestRegistration(env, { email: 'target@example.org', github: 'target-user' });
     const id = await registrationId('target@example.org');
@@ -182,6 +220,32 @@ describe('administrator user role management', () => {
       'SELECT role FROM user_roles WHERE github_user_id = 4242',
     ).first<{ role: string }>();
     expect(retainedRole?.role).toBe('moderator');
+  });
+
+  it('allows an administrator to grant every supported role to another user', async () => {
+    await insertTestRegistration(env, { email: 'roles@example.org', github: 'role-target' });
+    const id = await registrationId('roles@example.org');
+    fetchMock.when(request => request.url === 'https://api.github.com/users/role-target')
+      .respondWith(Response.json({ id: 4343, login: 'role-target', type: 'User' }));
+    const admin = await createTestSession(env, {
+      github_user_id: 7505051,
+      github_login: 'humor4fun',
+    });
+    const csrf = makeCsrf();
+
+    for (const role of ['admin', 'moderator', 'member', 'guest'] as const) {
+      const response = await SELF.fetch(adminRequest(`/api/admin/users/${id}/role`, admin, {
+        method: 'POST', csrf, body: { role },
+      }));
+      expect(response.status, role).toBe(200);
+      await expect(response.json()).resolves.toEqual(expect.objectContaining({
+        user: expect.objectContaining({ access_role: role }),
+      }));
+      const stored = await env.DB.prepare(
+        'SELECT role FROM user_roles WHERE github_user_id = 4343',
+      ).first<{ role: string }>();
+      expect(stored?.role).toBe(role);
+    }
   });
 
   it('lets an administrator supply a missing GitHub identity while assigning a role', async () => {
