@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runAnalyticsCollector } from '../../../worker/analytics.js';
-import { handleAdminAnalyticsCollect } from '../../../worker/handlers/analytics.js';
+import { handleAdminAnalytics, handleAdminAnalyticsCollect } from '../../../worker/handlers/analytics.js';
 import type { Env } from '../../../worker/types.js';
 import { fetchMock } from './fetchMock.js';
 import {
@@ -120,6 +120,21 @@ describe('privacy-safe administrative analytics', () => {
     expect(payload.engagement).toBeNull();
     expect(JSON.stringify(payload)).not.toContain('humor4fun');
     expect(JSON.stringify(payload)).not.toContain('ordinary-member');
+  });
+
+  it('reports that preview reads shared production data without recording preview telemetry', async () => {
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const response = await handleAdminAnalytics(new Request('http://localhost/api/admin/analytics', {
+      headers: { Cookie: buildCookieHeader(admin.sessionCookie, admin.tokenCookie) },
+    }), { ...env, ENVIRONMENT: 'preview' } as Env);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      configuration: expect.objectContaining({
+        environment: 'preview',
+        first_party_collection: false,
+        reads_shared_production_data: true,
+      }),
+    }));
   });
 
   it('requires an admin session and CSRF match for manual collection', async () => {
