@@ -97,6 +97,10 @@ id      = "4668dfe626b144de82ceec91df80c7ce"
 [env.production.vars]
 ENVIRONMENT        = "production"
 OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
+# Zone IDs identify public Cloudflare zones; unlike the Analytics API token,
+# this value is not a credential. Keep it in versioned config so Wrangler
+# deployments do not remove a dashboard-only binding.
+CLOUDFLARE_ZONE_ID = "3f30ef2d154b36358a11b0db4744b5fb"
 
 [env.production.triggers]
 crons = ["0 */4 * * *", "15 * * * *", "45 3 * * *"]

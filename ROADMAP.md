@@ -58,7 +58,7 @@ Initial implementation on `feat/admin-analytics-dashboard` includes:
 - Day/week/month ranges, preceding-period comparisons, freshness, collection checkpoints, route aggregates, Cloudflare request/cache/status aggregates, engagement cohort suppression, and operation-budget history.
 - Preview collection no-ops because preview and production share D1; production and local tests collect, preventing preview traffic from polluting production history.
 
-Production activation requires migration `0010`, the `CLOUDFLARE_ANALYTICS_TOKEN` and `CLOUDFLARE_ZONE_ID` production Worker secrets, and confirmation of the first successful collection from the dashboard or status page.
+Production activation requires migration `0010`, the `CLOUDFLARE_ANALYTICS_TOKEN` production Worker secret, the versioned `CLOUDFLARE_ZONE_ID` production variable, and confirmation of the first successful collection from the dashboard or status page.
 
 ### Daily Cloudflare analytics archive
 
