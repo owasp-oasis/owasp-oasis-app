@@ -464,6 +464,14 @@ export function shadowWorkflowInstanceId(legacyPipelineRunId: string): string {
   return `shadow-start-${legacyPipelineRunId}`.slice(0, 100);
 }
 
+export async function shadowContinuationWorkflowInstanceId(
+  pipelineRunId: string,
+  suffix: string,
+): Promise<string> {
+  const pipelineDigest = (await fingerprint({ pipeline_run_id: pipelineRunId })).slice(0, 16);
+  return `shadow-${pipelineDigest}-${suffix}`.replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 100);
+}
+
 export function nonRetryableShadowError(message: string): NonRetryableError {
   // Workflows recognizes this error by its runtime-provided identity. Keep the
   // default name instead of replacing it with the upstream error's name.
@@ -1171,8 +1179,9 @@ async function continueShadow(env: Env, params: ShadowSyncParams, suffix: string
     }
     return;
   }
-  const pipeline = 'pipelineRunId' in params ? params.pipelineRunId.slice(0, 8) : 'start';
-  const id = `shadow-${pipeline}-${suffix}`.replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 100);
+  const id = pipelineRunId
+    ? await shadowContinuationWorkflowInstanceId(pipelineRunId, suffix)
+    : `shadow-start-${suffix}`.replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 100);
   let createdId: string;
   try {
     const instance = await env.SHADOW_SYNC_WORKFLOW.create({
