@@ -12,6 +12,7 @@ import {
   prepareCanonicalProjections,
   runSyncOneCommentReaction,
   runSyncOneRepo,
+  seedCommentReactionWorkItems,
 } from './sync.js';
 import {
   finishSyncJob,
@@ -446,7 +447,16 @@ async function processSyncChunk(
       failedItems: progress?.failed_items ?? 0,
     });
   }
-  await markSyncJobRunning(env.DB, reactionJobRunId);
+  const expectedReactions = await seedCommentReactionWorkItems(
+    env.DB,
+    reactionJobRunId,
+    pipelineRunId,
+  );
+  await markSyncJobRunning(env.DB, reactionJobRunId, expectedReactions);
+  await recordSyncJobEvent(env.DB, reactionJobRunId, {
+    type: 'reaction_inventory_seeded',
+    details: { comments: expectedReactions },
+  });
   await continueCanonical(
     env,
     { action: 'reaction', pipelineRunId, pipelineKind: kind },
