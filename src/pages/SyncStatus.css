@@ -107,3 +107,6 @@
   .sync-pipeline-body { padding: 14px 14px 18px; }
   .sync-pipeline-jobs { padding-left: 9px; }
 }
+.sync-parity-differences { margin-top: 1rem; }
+.sync-parity-differences > summary { cursor: pointer; font-weight: 700; }
+.sync-parity-differences .sync-history-table { margin-top: .75rem; }

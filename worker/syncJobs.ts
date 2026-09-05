@@ -384,7 +384,10 @@ function publicRun(row: JobRunRow): Record<string, unknown> {
 async function getSyncStatusWithObservability(env: Env): Promise<Record<string, unknown>> {
   const db = env.DB;
   const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
-  const [stateRows, runRows, incompleteRows, parity, budgets, budgetHistory, hubspot, canonicalLock] = await Promise.all([
+  const [
+    stateRows, runRows, incompleteRows, parity, parityDifferences,
+    budgets, budgetHistory, hubspot, canonicalLock,
+  ] = await Promise.all([
     db.prepare(`SELECT key, value FROM sync_state WHERE key IN (
       'last_synced_at', 'sync_running', 'canonical_sync_enabled',
       'canonical_pipeline_run_id', 'canonical_pipeline_phase', 'canonical_pipeline_updated_at'
@@ -406,6 +409,21 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
        ORDER BY started_at DESC LIMIT 100
     `).all<JobRunRow>(),
     db.prepare('SELECT * FROM sync_parity_runs ORDER BY created_at DESC LIMIT 1').first<Record<string, unknown>>(),
+    db.prepare(`
+      SELECT entity_type, difference_type, fields_json, COUNT(*) AS count
+        FROM sync_parity_differences
+       WHERE pipeline_run_id = (
+         SELECT pipeline_run_id FROM sync_parity_runs ORDER BY created_at DESC LIMIT 1
+       )
+       GROUP BY entity_type, difference_type, fields_json
+       ORDER BY count DESC, entity_type, difference_type
+       LIMIT 100
+    `).all<{
+      entity_type: string;
+      difference_type: string;
+      fields_json: string;
+      count: number;
+    }>(),
     db.prepare('SELECT * FROM sync_daily_budgets WHERE budget_date = ? ORDER BY budget_key')
       .bind(nowIso().slice(0, 10)).all<Record<string, unknown>>(),
     db.prepare(`
@@ -502,6 +520,19 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
       required_consecutive_matches: 3,
       eligible_for_cutover: parity['eligible_for_cutover'] === 1,
       compared_at: parity['compared_at'],
+      difference_summary: (parityDifferences.results ?? []).map(row => ({
+        entity_type: row.entity_type,
+        difference_type: row.difference_type,
+        fields: (() => {
+          try {
+            const fields = JSON.parse(row.fields_json) as unknown;
+            return Array.isArray(fields)
+              ? fields.filter((field): field is string => typeof field === 'string').slice(0, 50)
+              : [];
+          } catch { return []; }
+        })(),
+        count: row.count,
+      })),
     } : null,
     budgets: budgets.results ?? [],
     budget_history: budgetHistory.results ?? [],

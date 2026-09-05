@@ -66,6 +66,12 @@ Do not develop directly on `preview`, push directly to either long-lived branch,
 
 ## Local development
 
+Authorization and role-protected feature development are documented in
+[`AUTHORIZATION.md`](AUTHORIZATION.md). New interactive administrative APIs
+must use the GitHub session, server-resolved role, mutation CSRF validation,
+and privileged-action audit pattern described there; `ADMIN_SECRET` is not a
+browser authorization mechanism.
+
 ### First-time setup
 
 ```bash
