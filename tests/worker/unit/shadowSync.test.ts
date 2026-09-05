@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   differingFields,
   nonRetryableShadowError,
+  shadowContinuationWorkflowInstanceId,
   shadowPipelineRunId,
   shadowWorkflowInstanceId,
 } from '../../../worker/shadowSync.js';
@@ -30,6 +31,20 @@ describe('shadow sync parity comparison', () => {
     expect(shadowPipelineRunId(firstLegacyRun)).toBe(`shadow-${firstLegacyRun}`);
     expect(shadowWorkflowInstanceId(firstLegacyRun)).toBe(`shadow-start-${firstLegacyRun}`);
     expect(shadowWorkflowInstanceId(firstLegacyRun)).not.toBe(shadowWorkflowInstanceId(secondLegacyRun));
+  });
+
+  it('gives manual pipeline continuations stable, distinct Workflow identities', async () => {
+    const firstPipeline = 'shadow-manual-11111111-1111-4111-8111-111111111111';
+    const secondPipeline = 'shadow-manual-22222222-2222-4222-8222-222222222222';
+
+    const firstId = await shadowContinuationWorkflowInstanceId(firstPipeline, 'finalize');
+    const firstRetryId = await shadowContinuationWorkflowInstanceId(firstPipeline, 'finalize');
+    const secondId = await shadowContinuationWorkflowInstanceId(secondPipeline, 'finalize');
+
+    expect(firstId).toBe(firstRetryId);
+    expect(firstId).not.toBe(secondId);
+    expect(firstId).toMatch(/^shadow-[a-f0-9]{16}-finalize$/);
+    expect(firstId.length).toBeLessThanOrEqual(100);
   });
 
   it('preserves the Workflow runtime identity for terminal failures', () => {
