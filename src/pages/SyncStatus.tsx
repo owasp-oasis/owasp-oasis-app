@@ -129,14 +129,14 @@ const WORKSPACE_PIPELINES = [
   {
     key: 'legacy',
     title: 'Legacy Workspace runs',
-    description: 'The current production writer while the canonical schedule remains behind its cutover gate.',
+    description: 'Retired historical runs retained for debugging and rollback review. This pipeline can no longer be triggered.',
     parentJobKey: 'legacy_workspace_sync',
     mode: 'legacy',
   },
   {
     key: 'canonical',
     title: 'Canonical Workspace runs',
-    description: 'The bounded replacement writer used for canaries and, after cutover, the production schedule.',
+    description: 'The bounded production writer scheduled every four hours.',
     parentJobKey: 'canonical_workspace_sync',
     mode: 'live',
   },
@@ -516,7 +516,7 @@ export default function SyncStatus() {
     }
   }, [payload])
 
-  const renderJob = (job: PublicJob, stateKey: string, pipeline: string) => {
+  const renderJob = (job: PublicJob, stateKey: string, pipeline: string, actionsEnabled = true) => {
     const actionKey = `${pipeline}:${job.key}`
     return (
     <details
@@ -543,7 +543,7 @@ export default function SyncStatus() {
         ) : (
           <p className="sync-job-empty">This job has no tracked runs in this pipeline yet.</p>
         )}
-        {user?.role === 'admin' && job.retryable && (
+        {user?.role === 'admin' && actionsEnabled && job.retryable && (
           <div className="sync-admin-actions">
             <span>Admin action</span>
             <button
@@ -784,6 +784,7 @@ export default function SyncStatus() {
                           job,
                           `pipeline:${pipeline.key}:job:${job.key}`,
                           pipeline.key,
+                          pipeline.key !== 'legacy',
                         ))}
                       </div>
                     </div>

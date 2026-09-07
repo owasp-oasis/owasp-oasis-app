@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_synced_at',   '2020-01-01T00:00:00Z');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
-INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_sync_enabled', '0');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_sync_enabled', '1');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_run_id', '');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_phase', 'idle');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');

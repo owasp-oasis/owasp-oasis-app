@@ -160,7 +160,7 @@ describe('server-side roles and sync retries', () => {
     } as Env;
     await insertTestRepo(env, { id: 101, name: 'current-fork' });
     const failedRunId = await startSyncJob(env.DB, {
-      jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'legacy',
+      jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'live',
     });
     await finishSyncJob(env.DB, failedRunId, 'failed', {
       errorCode: 'github_request_failed', error: 'Temporary GitHub failure',
@@ -177,7 +177,7 @@ describe('server-side roles and sync retries', () => {
     const csrf = makeCsrf();
     const ctx = createExecutionContext();
     const response = await handleRetrySyncJob(
-      retryRequest('repository_inventory', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
+      retryRequest('repository_inventory', admin.sessionCookie, admin.tokenCookie, csrf, 'canonical'),
       productionEnv,
       ctx,
       'repository_inventory',
@@ -191,7 +191,7 @@ describe('server-side roles and sync retries', () => {
     const retried = await env.DB.prepare(
       'SELECT status, trigger_type, mode FROM sync_job_runs WHERE id = ?',
     ).bind(body.retry_run_id).first<{ status: string; trigger_type: string; mode: string }>();
-    expect(retried).toEqual({ status: 'queued', trigger_type: 'manual', mode: 'legacy' });
+    expect(retried).toEqual({ status: 'queued', trigger_type: 'manual', mode: 'live' });
     expect(workflows).toHaveLength(1);
     expect(workflows[0].params.jobKey).toBe('repository_inventory');
 
@@ -202,7 +202,7 @@ describe('server-side roles and sync retries', () => {
     expect(audit.results).toEqual([
       expect.objectContaining({
         github_user_id: 7505051, github_login: 'humor4fun', role: 'admin',
-        action: 'sync_job.retry', target_id: 'legacy:repository_inventory', outcome: 'accepted',
+        action: 'sync_job.retry', target_id: 'canonical:repository_inventory', outcome: 'accepted',
       }),
     ]);
   });
@@ -299,14 +299,14 @@ describe('server-side roles and sync retries', () => {
     expect(historicalAnalyticsRun).toEqual({ status: 'deferred', trigger_type: 'manual', mode: 'live' });
 
     const failedRunId = await startSyncJob(env.DB, {
-      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy',
+      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'live',
     });
     await finishSyncJob(env.DB, failedRunId, 'failed');
     await startSyncJob(env.DB, {
-      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy', status: 'queued',
+      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'live', status: 'queued',
     });
     const active = await handleRetrySyncJob(
-      retryRequest('orphan_cleanup', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
+      retryRequest('orphan_cleanup', admin.sessionCookie, admin.tokenCookie, csrf, 'canonical'),
       productionEnv,
       createExecutionContext(),
       'orphan_cleanup',
@@ -363,7 +363,7 @@ describe('server-side roles and sync retries', () => {
     })));
   });
 
-  it('dispatches legacy, canonical, and shadow parent runs with manual tracking', async () => {
+  it('rejects retired legacy runs while dispatching canonical and shadow parents', async () => {
     const workspaceDispatches: Array<{ params: { action: string; pipelineKind?: string } }> = [];
     const shadowDispatches: Array<{ params: { action: string; legacyPipelineRunId: string } }> = [];
     const productionEnv = {
@@ -385,22 +385,28 @@ describe('server-side roles and sync retries', () => {
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
     const csrf = makeCsrf();
 
-    for (const target of [
-      { jobKey: 'legacy_workspace_sync', pipeline: 'legacy' as const },
-      { jobKey: 'canonical_workspace_sync', pipeline: 'canonical' as const },
-    ]) {
-      const response = await handleRetrySyncJob(
-        retryRequest(target.jobKey, admin.sessionCookie, admin.tokenCookie, csrf, target.pipeline),
-        productionEnv,
-        createExecutionContext(),
-        target.jobKey,
-      );
-      expect(response.status, target.jobKey).toBe(202);
-      await env.DB.prepare(
-        "UPDATE sync_job_runs SET status = 'succeeded', finished_at = ? WHERE status IN ('queued', 'running')",
-      ).bind(new Date().toISOString()).run();
-      await env.DB.prepare('DELETE FROM sync_pipeline_locks').run();
-    }
+    const legacy = await handleRetrySyncJob(
+      retryRequest('legacy_workspace_sync', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
+      productionEnv,
+      createExecutionContext(),
+      'legacy_workspace_sync',
+    );
+    expect(legacy.status).toBe(410);
+    await expect(legacy.json()).resolves.toEqual(expect.objectContaining({
+      error: 'Legacy Workspace synchronization is retired.',
+    }));
+
+    const canonical = await handleRetrySyncJob(
+      retryRequest('canonical_workspace_sync', admin.sessionCookie, admin.tokenCookie, csrf, 'canonical'),
+      productionEnv,
+      createExecutionContext(),
+      'canonical_workspace_sync',
+    );
+    expect(canonical.status).toBe(202);
+    await env.DB.prepare(
+      "UPDATE sync_job_runs SET status = 'succeeded', finished_at = ? WHERE status IN ('queued', 'running')",
+    ).bind(new Date().toISOString()).run();
+    await env.DB.prepare('DELETE FROM sync_pipeline_locks').run();
 
     const shadow = await handleRetrySyncJob(
       retryRequest('shadow_sync_dispatch', admin.sessionCookie, admin.tokenCookie, csrf, 'shadow'),
@@ -410,7 +416,6 @@ describe('server-side roles and sync retries', () => {
     );
     expect(shadow.status).toBe(202);
     expect(workspaceDispatches.map(item => item.params)).toEqual([
-      expect.objectContaining({ action: 'inventory', pipelineKind: 'legacy' }),
       expect.objectContaining({ action: 'inventory', pipelineKind: 'canonical' }),
     ]);
     expect(shadowDispatches).toHaveLength(1);

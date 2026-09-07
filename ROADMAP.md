@@ -1,6 +1,6 @@
 # OASIS product and operations roadmap
 
-Last reviewed: 2026-09-03
+Last reviewed: 2026-09-06
 
 This file is the durable backlog for work that is planned, partially implemented, or intentionally waiting on an operational gate. Update the status and acceptance criteria here when work starts or lands so feature intent does not remain only in issues, branch names, or conversations.
 
@@ -8,36 +8,43 @@ This file is the durable backlog for work that is planned, partially implemented
 
 - Keep production changes atomic, independently revertible, and documented with verification and rollback scope.
 - Start development from current `main` on a short-lived branch such as `feat/new-feature-name`; use PRs for every transition into `preview` or `main`.
-- Keep the legacy Workspace cron authoritative until the shadow Workflow repeatedly produces the same result and is explicitly approved for cutover.
+- Keep historical legacy Workspace runs available for diagnosis, but do not expose a live scheduling or manual retry path after canonical promotion.
 - Develop and validate the analytics dashboard on its own feature branch after sync status is operational and stable.
 - Never expose a username or other user-identifying value in administrative analytics. Usernames may appear only in the user's own profile and the existing contributor panel.
 - Administrative engagement metrics must be aggregate-only. Do not provide individual event rows, stable user pseudonyms, or low-cardinality slices that allow an administrator to infer a person's identity.
 - Apply D1 migrations before or with the Worker version that consumes them. Public operational pages must degrade gracefully if code and schema briefly differ during rollout.
 
-## In implementation: free-tier bounded synchronization replacement
+## Implemented: free-tier bounded synchronization replacement
 
 Current state:
 
 - The public Workspace status page, job history, budget history, incomplete-run archive, and shadow parity system are implemented in `main` and `preview`.
 - Migration `0007_sync_job_observability.sql` is applied to the shared remote D1 database.
-- The bounded canonical writer is implemented while production scheduling remains disabled in D1 by default.
-- The existing production synchronizer remains the scheduled path until the cutover flag is explicitly enabled and remains available as the first rollback path.
+- The bounded canonical writer is the production Workspace synchronizer and runs every four hours.
+- The legacy synchronizer is retired from scheduled and manual execution. Historical legacy run records remain visible for diagnosis, and its internal implementation is retained temporarily as a one-release rollback boundary.
 - Preview is shadow-only and runs one daily comparison against the shared canonical tables.
 - Canonical collection is split into one-PR, one-comment-reaction, and one-duplicate-close Workflow instances. The application keeps each unit below the Cloudflare Workers Free ceiling, which the platform applies automatically; the Wrangler configuration intentionally omits paid-only custom runtime limits.
 - A renewable D1 lease prevents overlapping canonical runs, and the public status page exposes the phase, lease, schedule gate, job history, and budgets.
-- Production scheduling cannot be enabled until the latest shadow result records at least three consecutive matches and cutover eligibility.
+- Canonical promotion was approved after the third consecutive shadow match compared 810 of 810 entities with zero differences on 2026-09-06.
 - GitHub authentication failures terminate the shadow inventory and mark blocked downstream jobs instead of leaving them running indefinitely.
 
-Exit criteria before cutover review:
+Completed cutover evidence:
 
-- Complete repeated production shadow runs without unhandled errors.
-- Reach three consecutive parity matches.
-- Inspect every mismatch category and document any intentional difference.
-- Use the aggregate parity difference categories on the status page to resolve every nonzero entity or field mismatch without exposing entity identifiers.
-- Confirm Workflow step, request, D1, and GitHub API budgets remain below their limits over the retained history.
-- Prove orphan cleanup, duplicate projection, contributor scoring, comment/reaction processing, and upstream merge detection match the legacy results.
-- Exercise rollback while the legacy cron remains available.
-- Obtain an explicit cutover decision; eligibility shown on the status page is not automatic authorization.
+- Three consecutive production shadow runs completed without unhandled errors and reached exact parity.
+- The final gate compared 810 of 810 entities with zero differences or source changes during comparison.
+- Repository inventory, PR collection, reactions, vote projection, duplicate projection, contributor scoring, and orphan cleanup all completed successfully.
+- Workflow and GitHub request observations remained within the configured operational budgets.
+- The product owner explicitly authorized canonical promotion after reviewing the completed third run.
+- The internal legacy implementation remains available for one release as a code-level rollback boundary, but it has no scheduled or admin-triggered execution path.
+
+## Planned: parallel canonical and shadow work queues
+
+The post-cutover performance plan is intentionally on hold. Preserve it for later implementation on `feat/parallel-sync-jobs`:
+
+- Keep whole pipeline runs mutually exclusive, but process repository, pull-request, upstream-status, and reaction work through four bounded lanes.
+- Add atomic D1 work-item claims and stage barriers so producer and consumer stages can overlap without duplicate processing or premature finalization.
+- Record per-item duration, GitHub request count, retry count, lane, queue depth, and estimated remaining time on the status page.
+- Validate the change in shadow first with three exact parity runs before applying the shared orchestration to canonical; do not retrofit the retired legacy pipeline.
 
 Development and promotion policy:
 

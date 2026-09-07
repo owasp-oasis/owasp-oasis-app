@@ -241,6 +241,7 @@ export async function canonicalCutoverEligible(db: D1Database): Promise<boolean>
   const row = await db.prepare(`
     SELECT eligible_for_cutover, consecutive_matches
       FROM sync_parity_runs
+     WHERE status <> 'pending'
      ORDER BY created_at DESC LIMIT 1
   `).first<{ eligible_for_cutover: number; consecutive_matches: number }>();
   return row?.eligible_for_cutover === 1 && row.consecutive_matches >= 3;
