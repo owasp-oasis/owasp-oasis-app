@@ -1,6 +1,6 @@
 import type { Env, ManualSyncJobKey, OrphanCleanupActor } from '../types.js';
 import { roleAllows, getRequestPrincipal, recordPrivilegedAction } from '../authorization.js';
-import { startBoundedLegacySync, startCanonicalSync } from '../canonicalSync.js';
+import { startCanonicalSync } from '../canonicalSync.js';
 import { failHubSpotSyncDispatch, initializeHubSpotSyncRun } from '../hubSpotSyncWorkflow.js';
 import { failManualSyncJobDispatch, initializeManualSyncJob } from '../manualSyncJobWorkflow.js';
 import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphanCleanupWorkflow.js';
@@ -121,16 +121,18 @@ export async function handleRetrySyncJob(
   if (!TRIGGERABLE_JOB_KEYS.has(jobKey)) return jsonErr('This job is not currently runnable', 409, request);
 
   const pipeline = await requestedPipeline(request, jobKey);
+  if (pipeline === 'legacy' || jobKey === 'legacy_workspace_sync') {
+    return jsonErr('Legacy Workspace synchronization is retired.', 410, request);
+  }
   const pipelineMismatch =
-    (jobKey === 'legacy_workspace_sync' && pipeline !== 'legacy')
-    || (jobKey === 'canonical_workspace_sync' && pipeline !== 'canonical')
+    (jobKey === 'canonical_workspace_sync' && pipeline !== 'canonical')
     || (jobKey === 'shadow_sync_dispatch' && pipeline !== 'shadow')
     || (jobKey === 'hubspot_contacts' && pipeline !== 'integration')
     || (ANALYTICS_JOB_KEYS.has(jobKey) && pipeline !== 'analytics')
     || (pipeline === 'integration' && jobKey !== 'hubspot_contacts')
     || (pipeline === 'analytics' && !ANALYTICS_JOB_KEYS.has(jobKey));
   if (pipelineMismatch) return jsonErr('Job does not belong to the requested pipeline', 400, request);
-  const mode = pipeline === 'legacy' ? 'legacy' : pipeline === 'shadow' ? 'shadow' : 'live';
+  const mode = pipeline === 'shadow' ? 'shadow' : 'live';
   const retriedRunId = await latestRunId(env, jobKey, mode);
 
   if (pipeline === 'shadow') {
@@ -150,16 +152,14 @@ export async function handleRetrySyncJob(
     }, { status: dispatch.started ? 202 : 409 }), request);
   }
 
-  if (jobKey === 'legacy_workspace_sync' || jobKey === 'canonical_workspace_sync') {
+  if (jobKey === 'canonical_workspace_sync') {
     if (await activeManualWorkspaceRun(env)) {
       return jsonErr('Another manually triggered Workspace job is already running', 409, request);
     }
     await recordPrivilegedAction(env, principal, {
       action: 'sync_job.retry', targetType: 'sync_job', targetId: `${pipeline}:${jobKey}`, outcome: 'accepted',
     });
-    const dispatch = jobKey === 'legacy_workspace_sync'
-      ? await startBoundedLegacySync(env, 'manual')
-      : await startCanonicalSync(env, 'manual');
+    const dispatch = await startCanonicalSync(env, 'manual');
     return secHeaders(Response.json({
       ok: dispatch.started,
       accepted: dispatch.started,

@@ -33,7 +33,7 @@ describe('public sync status', () => {
     expect(body.observability_ready).toBe(true);
     expect(body.overall.last_success_at).toBe('2020-01-01T00:00:00Z');
     expect(body.canonical).toEqual(expect.objectContaining({
-      schedule_enabled: false,
+      schedule_enabled: true,
       phase: 'idle',
       lock: null,
     }));
@@ -45,7 +45,8 @@ describe('public sync status', () => {
     };
     const executableJobs = productionStatus.jobs;
     expect(executableJobs.length).toBeGreaterThan(0);
-    expect(executableJobs.every(job => job.retryable)).toBe(true);
+    expect(executableJobs.find(job => job.key === 'legacy_workspace_sync')?.retryable).toBe(false);
+    expect(executableJobs.filter(job => job.key !== 'legacy_workspace_sync').every(job => job.retryable)).toBe(true);
   });
 
   it('derives the primary status from every child in the latest Workspace pipeline', async () => {
@@ -112,6 +113,14 @@ describe('public sync status', () => {
         eligible_for_cutover, created_at
       ) VALUES ('parity-3', ?, 'match', 3, 1, ?)
     `).bind(new Date().toISOString(), new Date(Date.now() + 1_000).toISOString()).run();
+    expect(await canonicalCutoverEligible(env.DB)).toBe(true);
+
+    await env.DB.prepare(`
+      INSERT INTO sync_parity_runs (
+        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
+        eligible_for_cutover, created_at
+      ) VALUES ('parity-pending', ?, 'pending', 0, 0, ?)
+    `).bind(new Date().toISOString(), new Date(Date.now() + 2_000).toISOString()).run();
     expect(await canonicalCutoverEligible(env.DB)).toBe(true);
   });
 

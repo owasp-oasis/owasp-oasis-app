@@ -33,8 +33,8 @@ export interface StartSyncJobOptions {
 }
 
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
-  { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
-  { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Manual canary; every 4 hours after activation', criticalForWorkspace: true, retryable: true },
+  { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Retired; historical runs only', criticalForWorkspace: false, retryable: false },
+  { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'Daily in preview', criticalForWorkspace: false, retryable: true },
   { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },

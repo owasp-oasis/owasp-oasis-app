@@ -22,10 +22,7 @@ import { runTrackedHubSpot } from './scheduledJobs.js';
 import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
-  canonicalCutoverEligible,
-  canonicalScheduleEnabled,
   setCanonicalScheduleEnabled,
-  startBoundedLegacySync,
   startCanonicalSync,
 } from './canonicalSync.js';
 import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
@@ -238,7 +235,7 @@ export default {
          return secHeaders(Response.json({ repositories, pull_requests: { deferred_to_canonical_sync: true } }), request);
        }
 
-       /* ── Bounded canonical sync canary and schedule controls ──── */
+       /* ── Bounded canonical sync controls ─────────────────────── */
        if (method === 'POST' && url.pathname === '/api/admin/sync/canonical/run') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          const result = await startCanonicalSync(env, 'manual');
@@ -255,11 +252,11 @@ export default {
            return jsonErr('Request body must be valid JSON.', 400, request);
          }
          if (typeof body.enabled !== 'boolean') return jsonErr('enabled must be a boolean', 400, request);
-         if (body.enabled && !await canonicalCutoverEligible(env.DB)) {
-           return jsonErr('Canonical scheduling requires three consecutive matching shadow parity runs.', 409, request);
+         if (!body.enabled) {
+           return jsonErr('Canonical scheduling is permanently enabled; the legacy sync is retired.', 409, request);
          }
-         await setCanonicalScheduleEnabled(env.DB, body.enabled);
-         return jsonOk({ enabled: body.enabled }, request);
+         await setCanonicalScheduleEnabled(env.DB, true);
+         return jsonOk({ enabled: true, legacy_retired: true }, request);
        }
 
        /* ── Leaderboard API ───────────────────────────────────────── */
@@ -346,11 +343,6 @@ export default {
     }
     if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
-      return;
-    }
-    if (!await canonicalScheduleEnabled(env.DB)) {
-      const dispatch = await startBoundedLegacySync(env);
-      console.log(JSON.stringify({ event: 'bounded_legacy_sync_dispatched', ...dispatch }));
       return;
     }
     const dispatch = await startCanonicalSync(env, 'scheduled');
