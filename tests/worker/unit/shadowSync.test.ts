@@ -33,6 +33,14 @@ describe('shadow sync parity comparison', () => {
     expect(shadowWorkflowInstanceId(firstLegacyRun)).not.toBe(shadowWorkflowInstanceId(secondLegacyRun));
   });
 
+  it('sanitizes preview schedule timestamps for Cloudflare Workflow IDs', () => {
+    const previewRun = 'preview-2026-09-06T02:30:27.000Z';
+
+    expect(shadowWorkflowInstanceId(previewRun))
+      .toBe('shadow-start-preview-2026-09-06T02-30-27-000Z');
+    expect(shadowWorkflowInstanceId(previewRun)).toMatch(/^[a-zA-Z0-9-_]+$/);
+  });
+
   it('gives manual pipeline continuations stable, distinct Workflow identities', async () => {
     const firstPipeline = 'shadow-manual-11111111-1111-4111-8111-111111111111';
     const secondPipeline = 'shadow-manual-22222222-2222-4222-8222-222222222222';

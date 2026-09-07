@@ -461,7 +461,9 @@ export function shadowPipelineRunId(legacyPipelineRunId: string): string {
 }
 
 export function shadowWorkflowInstanceId(legacyPipelineRunId: string): string {
-  return `shadow-start-${legacyPipelineRunId}`.slice(0, 100);
+  return `shadow-start-${legacyPipelineRunId}`
+    .replace(/[^a-zA-Z0-9-_]/g, '-')
+    .slice(0, 100);
 }
 
 export async function shadowContinuationWorkflowInstanceId(
