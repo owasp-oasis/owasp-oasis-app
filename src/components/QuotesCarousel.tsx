@@ -7,7 +7,7 @@ export interface Quote {
   company: string
   quote: string
   photoUrl: string | null
-  linkedinUrl: string
+  linkedinUrl?: string
 }
 
 interface Props {
@@ -47,6 +47,8 @@ function Avatar({ quote }: { quote: Quote }) {
 }
 
 function QuoteCard({ quote }: { quote: Quote }) {
+  const role = [quote.title, quote.company].filter(Boolean).join(' · ')
+
   return (
     <div className="quote-card">
       <blockquote className="quote-text">
@@ -55,17 +57,19 @@ function QuoteCard({ quote }: { quote: Quote }) {
       <div className="quote-attribution">
         <Avatar quote={quote} />
         <div className="quote-person">
-          <a
-            className="quote-name"
-            href={quote.linkedinUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {quote.name}
-          </a>
-          <span className="quote-role">
-            {quote.title} &middot; {quote.company}
-          </span>
+          {quote.linkedinUrl ? (
+            <a
+              className="quote-name"
+              href={quote.linkedinUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {quote.name}
+            </a>
+          ) : (
+            <span className="quote-name">{quote.name}</span>
+          )}
+          {role && <span className="quote-role">{role}</span>}
         </div>
       </div>
     </div>
