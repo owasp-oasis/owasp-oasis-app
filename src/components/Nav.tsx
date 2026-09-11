@@ -10,7 +10,7 @@ const links = [
   { to: '/workspace', label: 'Workspace', exact: false },
   { to: '/support', label: 'Support', exact: false },
   { to: '/sponsors', label: 'Sponsors', exact: false },
-  { to: '/news', label: 'News', exact: false },
+  { to: '/news', label: 'News & Events', exact: false },
 ]
 
 interface NavProps {
