@@ -65,8 +65,11 @@ export default function News() {
       <section className="section news-events-section">
         <div className="container">
           <div className="news-section-heading">
-            <span className="badge badge-green">Calendar</span>
-            <h2>Upcoming events</h2>
+            <div>
+              <span className="badge badge-green">Calendar</span>
+              <h2>Upcoming events</h2>
+            </div>
+            <p>Find OASIS in the community, starting with our next conference appearance.</p>
           </div>
 
           <div className="event-grid">
@@ -102,6 +105,7 @@ export default function News() {
               <span className="badge badge-blue">From OASIS</span>
               <h2>Latest news</h2>
             </div>
+            <p>Project announcements and milestones from the OASIS team.</p>
           </div>
 
           <div className="news-grid">
