@@ -102,7 +102,6 @@ export default function News() {
               <span className="badge badge-blue">From OASIS</span>
               <h2>Latest news</h2>
             </div>
-            <p>Project announcements and milestones from the OASIS team.</p>
           </div>
 
           <div className="news-grid">
