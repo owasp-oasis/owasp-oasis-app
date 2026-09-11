@@ -65,10 +65,8 @@ export default function News() {
       <section className="section news-events-section">
         <div className="container">
           <div className="news-section-heading">
-            <div>
-              <span className="badge badge-green">Calendar</span>
-              <h2>Upcoming events</h2>
-            </div>
+            <span className="badge badge-green">Calendar</span>
+            <h2>Upcoming events</h2>
           </div>
 
           <div className="event-grid">
