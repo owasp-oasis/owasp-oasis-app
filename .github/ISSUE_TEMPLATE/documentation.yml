@@ -1,0 +1,49 @@
+name: Documentation improvement
+description: Report missing, inaccurate, confusing, or outdated OASIS documentation.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and pull requests for this documentation change.
+          required: true
+        - label: I removed secrets, tokens, personal data, and other sensitive information.
+          required: true
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Link the page or give the repository path and heading.
+      placeholder: README.md#local-development
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is missing or incorrect?
+      description: Explain the reader's goal and how the current documentation falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Suggested correction
+      description: Supply corrected wording, commands, links, or an outline if possible.
+  - type: input
+    id: audience
+    attributes:
+      label: Intended audience
+      placeholder: First-time contributor, maintainer, administrator, validator, or AI agent
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What should a reader be able to understand or complete after this is fixed?
+    validations:
+      required: true
