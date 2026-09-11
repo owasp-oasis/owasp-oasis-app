@@ -69,7 +69,6 @@ export default function News() {
               <span className="badge badge-green">Calendar</span>
               <h2>Upcoming events</h2>
             </div>
-            <p>Find OASIS in the community, starting with our next conference appearance.</p>
           </div>
 
           <div className="event-grid">
