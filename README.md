@@ -8,6 +8,19 @@ Two live environments:
 
 ---
 
+## Contributing
+
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for issue selection, branch and
+promotion workflow, implementation expectations, testing, commit messages, pull
+requests, and guidance for AI-assisted contributions. Suspected vulnerabilities
+in OASIS itself must follow [`SECURITY.md`](SECURITY.md) and must not be
+disclosed in a public issue.
+
+All community participation is governed by the
+[OWASP Code of Conduct](https://owasp.org/www-policy/operational/code-of-conduct).
+
+---
+
 ## Branch strategy
 
 ```
