@@ -124,6 +124,7 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   security.ts              ← Security headers, CORS, CSRF, rate limiting, response helpers
   validation.ts            ← Input validators (email, GitHub handle, role) and body parser
   db.ts                    ← D1 database helpers (upsert, getSyncState, rebuildContributors)
+  responseBadges.ts        ← Independent response-recognition rules and calculations
   github.ts                ← GitHub API client, comment/PR body parsers, bot detection
   sync.ts                  ← GitHub sync engine (cron full sync + chunked manual sync)
   hubspot.ts               ← Durable registration and application contact sync
@@ -203,6 +204,7 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `security.ts` | Content Security Policy, security response headers, CORS preflight, CSRF token generation and validation, rate limiting (KV-backed), `jsonOk`/`jsonErr` response helpers |
 | `validation.ts` | Sanitizes and validates all user input: email (RFC 5322 + blocklist), GitHub username, name, role, request body size and JSON parsing |
 | `db.ts` | All D1 read/write operations: upsert repos, PRs, participants, contributors; sync state key/value store; `rebuildContributors` aggregation |
+| `responseBadges.ts` | Calculates First Responder, Fast Responder, and Coverage Contributor independently of reputation and vote weight |
 | `github.ts` | GitHub REST API client (`ghFetch`, `ghFetchAll` with pagination); parses OASIS decision comments (`accept`/`modify`/`reject`); detects SAST tool from PR body; filters automated/bot accounts |
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
 | `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
