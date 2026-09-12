@@ -47,6 +47,7 @@ body.lb-tabs-docked .nav {
   font-size: 0.95rem;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
   transition: color 0.15s, background 0.15s;
   text-decoration: none;
 }
