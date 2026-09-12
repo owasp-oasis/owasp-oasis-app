@@ -264,6 +264,20 @@ CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
+CREATE TABLE IF NOT EXISTS validation_requests (
+  pr_id              INTEGER PRIMARY KEY,
+  requested_at       TEXT NOT NULL,
+  request_source     TEXT NOT NULL DEFAULT 'workspace_sync',
+  status             TEXT NOT NULL DEFAULT 'open',
+  badge_eligible     INTEGER NOT NULL DEFAULT 1,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_requests_eligibility
+  ON validation_requests(badge_eligible, requested_at);
+
 CREATE TABLE IF NOT EXISTS sync_job_runs (
   id TEXT PRIMARY KEY, pipeline_run_id TEXT, workflow_instance_id TEXT,
   job_key TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL,
@@ -395,6 +409,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'sync_pipeline_locks',
     'hubspot_sync_queue',
     'user_votes',
+    'validation_requests',
     'user_preferences',
     'user_sessions',
     'privileged_action_audit',

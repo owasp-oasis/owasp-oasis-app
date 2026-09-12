@@ -301,6 +301,25 @@ CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
+-- A validation request starts when a new open PR first becomes available in
+-- the OASIS Workspace. Response badges do not alter contributor reputation.
+CREATE TABLE IF NOT EXISTS validation_requests (
+  pr_id              INTEGER PRIMARY KEY,
+  requested_at       TEXT NOT NULL,
+  request_source     TEXT NOT NULL DEFAULT 'workspace_sync'
+                     CHECK(request_source IN ('workspace_sync', 'explicit_request')),
+  status             TEXT NOT NULL DEFAULT 'open'
+                     CHECK(status IN ('open', 'responded', 'closed', 'cancelled')),
+  badge_eligible     INTEGER NOT NULL DEFAULT 1
+                     CHECK(badge_eligible IN (0, 1)),
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_requests_eligibility
+  ON validation_requests(badge_eligible, requested_at);
+
 -- Sync observability and shadow validation tables are introduced by
 -- migrations/0007_sync_job_observability.sql. Apply migrations after this
 -- bootstrap schema when creating a fresh local database.

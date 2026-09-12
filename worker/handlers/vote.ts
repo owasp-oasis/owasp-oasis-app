@@ -357,6 +357,11 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, commentId, now).run();
+    await env.DB.prepare(`
+      UPDATE validation_requests
+      SET status = 'responded', updated_at = ?
+      WHERE pr_id = ? AND status = 'open'
+    `).bind(now, pr.id).run();
     voteRecorded = true;
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);

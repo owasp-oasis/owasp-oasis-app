@@ -5,6 +5,7 @@
 import type { Env, ParsedQuery } from '../types.js';
 import { secHeaders } from '../security.js';
 import { BOT_TO_TOOL, BOT_TO_VALIDATOR_TOOL } from '../github.js';
+import { getResponseBadgeSummary } from '../responseBadges.js';
 
 /* ─── QUERY HELPER ───────────────────────────────────────────── */
 export function parseQuery(url: URL): ParsedQuery {
@@ -373,7 +374,9 @@ export async function handleContributorDetail(env: Env, req: Request, login: str
       };
     });
 
-  return lbResponse({ contributor, allTimeRank, contributions }, req);
+  const responseBadges = await getResponseBadgeSummary(env.DB, login);
+
+  return lbResponse({ contributor, allTimeRank, contributions, responseBadges }, req);
 }
 
 export async function handleMaintainers(env: Env, req: Request, url: URL): Promise<Response> {
