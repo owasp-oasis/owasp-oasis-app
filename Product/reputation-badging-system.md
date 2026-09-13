@@ -1,6 +1,6 @@
 # OASIS Reputation and Recognition System
 
-**Status:** Response-recognition MVP implemented locally; maintainer and upstream lifecycle specified for the next phase
+**Status:** Response-recognition MVP and maintainer/upstream workflow implemented locally
 **Initial scope:** First response, fast response, and unattended-request coverage
 **Important:** These recognitions do not alter the existing reputation formula, ranks, vote weight, or permissions.
 
@@ -76,8 +76,7 @@ The MVP counts a structured OASIS Accept, Modify, Reject, or Duplicate vote subm
 - known automated comments excluded by the existing synchronization pipeline.
 
 The current parser recognizes the OASIS comment format, but the response-badge
-MVP does not implement moderation, invalidation, or the separate persisted
-maintainer decision described below. For that reason, the badge UI uses
+MVP does not implement moderation or invalidation. For that reason, the badge UI uses
 “recognized OASIS vote,” not “verified expertise” or “quality-qualified review.”
 
 ## Maintainer decision layer
@@ -95,15 +94,19 @@ the maintainer's reason, actor, timestamp, and review history so the contributor
 can revise the candidate and return it to Maintainer Review.
 
 Maintainer decisions require server-side authorization, CSRF protection,
-idempotency, and an audit record. The current maintainer leaderboard is
-informational and does not by itself grant permission to make these decisions.
+idempotency, and an audit record. These controls are implemented in the OASIS
+UX. The initial deployment authorizes the existing `admin` role as the
+maintainer role; a project-specific maintainer role can be added later without
+changing the workflow data model. The maintainer leaderboard remains
+informational and does not by itself grant permission to make decisions.
 
 ## Upstream submission and outcome
 
-After `Maintainer Accepted`, OASIS can create a separate cross-fork GitHub PR
-against the upstream repository. The original OASIS PR cannot be retargeted to a
-different base repository, so OASIS must retain a durable link between the two
-PRs.
+After `Maintainer Accepted`, OASIS creates a separate cross-fork GitHub PR
+against the upstream repository from the validated source branch. The original
+OASIS PR cannot be retargeted to a different base repository, so OASIS retains a
+durable link between the two PRs. A confirmation step is required before the
+external GitHub write.
 
 An upstream submission record should retain:
 
@@ -122,7 +125,8 @@ Use `Maintainer Declined` or `Declined Upstream` only when the evidence supports
 that interpretation.
 
 The upstream PR is the source of truth for upstream review and merge outcome.
-OASIS should synchronize that outcome and show it on the original OASIS PR with
+OASIS refreshes that outcome when the workflow panel is opened and shows it on
+the original OASIS PR with
 the upstream link, status chip, actor, timestamp, and reason when available.
 
 ## MVP recognitions
@@ -204,7 +208,6 @@ The MVP deliberately defers:
 - persisted provisional, historical, and revoked badge awards;
 - moderator invalidation and appeal workflows;
 - evidence links for individual qualifying responses;
-- the maintainer decision and upstream submission workflow described above;
 - Reliable Validator, Maintainer Ally, and Sustained Contributor badges; and
 - any connection between badges and workflow permissions.
 

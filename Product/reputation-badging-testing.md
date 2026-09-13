@@ -10,6 +10,12 @@ Use Node 22 from the repository root:
 npm run test:badges
 ```
 
+To exercise the maintainer and upstream workflow directly:
+
+```bash
+npm run test:workflow
+```
+
 The tests cover:
 
 - creation of a badge-eligible clock for a newly discovered PR;
@@ -56,20 +62,23 @@ The seed uses dates relative to the time it is run, so rolling badge windows rem
 The setup command modifies only Wrangler’s local D1 database. It does not apply remote migrations or deploy the application.
 Stop the preview with `Ctrl+C` when finished.
 
-## Planned maintainer and upstream workflow
+## Maintainer and upstream workflow
 
-The response-recognition MVP currently demonstrates validator activity and
-badges. The next workflow phase should be accepted only when it preserves the
-following distinctions:
+The workflow is available through the PR panel's **Workflow** tab. It preserves
+the following distinctions:
 
 - `Accept`, `Modify`, and `Reject` remain validator decisions;
 - `Changes Requested` preserves a maintainer reason and returns the candidate to
   maintainer review after revision;
 - `Maintainer Accepted` means approved for upstream submission, not merged;
-- `Submitted Upstream` links to a separate upstream GitHub PR;
+- `Submitted Upstream` links to a separate upstream GitHub PR created only
+  after explicit confirmation;
 - `Merged Upstream` is shown only after GitHub confirms the upstream merge; and
 - an unmerged closed upstream PR is shown as `Closed Without Merge` unless a
   documented decline reason is available.
 
-None of these maintainer or upstream states should change the existing
-reputation score or response-badge calculations.
+The integration suite also verifies authorization, CSRF protection, idempotent
+decision submission, append-only decision history, upstream branch/SHA
+linkage, upstream review requests, and merge projection. None of these
+maintainer or upstream states changes the existing reputation score or
+response-badge calculations.

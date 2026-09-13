@@ -45,6 +45,7 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handlePRWorkflow, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
@@ -296,6 +297,20 @@ export default {
        if (method === 'GET' && contributorDetailMatch) {
          const login = decodeURIComponent(contributorDetailMatch[1]);
          return await handleContributorDetail(env, request, login);
+       }
+
+       /* ── Maintainer disposition and upstream submission ─────────── */
+       const workflowMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/workflow$/);
+       if (method === 'GET' && workflowMatch) {
+         return await handlePRWorkflow(request, env, Number(workflowMatch[1]));
+       }
+       const maintainerDecisionMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/maintainer-decision$/);
+       if (method === 'POST' && maintainerDecisionMatch) {
+         return await handleMaintainerDecision(request, env, Number(maintainerDecisionMatch[1]));
+       }
+       const submitUpstreamMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/submit-upstream$/);
+       if (method === 'POST' && submitUpstreamMatch) {
+         return await handleSubmitUpstream(request, env, Number(submitUpstreamMatch[1]));
        }
 
       if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')

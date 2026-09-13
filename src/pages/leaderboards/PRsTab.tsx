@@ -24,6 +24,9 @@ interface PR {
   consensus_reject: number
   merged_upstream: number
   updated_at: string
+  maintainer_decision?: 'changes_requested' | 'accepted' | 'declined' | null
+  maintainer_decision_at?: string | null
+  upstream_status?: 'pending' | 'open' | 'changes_requested' | 'merged' | 'closed' | 'failed' | null
 }
 
 const TRUST_MIN_CONTRIBUTORS = 10
@@ -86,6 +89,28 @@ function StatusBadge({ status }: { status: OASISStatus }) {
     'Accepted':     'state-badge state-merged',
   }
   return <span className={cls[status]}>{status}</span>
+}
+
+function getWorkflowStatus(pr: PR): string {
+  if (pr.upstream_status === 'merged') return 'Merged Upstream'
+  if (pr.upstream_status === 'changes_requested') return 'Upstream Changes Requested'
+  if (pr.upstream_status === 'open' || pr.upstream_status === 'pending') return 'Submitted Upstream'
+  if (pr.upstream_status === 'closed') return 'Closed Without Merge'
+  if (pr.maintainer_decision === 'declined') return 'Maintainer Declined'
+  if (pr.maintainer_decision === 'changes_requested') {
+    return pr.maintainer_decision_at && pr.updated_at > pr.maintainer_decision_at ? 'Maintainer Review' : 'Changes Requested'
+  }
+  if (pr.maintainer_decision === 'accepted') return 'Maintainer Accepted'
+  return '—'
+}
+
+function WorkflowBadge({ status }: { status: string }) {
+  if (status === '—') return <span style={{ color: 'var(--gray-400)' }}>—</span>
+  const cls = status.includes('Merged') ? 'state-badge state-merged'
+    : status.includes('Declined') || status.includes('Closed') ? 'state-badge state-closed'
+      : status.includes('Requested') ? 'state-badge state-withdrawn'
+        : 'state-badge state-trusted'
+  return <span className={cls}>{status}</span>
 }
 
 const STATUS_DEFINITIONS: { status: OASISStatus; cls: string; description: string; todo?: boolean }[] = [
@@ -343,10 +368,18 @@ export default function PRsTab({
     },
     {
       key: 'oasis_status',
-      label: <StatusKey />,
+      label: <span title="Community validator outcome">Community <StatusKey /></span>,
       sortable: true,
       searchable: false,
       render: (v) => <StatusBadge status={v as OASISStatus} />,
+      align: 'center',
+    },
+    {
+      key: 'id' as keyof AugmentedPR,
+      label: <span title="Maintainer and upstream disposition">Workflow</span>,
+      sortable: false,
+      searchable: false,
+      render: (_v, row) => <WorkflowBadge status={getWorkflowStatus(row)} />,
       align: 'center',
     },
     ...(user ? [{

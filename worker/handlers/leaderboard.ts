@@ -96,7 +96,15 @@ export async function handleRepoDetail(env: Env, req: Request, repoId: number): 
       SELECT id, number, title, state, author, html_url,
              comment_count, oasis_comment_count, non_oasis_comment_count,
              participants, consensus_accept, consensus_modify, consensus_reject,
-             merged_upstream, updated_at
+             merged_upstream, updated_at,
+           (SELECT md.decision FROM maintainer_decisions md
+             WHERE md.pr_id = pull_requests.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision,
+           (SELECT md.created_at FROM maintainer_decisions md
+             WHERE md.pr_id = pull_requests.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision_at,
+             (SELECT us.status FROM upstream_submissions us
+               WHERE us.source_pr_id = pull_requests.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_status,
+             (SELECT us.upstream_pr_url FROM upstream_submissions us
+               WHERE us.source_pr_id = pull_requests.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_pr_url
       FROM pull_requests WHERE repo_id = ? AND deleted = 0
       ORDER BY updated_at DESC
     `).bind(repoId).all<Record<string, unknown>>(),
@@ -147,7 +155,15 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            participants,
            consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
            duplicate_of, closed_as_duplicate,
-           merged_upstream, merged_at, created_at, updated_at
+           merged_upstream, merged_at, created_at, updated_at,
+           (SELECT md.decision FROM maintainer_decisions md
+             WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision,
+           (SELECT md.created_at FROM maintainer_decisions md
+             WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision_at,
+           (SELECT us.status FROM upstream_submissions us
+             WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_status,
+           (SELECT us.upstream_pr_url FROM upstream_submissions us
+             WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_pr_url
     FROM pull_requests p JOIN repos r ON r.id = p.repo_id
     WHERE p.deleted = 0 AND r.active = 1
     ORDER BY ${col} ${dir} LIMIT 500

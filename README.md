@@ -349,7 +349,8 @@ The **Pull Requests** table in the Workspace is the primary work queue for valid
 | Column | Notes |
 |---|---|
 | Pull Request | Combined column: muted repo-name link (top) + PR number and full title below. Title truncated by CSS ellipsis — no JS slice. |
-| Status | OASIS status badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). Header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Community status | OASIS validator outcome badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). The header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Workflow | Separate maintainer/upstream lifecycle badge (`Maintainer Review`, `Changes Requested`, `Maintainer Accepted`, `Submitted Upstream`, `Upstream Changes Requested`, `Merged Upstream`, or `Closed Without Merge`). |
 | My Vote | Shown only when logged in. Displays the user's vote with coloured badge. Row gets a coloured left-border inset shadow: green = Accept, amber = Modify, red = Reject. Also shows `pr-row-agree` (green tint) or `pr-row-disagree` (amber tint) bg overlay when the user's vote matches/diverges from the crowd plurality. |
 | Consensus | Compact stacked bar (Accept/Modify/Reject proportions) + total vote count. Tooltip shows breakdown including OASIS vs non-OASIS comment counts. |
 | Participants | Total unique participants. |
