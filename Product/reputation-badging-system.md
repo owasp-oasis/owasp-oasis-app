@@ -1,6 +1,6 @@
 # OASIS Reputation and Recognition System
 
-**Status:** Response-recognition MVP implemented locally
+**Status:** Response-recognition MVP implemented locally; maintainer and upstream lifecycle specified for the next phase
 **Initial scope:** First response, fast response, and unattended-request coverage
 **Important:** These recognitions do not alter the existing reputation formula, ranks, vote weight, or permissions.
 
@@ -13,6 +13,41 @@ OASIS should recognize people who provide useful and timely human validation wit
 - **Trust badges**, which would require stronger quality and outcome evidence and are not part of this MVP.
 
 Recognition must be understandable and based on public OASIS activity. Popularity, employer, sponsorship, and raw comment volume do not determine badge eligibility.
+
+## End-to-end PR lifecycle
+
+The response badges sit inside a larger candidate-fix workflow. Validator votes,
+the maintainer decision, and the upstream repository outcome are separate
+decision layers.
+
+```mermaid
+stateDiagram-v2
+    [*] --> NeedsReview: GitHub PR discovered by OASIS
+
+    NeedsReview --> Trusted: Validator threshold reached
+    Trusted --> MaintainerReview: Candidate queued for maintainer
+
+    MaintainerReview --> ChangesRequested: Maintainer wants revisions
+    ChangesRequested --> MaintainerReview: Candidate revised
+    MaintainerReview --> MaintainerDeclined: Maintainer rejects candidate
+    MaintainerReview --> MaintainerAccepted: Maintainer approves candidate
+
+    MaintainerAccepted --> SubmittedUpstream: Upstream PR created
+    SubmittedUpstream --> UpstreamChangesRequested: Upstream reviewer requests changes
+    UpstreamChangesRequested --> SubmittedUpstream: Upstream PR updated
+    SubmittedUpstream --> MergedUpstream: Upstream PR merged
+    SubmittedUpstream --> ClosedWithoutMerge: Upstream PR closed without merge
+
+    MaintainerDeclined --> [*]
+    MergedUpstream --> [*]
+    ClosedWithoutMerge --> [*]
+```
+
+`Trusted` means that validator consensus has reached the configured threshold.
+`Maintainer Accepted` means that the candidate is approved for upstream
+submission. `Merged Upstream` means that the upstream repository actually
+merged the separate upstream PR. These labels must not be collapsed into one
+generic `Accepted` state.
 
 ## MVP definitions
 
@@ -40,7 +75,55 @@ The MVP counts a structured OASIS Accept, Modify, Reject, or Duplicate vote subm
 - deleted PRs and PRs classified as duplicates; and
 - known automated comments excluded by the existing synchronization pipeline.
 
-The current parser recognizes the OASIS comment format, but it does not yet implement moderation, invalidation, or a separate persisted quality-review decision. For that reason, the UI uses “recognized OASIS vote,” not “verified expertise” or “quality-qualified review.”
+The current parser recognizes the OASIS comment format, but the response-badge
+MVP does not implement moderation, invalidation, or the separate persisted
+maintainer decision described below. For that reason, the badge UI uses
+“recognized OASIS vote,” not “verified expertise” or “quality-qualified review.”
+
+## Maintainer decision layer
+
+The existing `Accept`, `Modify`, and `Reject` chips remain validator decisions.
+Maintainers need a separate, role-protected decision in the OASIS UX:
+
+- **Maintainer Review** — awaiting a maintainer decision;
+- **Changes Requested** — the candidate has value but needs specific revisions;
+- **Maintainer Accepted** — approved for upstream submission; or
+- **Maintainer Declined** — rejected before an upstream PR is submitted.
+
+`Changes Requested` is a collaboration state, not a rejection. It must preserve
+the maintainer's reason, actor, timestamp, and review history so the contributor
+can revise the candidate and return it to Maintainer Review.
+
+Maintainer decisions require server-side authorization, CSRF protection,
+idempotency, and an audit record. The current maintainer leaderboard is
+informational and does not by itself grant permission to make these decisions.
+
+## Upstream submission and outcome
+
+After `Maintainer Accepted`, OASIS can create a separate cross-fork GitHub PR
+against the upstream repository. The original OASIS PR cannot be retargeted to a
+different base repository, so OASIS must retain a durable link between the two
+PRs.
+
+An upstream submission record should retain:
+
+- source OASIS PR;
+- upstream repository identity and default branch;
+- upstream PR number, URL, and node ID;
+- validated head commit SHA and head branch;
+- submitting actor and submission time;
+- current upstream status and last synchronization time; and
+- close reason when the upstream PR closes without merging.
+
+The upstream status should distinguish `Open`, `Changes Requested`, `Merged`,
+and `Closed Without Merge`. A closed PR is not automatically a merge rejection:
+it may have been withdrawn, superseded, duplicated, or closed by automation.
+Use `Maintainer Declined` or `Declined Upstream` only when the evidence supports
+that interpretation.
+
+The upstream PR is the source of truth for upstream review and merge outcome.
+OASIS should synchronize that outcome and show it on the original OASIS PR with
+the upstream link, status chip, actor, timestamp, and reason when available.
 
 ## MVP recognitions
 
@@ -85,6 +168,22 @@ Contributor panels include a **Badges** tab. Each card shows:
 
 The Score tab remains separate. It also explains the existing bonus multiplier, which is unrelated to response badges.
 
+PR-level status chips should expose the candidate lifecycle separately from the
+decision chips:
+
+```text
+Needs Review → Trusted → Maintainer Review → Maintainer Accepted
+                                      ├── Changes Requested
+                                      └── Maintainer Declined
+
+Maintainer Accepted → Submitted Upstream → Merged Upstream
+                                      └── Closed Without Merge
+```
+
+The existing `Accept`, `Modify`, and `Reject` chips continue to represent the
+validator's decision on the candidate. They are not replaced by these lifecycle
+states.
+
 ## Fairness and integrity
 
 - First Responder is intentionally low stakes because request timing favors some schedules and time zones.
@@ -94,6 +193,7 @@ The Score tab remains separate. It also explains the existing bonus multiplier, 
 - A negative or minority vote is not penalized merely for disagreeing.
 - Historical PRs cannot receive invented response clocks.
 - Rules and thresholds are centralized and versioned in code.
+- Maintainer decisions do not change a validator's response badge or existing reputation score.
 
 ## Deferred work
 
@@ -104,6 +204,7 @@ The MVP deliberately defers:
 - persisted provisional, historical, and revoked badge awards;
 - moderator invalidation and appeal workflows;
 - evidence links for individual qualifying responses;
+- the maintainer decision and upstream submission workflow described above;
 - Reliable Validator, Maintainer Ally, and Sustained Contributor badges; and
 - any connection between badges and workflow permissions.
 

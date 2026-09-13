@@ -55,3 +55,21 @@ The seed uses dates relative to the time it is run, so rolling badge windows rem
 
 The setup command modifies only Wrangler’s local D1 database. It does not apply remote migrations or deploy the application.
 Stop the preview with `Ctrl+C` when finished.
+
+## Planned maintainer and upstream workflow
+
+The response-recognition MVP currently demonstrates validator activity and
+badges. The next workflow phase should be accepted only when it preserves the
+following distinctions:
+
+- `Accept`, `Modify`, and `Reject` remain validator decisions;
+- `Changes Requested` preserves a maintainer reason and returns the candidate to
+  maintainer review after revision;
+- `Maintainer Accepted` means approved for upstream submission, not merged;
+- `Submitted Upstream` links to a separate upstream GitHub PR;
+- `Merged Upstream` is shown only after GitHub confirms the upstream merge; and
+- an unmerged closed upstream PR is shown as `Closed Without Merge` unless a
+  documented decline reason is available.
+
+None of these maintainer or upstream states should change the existing
+reputation score or response-badge calculations.
