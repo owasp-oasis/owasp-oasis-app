@@ -44,7 +44,7 @@
 .dashboard-hero-body { align-items: flex-end; }
 .dashboard-hero h1 { font-family: var(--mono); font-weight: 450; font-size: clamp(2.8rem, 7vw, 5.4rem); line-height: .94; letter-spacing: -.06em; margin: 0; }
 .dashboard-hero h1 span { color: var(--dash-green); }
-.dashboard-hero-body > div:first-child > p { max-width: 660px; margin-top: 24px; color: #bdcddd; font-size: 1.04rem; line-height: 1.6; }
+.dashboard-hero-body > div:first-child > p { max-width: none; margin-top: 24px; color: #bdcddd; font-size: 1.04rem; line-height: 1.6; white-space: nowrap; }
 .dashboard-data-note { display: flex; align-items: center; gap: 8px; margin-top: 28px; color: var(--dash-muted); font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
 .dashboard-data-note span { width: 7px; height: 7px; border-radius: 50%; }
 .dashboard-data-note .is-demo { background: #ffcc55; box-shadow: 0 0 12px rgba(255, 204, 85, .7); }
@@ -198,6 +198,7 @@
 .dashboard-empty { padding: 42px 18px; color: var(--dash-muted); text-align: center; }
 
 @media (max-width: 960px) {
+  .dashboard-hero-body > div:first-child > p { white-space: normal; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .metric-card:nth-child(2n) { border-right: 1px solid var(--dash-line); }
   .metric-card:nth-child(n+3) { border-top: 1px solid var(--dash-line); }

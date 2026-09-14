@@ -93,6 +93,11 @@ function formatDate(date: string | null) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(date))
 }
 
+function formatDateTime(date: string | null) {
+  if (!date) return 'Not yet synced'
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(date))
+}
+
 function number(value: unknown) {
   return Number(value) || 0
 }
@@ -294,7 +299,7 @@ export default function Dashboard() {
               <p>Automated fixes found, human judgment applied, and trusted security improvements moved upstream.</p>
             </div>
           </div>
-          <div className="dashboard-data-note"><span className={usingDemo ? 'is-demo' : 'is-live'} />{usingDemo ? 'Snapshot' : 'Live workspace data'}</div>
+          <div className="dashboard-data-note"><span className={usingDemo ? 'is-demo' : 'is-live'} />{usingDemo ? `Snapshot · ${formatDateTime(lastSynced)}` : `Live workspace data · ${formatDateTime(lastSynced)}`}</div>
         </div>
       </section>
 
