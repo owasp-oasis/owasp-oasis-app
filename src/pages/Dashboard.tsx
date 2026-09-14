@@ -299,7 +299,7 @@ export default function Dashboard() {
           <div className="active-validators-heading"><strong>{contributors.length}</strong><span>active validators</span></div>
           <div className="metric-grid">
             {[
-              ['Active projects', metrics.projects, `${contributors.length} validators`],
+              ['Active projects', metrics.projects, 'Currently tracked'],
               ['Total validations', metrics.totalValidations, 'All decisions recorded'],
               ['Candidate fixes', metrics.candidate, 'Generated for review'],
               ['Community trusted', metrics.trusted, 'Reached trust threshold'],
