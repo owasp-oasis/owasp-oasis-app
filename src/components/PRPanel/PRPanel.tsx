@@ -13,6 +13,7 @@ import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
+import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
 import { trackReviewEngagement } from '../../analytics'
 
@@ -54,7 +55,7 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary'
+type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
 
 interface Props {
   pr: PanelPR | null
@@ -225,6 +226,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     { id: 'body',     label: 'Body' },
     { id: 'changes',  label: 'Diffs' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
+    { id: 'workflow', label: 'Workflow' },
   ]
 
   // SummaryTab needs details augmented with consensus counts from the leaderboard PR
@@ -353,6 +355,9 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               loading={detailsLoading}
               error={detailsError}
             />
+          )}
+          {activeTab === 'workflow' && (
+            <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
           )}
         </div>
 
