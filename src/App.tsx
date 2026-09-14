@@ -8,6 +8,7 @@ import OnboardingModal from './components/OnboardingModal/OnboardingModal'
 import Home from './pages/Home'
 import About from './pages/About'
 import Overview from './pages/Overview'
+import Dashboard from './pages/Dashboard'
 import Leaderboards from './pages/Leaderboards'
 import Support from './pages/Support'
 import Sponsors from './pages/Sponsors'
@@ -36,6 +37,7 @@ function AppShell() {
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route path="/about" element={<About />} />
           <Route path="/overview" element={<Overview />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/workspace" element={<Navigate to="/workspace/pull-requests" replace />} />
           <Route path="/workspace/projects" element={<Leaderboards activeTab="projects" />} />
           <Route path="/workspace/pull-requests" element={<Leaderboards activeTab="prs" />} />
