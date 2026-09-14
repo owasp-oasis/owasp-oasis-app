@@ -52,7 +52,8 @@
 
 .dashboard-metrics { background: #091522; border-bottom: 1px solid var(--dash-line); }
 .dashboard-metrics-shell { border-right: 1px solid var(--dash-line); border-left: 1px solid var(--dash-line); }
-.active-validators-heading { min-height: 42px; display: flex; align-items: baseline; justify-content: center; gap: 9px; padding: 9px 18px; border-bottom: 1px solid var(--dash-line); background: linear-gradient(90deg, rgba(101, 211, 255, .08), rgba(76, 217, 100, .04)); font-family: var(--mono); text-transform: uppercase; }
+.active-validators-heading { min-height: 42px; display: flex; align-items: baseline; justify-content: center; gap: 28px; padding: 9px 18px; border-bottom: 1px solid var(--dash-line); background: linear-gradient(90deg, rgba(101, 211, 255, .08), rgba(76, 217, 100, .04)); font-family: var(--mono); text-transform: uppercase; }
+.active-validators-heading > div { display: inline-flex; align-items: baseline; gap: 9px; }
 .active-validators-heading strong { color: #65d3ff; font-size: 1.05rem; font-weight: 600; }
 .active-validators-heading span { color: #d5e5f2; font-size: .68rem; letter-spacing: .08em; }
 .metric-grid { display: grid; grid-template-columns: repeat(5, 1fr); }

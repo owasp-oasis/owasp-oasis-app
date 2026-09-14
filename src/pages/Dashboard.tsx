@@ -44,6 +44,7 @@ type DashboardContributor = {
 type DashboardStatus = 'Awaiting review' | 'Community trusted' | 'Upstream accepted' | 'Closed'
 
 const SNAPSHOT_DATE = '2026-09-08T16:30:00Z'
+const SNAPSHOT_SIGNUPS = 773
 
 const demoPRs: DashboardPR[] = [
   { id: 1, repo_id: 1, repo_name: 'juice-shop', number: 421, title: 'Prevent stored XSS in product review rendering', state: 'open', author: 'oasis-fixbot', html_url: '#', participants: 14, consensus_accept: 12, consensus_modify: 1, consensus_reject: 1, merged_upstream: 0, created_at: '2026-06-04T10:00:00Z', updated_at: '2026-09-08T14:10:00Z' },
@@ -181,6 +182,7 @@ export default function Dashboard() {
   const [repos, setRepos] = useState<DashboardRepo[]>(demoRepos)
   const [contributors, setContributors] = useState<DashboardContributor[]>(demoContributors)
   const [lastSynced, setLastSynced] = useState<string | null>(SNAPSHOT_DATE)
+  const [totalSignups, setTotalSignups] = useState(SNAPSHOT_SIGNUPS)
   const [usingDemo, setUsingDemo] = useState(true)
   const [range, setRange] = useState(90)
   const [activityRepo, setActivityRepo] = useState('all')
@@ -195,12 +197,14 @@ export default function Dashboard() {
       fetch('/api/leaderboard/repos').then(r => r.ok ? r.json() : Promise.reject()),
       fetch('/api/leaderboard/contributors').then(r => r.ok ? r.json() : Promise.reject()),
       fetch('/api/leaderboard/meta').then(r => r.ok ? r.json() : Promise.reject()),
-    ]).then(([prData, repoData, contributorData, meta]) => {
+      fetch('/api/count').then(r => r.ok ? r.json() : Promise.reject()),
+    ]).then(([prData, repoData, contributorData, meta, countData]) => {
       if (cancelled || !Array.isArray(prData) || !Array.isArray(repoData) || prData.length === 0) return
       setPRs(prData.map((pr: DashboardPR) => ({ ...pr, consensus_duplicate: number(pr.consensus_duplicate) })))
       setRepos(repoData)
       setContributors(Array.isArray(contributorData) ? contributorData : [])
       setLastSynced(meta?.last_synced_at ?? null)
+      setTotalSignups(number(countData?.count) || SNAPSHOT_SIGNUPS)
       setUsingDemo(false)
     }).catch(() => {})
     return () => { cancelled = true }
@@ -296,7 +300,7 @@ export default function Dashboard() {
 
       <section className="dashboard-metrics" aria-label="OASIS at a glance">
         <div className="dashboard-shell dashboard-metrics-shell">
-          <div className="active-validators-heading"><strong>{contributors.length}</strong><span>active validators</span></div>
+          <div className="active-validators-heading"><div><strong>{contributors.length}</strong><span>active validators</span></div><div><strong>{totalSignups}</strong><span>total volunteer signups</span></div></div>
           <div className="metric-grid">
             {[
               ['Active projects', metrics.projects, 'Currently tracked'],
