@@ -346,7 +346,7 @@ export default function Dashboard() {
 
         <div className="dashboard-grid dashboard-grid--equal">
           <section className="dashboard-panel">
-            <div className="panel-heading"><div><span className="panel-index">03</span><h2>Most active projects</h2></div><Link to="/workspace/projects">All projects ↗</Link></div>
+            <div className="panel-heading"><div><span className="panel-index">03</span><h2>Most active projects</h2></div><Link to="/workspace/projects">All projects</Link></div>
             <div className="project-bars">
               {projectRows.map(project => (
                 <div className="project-bar-row" key={project.id}>
@@ -371,7 +371,7 @@ export default function Dashboard() {
         </div>
 
         <section className="dashboard-panel dashboard-leaderboard">
-          <div className="panel-heading"><div><span className="panel-index">05</span><h2>Community leaderboard</h2></div><Link to="/workspace/contributors">Full leaderboard ↗</Link></div>
+          <div className="panel-heading"><div><span className="panel-index">05</span><h2>Community leaderboard</h2></div><Link to="/workspace/contributors">Full leaderboard</Link></div>
           <div className="leaderboard-list">
             {[...contributors].sort((a, b) => number(b.modified_reputation) - number(a.modified_reputation)).slice(0, 5).map((contributor, index) => (
               <div className="leaderboard-row" key={contributor.login}>
@@ -417,7 +417,7 @@ export default function Dashboard() {
           <div className="panel-heading ledger-heading">
             <div><span className="panel-index">07</span><h2>Fix ledger</h2><span className="ledger-count">{filtered.length} records</span></div>
             <div className="ledger-controls">
-              <label className="dashboard-search"><span>⌕</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search fixes" aria-label="Search fixes" /></label>
+              <label className="dashboard-search"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search fixes" aria-label="Search fixes" /></label>
               <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as 'All' | DashboardStatus)} aria-label="Filter by status">
                 <option>All</option><option>Awaiting review</option><option>Community trusted</option><option>Upstream accepted</option><option>Closed</option>
               </select>
@@ -432,7 +432,7 @@ export default function Dashboard() {
                   const repoUrl = pr.html_url.startsWith('http') ? pr.html_url.replace(/\/pull\/\d+.*$/, '') : `https://github.com/OWASP/${pr.repo_name}`
                   return (
                     <tr key={pr.id}>
-                      <td><span className="ledger-project-line"><a href={repoUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${pr.repo_name} repository on GitHub`}>{pr.repo_name} ↗</a><span>· #{pr.number}</span></span><strong>{pr.title}</strong></td>
+                      <td><span className="ledger-project-line"><a href={repoUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${pr.repo_name} repository on GitHub`}>{pr.repo_name}</a><span>- #{pr.number}</span></span><strong>{pr.title}</strong></td>
                       <td><span className={`dashboard-status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span></td>
                       <td><div className="signal"><span className="yes" style={{ flex: pr.consensus_accept || 0 }} /><span className="change" style={{ flex: pr.consensus_modify || 0 }} /><span className="no" style={{ flex: pr.consensus_reject || 0 }} /></div><small>{pr.participants} validators</small></td>
                       <td>{formatDate(pr.updated_at)}</td>
@@ -443,7 +443,7 @@ export default function Dashboard() {
             </table>
             {!visiblePRs.length && <div className="dashboard-empty">No fixes match this view.</div>}
           </div>
-          <div className="ledger-pagination"><span>{(page - 1) * pageSize + (filtered.length ? 1 : 0)}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div><button disabled={page === 1} onClick={() => setPage(value => value - 1)}>← Prev</button><span>{page} / {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next →</button></div></div>
+          <div className="ledger-pagination"><span>{(page - 1) * pageSize + (filtered.length ? 1 : 0)}-{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div><button disabled={page === 1} onClick={() => setPage(value => value - 1)}>Prev</button><span>{page} / {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></div>
         </section>
       </main>
     </div>
