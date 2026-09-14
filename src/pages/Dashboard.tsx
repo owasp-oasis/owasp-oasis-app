@@ -300,7 +300,7 @@ export default function Dashboard() {
 
       <section className="dashboard-metrics" aria-label="OASIS at a glance">
         <div className="dashboard-shell dashboard-metrics-shell">
-          <div className="active-validators-heading"><div><strong>{contributors.length}</strong><span>active validators</span></div><div><strong>{totalSignups}</strong><span>total volunteer signups</span></div></div>
+          <div className="active-validators-heading"><div><strong>{contributors.length}</strong><span>active validators</span></div><div><strong>{totalSignups}</strong><span>volunteers</span></div></div>
           <div className="metric-grid">
             {[
               ['Active projects', metrics.projects, 'Currently tracked'],
