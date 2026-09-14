@@ -378,7 +378,7 @@ export default function Dashboard() {
                 <span className="leaderboard-rank">{String(index + 1).padStart(2, '0')}</span>
                 <span className="leaderboard-avatar">{contributor.login.slice(0, 2).toUpperCase()}</span>
                 <strong>{contributor.login}</strong>
-                <span><b>{number(contributor.prs_worked)}</b> fixes reviewed</span>
+                <span><b>{number(contributor.prs_worked)}</b> fixes participated in</span>
                 <span><b>{number(contributor.total_interactions)}</b> decisions</span>
                 <span className="leaderboard-score"><b>{number(contributor.modified_reputation).toFixed(1)}</b> reputation</span>
               </div>
