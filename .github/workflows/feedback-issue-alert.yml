@@ -1,0 +1,22 @@
+name: Alert on site feedback
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  assign-feedback:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'preview-feedback') &&
+      !contains(github.event.issue.assignees.*.login, 'cartsoni')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign feedback issue to cartsoni
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh api --method POST "repos/${GH_REPO}/issues/${ISSUE_NUMBER}/assignees" -f 'assignees[]=cartsoni'
