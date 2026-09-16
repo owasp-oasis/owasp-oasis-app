@@ -172,7 +172,7 @@ function publicDecision(decision: DecisionRow | null) {
   } : null;
 }
 
-function publicSubmission(submission: SubmissionRow | null) {
+function publicSubmission(submission: SubmissionRow | null, includeErrorDetail: boolean) {
   if (!submission) return null;
   return {
     id: submission.id,
@@ -195,7 +195,7 @@ function publicSubmission(submission: SubmissionRow | null) {
     submitted_by_login: submission.submitted_by_login,
     submitted_at: submission.submitted_at,
     last_synced_at: submission.last_synced_at,
-    error_summary: submission.error_summary,
+    error_summary: includeErrorDetail ? submission.error_summary : null,
   };
 }
 
@@ -204,13 +204,14 @@ function asWorkflowResponse(
   decision: DecisionRow | null,
   submission: SubmissionRow | null,
   req: Request,
+  includeErrorDetail = false,
 ): Response {
   return jsonOk({
     pr_id: pr.id,
     status: workflowStatus(pr, decision, submission),
     community_ready: communityReady(pr),
     maintainer_decision: publicDecision(decision),
-    upstream_submission: publicSubmission(submission),
+    upstream_submission: publicSubmission(submission, includeErrorDetail),
   }, req);
 }
 
@@ -281,14 +282,14 @@ export async function handlePRWorkflow(request: Request, env: Env, prId: number)
   if (submission && ['pending', 'open', 'changes_requested'].includes(submission.status)) {
     submission = await refreshSubmission(env, submission);
   }
-  return asWorkflowResponse(pr, decision, submission, request);
+  return asWorkflowResponse(pr, decision, submission, request, false);
 }
 
 export async function handleMaintainerDecision(request: Request, env: Env, prId: number): Promise<Response> {
   const principal = await getRequestPrincipal(request, env);
+  if (!principal.session) return jsonErr('Sign in to use maintainer actions', 401, request);
   if (!roleAllows(principal.role, 'admin')) return jsonErr('Admin role required for maintainer actions', 403, request);
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
-  if (!principal.session) return jsonErr('Sign in to use maintainer actions', 401, request);
 
   const pr = await getPR(env, prId);
   if (!pr) return jsonErr('PR not found', 404, request);
@@ -307,9 +308,9 @@ export async function handleMaintainerDecision(request: Request, env: Env, prId:
   const latest = await getLatestDecision(env, prId);
   if (latest?.decision === decision && latest.reason === reason) {
     await recordPrivilegedAction(env, principal, {
-      action: 'maintainer_decision', targetType: 'pull_request', targetId: String(prId), outcome: 'accepted',
+      action: 'maintainer_decision', targetType: 'pull_request', targetId: String(prId), outcome: 'succeeded',
     });
-    return asWorkflowResponse(pr, latest, await getLatestSubmission(env, prId), request);
+    return asWorkflowResponse(pr, latest, await getLatestSubmission(env, prId), request, true);
   }
 
   const now = new Date().toISOString();
@@ -326,14 +327,15 @@ export async function handleMaintainerDecision(request: Request, env: Env, prId:
   await recordPrivilegedAction(env, principal, {
     action: 'maintainer_decision', targetType: 'pull_request', targetId: String(prId), outcome: 'succeeded',
   });
-  return asWorkflowResponse(pr, await getLatestDecision(env, prId), await getLatestSubmission(env, prId), request);
+  return asWorkflowResponse(pr, await getLatestDecision(env, prId), await getLatestSubmission(env, prId), request, true);
 }
 
 export async function handleSubmitUpstream(request: Request, env: Env, prId: number): Promise<Response> {
   const principal = await getRequestPrincipal(request, env);
+  if (!principal.session) return jsonErr('Sign in to submit upstream', 401, request);
   if (!roleAllows(principal.role, 'admin')) return jsonErr('Admin role required for upstream submission', 403, request);
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
-  if (!principal.session?.github_token) return jsonErr('A GitHub sign-in with write access is required', 403, request);
+  if (!principal.session.github_token) return jsonErr('A GitHub sign-in with write access is required', 403, request);
 
   let body: { confirm?: unknown };
   try {
@@ -351,7 +353,7 @@ export async function handleSubmitUpstream(request: Request, env: Env, prId: num
   }
   const existing = await getLatestSubmission(env, prId);
   if (existing && ['pending', 'open', 'changes_requested'].includes(existing.status)) {
-    return asWorkflowResponse(pr, decision, existing, request);
+    return asWorkflowResponse(pr, decision, existing, request, true);
   }
   if (!pr.upstream_url) return jsonErr('No upstream repository is configured for this project', 409, request);
   if (pr.state !== 'open') return jsonErr('Only an open OASIS PR can be submitted upstream', 409, request);
@@ -439,5 +441,5 @@ export async function handleSubmitUpstream(request: Request, env: Env, prId: num
     action: 'submit_upstream', targetType: 'pull_request', targetId: String(prId), outcome: 'succeeded',
   });
 
-  return asWorkflowResponse(pr, decision, await getLatestSubmission(env, prId), request);
+  return asWorkflowResponse(pr, decision, await getLatestSubmission(env, prId), request, true);
 }

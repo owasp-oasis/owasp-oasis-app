@@ -44,6 +44,55 @@ describe('maintainer and upstream workflow', () => {
     await cleanDB(env);
   });
 
+  it('returns 401 for unauthenticated POST requests to both mutation endpoints', async () => {
+    await insertTestPR(env);
+    const csrf = makeCsrf();
+
+    const noSessionDecision = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/maintainer-decision', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}` },
+      body: JSON.stringify({ decision: 'accepted', reason: 'Looks good' }),
+    }));
+    expect(noSessionDecision.status).toBe(401);
+
+    const noSessionUpstream = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/submit-upstream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}` },
+      body: JSON.stringify({ confirm: true }),
+    }));
+    expect(noSessionUpstream.status).toBe(401);
+  });
+
+  it('hides error_summary from public GET but exposes it to admin POST responses', async () => {
+    await insertTestPR(env);
+    const now = new Date().toISOString();
+    await env.DB.prepare(`
+      INSERT INTO upstream_submissions (
+        id, source_pr_id, upstream_full_name, upstream_default_branch,
+        upstream_pr_id, upstream_pr_number, upstream_pr_node_id, upstream_pr_url,
+        head_repo_full_name, head_branch, validated_head_sha, base_branch,
+        status, submitted_by_login, error_summary, created_at, updated_at
+      ) VALUES ('sub-err', 1001, 'upstream/project', 'main', null, null, null, null,
+        'owasp-oasis/test-repo', 'fix/sql', 'abc123', 'main',
+        'failed', 'humor4fun', 'GitHub API 422: {"message":"Validation Failed"}', ?, ?)
+    `).bind(now, now).run();
+
+    const publicGet = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/workflow'));
+    const publicBody = await publicGet.json();
+    expect(publicBody.upstream_submission.error_summary).toBeNull();
+
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const csrf = makeCsrf();
+    await env.DB.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, head_sha, github_user_id, github_login, created_at) VALUES ('d1', 1001, 'accepted', 'ready', null, 7505051, 'humor4fun', ?)`).bind(now).run();
+
+    const adminPost = await SELF.fetch(requestWithSession(
+      '/api/pr-panel/1001/maintainer-decision', admin, csrf,
+      { decision: 'accepted', reason: 'ready' },
+    ));
+    const adminBody = await adminPost.json();
+    expect(adminBody.upstream_submission.error_summary).toBe('GitHub API 422: {"message":"Validation Failed"}');
+  });
+
   it('keeps validator decisions separate and records an append-only maintainer history', async () => {
     await insertTestPR(env);
     await env.DB.prepare(`UPDATE pull_requests SET participants = 10, consensus_accept = 8, head_sha = 'before-revision' WHERE id = 1001`).run();
