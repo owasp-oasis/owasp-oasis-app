@@ -16,6 +16,7 @@ interface Event {
   month: string
   dateLabel: string
   venue: string
+  kind: string
   title: string
   time: string
   location: string
@@ -41,6 +42,7 @@ const upcomingEvents: Event[] = [
     month: 'SEP',
     dateLabel: 'September 16, 2026',
     venue: 'CYBR.SEC.CON. 2026',
+    kind: 'Speaking',
     title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
     time: '3:30–4:15 PM',
     location: 'Room 361 · General Session · Houston, TX',
@@ -53,10 +55,11 @@ const upcomingEvents: Event[] = [
     month: 'SEP',
     dateLabel: 'September 25–26, 2026',
     venue: 'B-Sides Orlando',
-    title: 'OASIS at B-Sides Orlando',
+    kind: 'Speaking',
+    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
     time: 'Talk time to be announced · Sep 25–26',
     location: 'Full Sail University · Winter Park, FL',
-    details: 'Chris Holt presents the OASIS project at B-Sides Orlando. His specific talk slot is not yet posted publicly.',
+    details: 'Chris Holt presents the OASIS project at B-Sides Orlando.',
     href: 'https://bsidesorlando.org/',
   },
   {
@@ -65,6 +68,7 @@ const upcomingEvents: Event[] = [
     month: 'OCT',
     dateLabel: 'October 1, 2026',
     venue: 'Online · Zoom Webinar',
+    kind: 'Webinar',
     title: 'The Future of AppSec, Open Source, and Your Role in the Age of AI',
     time: '1:00 PM ET · 11:00 AM MT · Thu, October 1',
     location: 'Online · Zoom Webinar',
@@ -76,6 +80,7 @@ const upcomingEvents: Event[] = [
     month: 'OCT',
     dateLabel: 'October 6, 2026',
     venue: 'THREATCON1',
+    kind: 'Speaking',
     title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
     time: '1:10–1:40 PM · Tue, October 6',
     location: 'Sheraton Reston Hotel · Reston, VA',
@@ -114,12 +119,12 @@ export default function News() {
                 <div className="event-date" aria-label={event.dateLabel}>
                   <time dateTime={event.date}>
                     <span className="event-date-month">{event.month}</span>
-                    <span className="event-date-day">{event.day}</span>
+                    <span className={`event-date-day${event.day.includes('–') ? ' event-date-day--range' : ''}`}>{event.day}</span>
                   </time>
                 </div>
                 <div className="event-card-content">
                   <div className="event-card-meta">
-                    <span className="badge badge-green">Speaking</span>
+                    <span className="badge badge-green">{event.kind}</span>
                     <span>{event.venue}</span>
                   </div>
                   <h2 className="event-card-title">{event.title}</h2>
