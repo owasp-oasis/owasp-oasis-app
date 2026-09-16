@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Decision } from '../components/VoteForm'
-import ProjectsTab from './leaderboards/ProjectsTab'
-import PRsTab from './leaderboards/PRsTab'
-import ContributorsTab from './leaderboards/ContributorsTab'
-import MaintainersTab from './leaderboards/MaintainersTab'
-import ToolsTab from './leaderboards/ToolsTab'
-import './Leaderboards.css'
+import ProjectsTab from './workspace/ProjectsTab'
+import PRsTab from './workspace/PRsTab'
+import ContributorsTab from './workspace/ContributorsTab'
+import MaintainersTab from './workspace/MaintainersTab'
+import ToolsTab from './workspace/ToolsTab'
+import './Workspace.css'
 
 export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers'
 
@@ -34,11 +34,11 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-interface LeaderboardsProps {
+interface WorkspaceProps {
   activeTab: WorkspaceTab
 }
 
-export default function Leaderboards({ activeTab }: LeaderboardsProps) {
+export default function Workspace({ activeTab }: WorkspaceProps) {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
@@ -89,9 +89,9 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
         const docked = !entry.isIntersecting
         setTabsSticky(docked)
         if (docked) {
-          document.body.classList.add('lb-tabs-docked')
+          document.body.classList.add('ws-tabs-docked')
         } else {
-          document.body.classList.remove('lb-tabs-docked')
+          document.body.classList.remove('ws-tabs-docked')
         }
       },
       { threshold: 0, rootMargin: '0px' }
@@ -100,7 +100,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
 
     return () => {
       observer.disconnect()
-      document.body.classList.remove('lb-tabs-docked')
+      document.body.classList.remove('ws-tabs-docked')
     }
   }, [])
 
@@ -166,7 +166,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   }, [activeTab, fetchTab])
 
   return (
-    <div className="leaderboards workspace">
+    <div className="workspace">
       <div className="page-hero workspace-hero">
         <div className="container">
           <div className="workspace-hero__eyebrow">OASIS work area</div>

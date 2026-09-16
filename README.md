@@ -154,12 +154,12 @@ src/                       ← React SPA (frontend)
     AuthContext.tsx         ← React context — GitHub auth state (user, loading, logout, refetch)
   pages/
     Home.tsx               ← Landing page
-    Leaderboards.tsx       ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
+    Workspace.tsx          ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
     About.tsx              ← Team and project background
     Overview.tsx           ← How OASIS works
     Support.tsx            ← How to help: share, recruit, validate, sponsor
     Sponsors.tsx           ← Sponsors page
-    leaderboards/          ← One file per leaderboard tab
+    workspace/             ← One file per workspace tab
       PRsTab.tsx           ← PR table with My Vote column, Needs My Vote filter
       ContributorsTab.tsx
       MaintainersTab.tsx
@@ -250,9 +250,9 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `Footer` | Site-wide footer |
 | `PreviewBanner` | Dismissible banner shown on the preview environment indicating the site is in staging; includes a link to submit feedback |
 | `RegisterForm` | Validator/sponsor registration form — posts to `POST /api/register` |
-| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
+| `SortableTable` / `ColHeader` | Generic sortable data table used by all workspace tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
 | `QuotesCarousel` | Auto-advancing animated carousel for testimonial/quote content on the Home page |
-| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
+| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the workspace; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
 | `VoteForm` | Form inside the PR Panel for submitting an accept/modify/reject vote; builds the OASIS validation comment template and posts to `POST /api/vote` |
 | `VoteModal` | Modal wrapper that prompts unauthenticated users to sign in with GitHub before voting |
 
@@ -301,11 +301,11 @@ The OAuth callback URL registered in the GitHub app must be `https://preview.owa
 
 ## Voting system
 
-Validators can submit their OASIS validation decision directly from the leaderboard PR panel.
+Validators can submit their OASIS validation decision directly from the workspace PR panel.
 
 ### How it works
 
-1. User clicks a PR row in the leaderboards → PR Panel slides open
+1. User clicks a PR row in the workspace → PR Panel slides open
 2. User clicks the "Vote" tab (sign-in modal shown if not authenticated)
 3. User selects **Accept**, **Modify**, or **Reject** and fills in the structured form
 4. `POST /api/vote` validates CSRF, session, rate limit, and body; then:

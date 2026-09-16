@@ -8,7 +8,7 @@ import OnboardingModal from './components/OnboardingModal/OnboardingModal'
 import Home from './pages/Home'
 import About from './pages/About'
 import Overview from './pages/Overview'
-import Leaderboards from './pages/Leaderboards'
+import Workspace from './pages/Workspace'
 import Support from './pages/Support'
 import Sponsors from './pages/Sponsors'
 import BrandGuide from './pages/BrandGuide'
@@ -37,12 +37,12 @@ function AppShell() {
           <Route path="/about" element={<About />} />
           <Route path="/overview" element={<Overview />} />
           <Route path="/workspace" element={<Navigate to="/workspace/pull-requests" replace />} />
-          <Route path="/workspace/projects" element={<Leaderboards activeTab="projects" />} />
-          <Route path="/workspace/pull-requests" element={<Leaderboards activeTab="prs" />} />
-          <Route path="/workspace/contributors" element={<Leaderboards activeTab="contributors" />} />
-          <Route path="/workspace/maintainers" element={<Leaderboards activeTab="maintainers" />} />
+          <Route path="/workspace/projects" element={<Workspace activeTab="projects" />} />
+          <Route path="/workspace/pull-requests" element={<Workspace activeTab="prs" />} />
+          <Route path="/workspace/contributors" element={<Workspace activeTab="contributors" />} />
+          <Route path="/workspace/maintainers" element={<Workspace activeTab="maintainers" />} />
           {/* Intentionally unlisted: available by direct link, but omitted from Workspace navigation. */}
-          <Route path="/workspace/tools" element={<Leaderboards activeTab="tools" />} />
+          <Route path="/workspace/tools" element={<Workspace activeTab="tools" />} />
           {/* Intentionally unlisted: linked from the Workspace sync chip. */}
           <Route path="/workspace/status" element={<SyncStatus />} />
           <Route path="/workspace/status/runs/:runId" element={<SyncRunDetail />} />

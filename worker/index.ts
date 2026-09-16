@@ -259,7 +259,7 @@ export default {
          return jsonOk({ enabled: true, legacy_retired: true }, request);
        }
 
-       /* ── Leaderboard API ───────────────────────────────────────── */
+       /* ── Workspace API ─────────────────────────────────────────── */
        /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
