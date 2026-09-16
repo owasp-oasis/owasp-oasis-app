@@ -438,7 +438,7 @@ export default function Dashboard() {
               <tbody>
                 {visiblePRs.map(pr => {
                   const status = getStatus(pr)
-                  const repoUrl = pr.html_url.startsWith('http') ? pr.html_url.replace(/\/pull\/\d+.*$/, '') : `https://github.com/OWASP/${pr.repo_name}`
+                  const repoUrl = pr.html_url.startsWith('http') ? pr.html_url.replace(/\/pull\/\d+.*$/, '') : `https://github.com/owasp-oasis/${pr.repo_name}`
                   return (
                     <tr key={pr.id}>
                       <td><span className="ledger-project-line"><a href={repoUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${pr.repo_name} repository on GitHub`}>{pr.repo_name}</a><span>- #{pr.number}</span></span><strong>{pr.title}</strong></td>
