@@ -3,7 +3,7 @@ import QuotesCarousel from '../components/QuotesCarousel'
 import type { Quote } from '../components/QuotesCarousel'
 import './Home.css'
 
-// TODO: Replace with third-party quotes — these are placeholder quotes from OASIS co-founders
+// Rotating testimonials from OASIS contributors and partners
 const quotes: Quote[] = [
   {
     name: 'Chris Holt',
@@ -22,13 +22,21 @@ const quotes: Quote[] = [
     linkedinUrl: 'https://www.linkedin.com/in/cartsoni/',
   },
   {
-    name: 'Aaron Birnbaum',
-    title: 'Co-founder & Chief Security Officer',
-    company: 'Seron Security',
-    quote: "Great to see OASIS officially accepted into OWASP. The increase in AI-accelerated attacks on open source software is alarming. From poisoned packages, automated dependency abuse, and over-extended security teams makes this one of the fastest-growing blind spots in modern security programs. A vendor-neutral, community-driven standard for defending the ecosystem is long overdue. So much of an organization's real exposure now lives in its open-source dependencies, so a project like this strengthens the whole chain. Congratulations to the team and to the validators making it happen — happy to contribute where useful.",
-    photoUrl: '/headshots/aaron-birnbaum.jpeg',
-    linkedinUrl: 'https://www.linkedin.com/in/aaron-s-birnbaum/',
-  }
+    name: 'David Kosorok',
+    title: 'Director of Product Security',
+    company: 'ACV Auctions',
+    quote: 'I have spent thirty years defending enterprises, and every one of them builds on open source components, which means every one of them inherits any unfixed vulnerabilities in that code. Our industry got very good at finding problems and never solved fixing them at scale. That is what OASIS changes. When the community validates a fix and it lands upstream, thousands of applications get safer at once. That is the highest-leverage work an application security professional can do, and now it is open to all of us.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/kosorok/',
+  },
+  {
+    name: 'Zoe Braiterman',
+    title: 'Contributor',
+    company: 'OASIS',
+    quote: 'I am proud to be a part of this initiative to help fellow open source maintainers navigate complexities introduced by AI slop.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/zoebraiterman/',
+  },
 ]
 
 const ShieldSVG = () => (
