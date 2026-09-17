@@ -1,5 +1,5 @@
 /**
- * Leaderboard API handlers: meta, repos, PRs, contributors, maintainers, tools.
+ * Workspace API handlers: meta, repos, PRs, contributors, maintainers, tools.
  */
 
 import type { Env, ParsedQuery } from '../types.js';
@@ -69,7 +69,7 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
 }
 
 /**
- * GET /api/leaderboard/repos/:id
+ * GET /api/workspace/repos/:id
  * Returns detailed project info for the ProjectPanel slide-out:
  *   - repo row (full metadata)
  *   - all PRs for the repo

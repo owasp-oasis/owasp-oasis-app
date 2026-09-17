@@ -37,7 +37,7 @@ import {
   handleContributorDetail,
   handleMaintainers,
   handleTools,
-} from './handlers/leaderboard.js';
+} from './handlers/workspace.js';
 import { handleRegister } from './handlers/register.js';
 import { handleApply } from './handlers/apply.js';
 import { handleFeedback } from './handlers/feedback.js';
@@ -275,20 +275,20 @@ export default {
          }
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
+       if (method === 'GET' && url.pathname === '/api/workspace/meta')
          return await handleMeta(env, request);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
+       if (method === 'GET' && url.pathname === '/api/workspace/repos')
          return await handleRepos(env, request, url);
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
-       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/(\d+)$/);
+       const repoDetailMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)$/);
        if (method === 'GET' && repoDetailMatch) {
          return await handleRepoDetail(env, request, Number(repoDetailMatch[1]));
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
+       if (method === 'GET' && url.pathname === '/api/workspace/prs')
          return await handlePRs(env, request, url);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
+       if (method === 'GET' && url.pathname === '/api/workspace/contributors')
          return await handleContributors(env, request, url);
 
        /* ── Contributor detail (for ContributorPanel slide-out) ───── */
@@ -298,13 +298,13 @@ export default {
          return await handleContributorDetail(env, request, login);
        }
 
-      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
+      if (method === 'GET' && url.pathname === '/api/workspace/maintainers')
         return await handleMaintainers(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')
+      if (method === 'GET' && url.pathname === '/api/workspace/tools')
         return await handleTools(env, request, url);
 
       /* ── Retired public sync trigger ───────────────────────────── */
-      if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
+      if (method === 'GET' && url.pathname === '/workspace-refresh') {
         return jsonErr('This public sync trigger is retired. Use the authenticated canonical sync endpoint.', 410, request);
       }
 

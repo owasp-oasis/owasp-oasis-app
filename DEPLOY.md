@@ -201,11 +201,11 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="SELECT COUNT(*) as total FROM registrations"
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 
-# Check contributor leaderboard
+# Check contributors
 wrangler d1 execute oasis-db --remote \
   --command="SELECT login, prs_worked, total_interactions, reputation FROM contributors ORDER BY reputation DESC"
 
@@ -253,7 +253,7 @@ node export-db.js
 
 ## GitHub sync
 
-The leaderboard is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
+The workspace is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
 
 ### Bounded Workflow rollout
 
@@ -327,7 +327,7 @@ Allowed values are `admin`, `moderator`, `member`, and `guest`. Use an explicit 
 
 ### Retired sync entry points
 
-`GET /leaderboard-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
+`GET /workspace-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
 
 ### Sync state
 
@@ -353,13 +353,13 @@ wrangler d1 execute oasis-db --remote --env production \
 |---|---|
 | HTTPS redirect | HTTP → HTTPS enforced at Worker level |
 | Apex redirect | `owasp-oasis.com` → `www.owasp-oasis.com` |
-| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including leaderboard API |
+| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including workspace API |
 | CSRF protection | Double-submit cookie pattern with constant-time comparison (`GET /api/csrf` issues token) |
 | Rate limiting | 5 POST requests per IP per 60 seconds via KV; IP is SHA-256 hashed before use as key |
 | Input validation | Email (RFC 5322 + disposable domain blocklist), GitHub username format, max field lengths, HTML tag stripping, control character removal |
 | Body size limit | 8 KB maximum request body; enforced via `Content-Length` header and actual read |
 | SQL injection | Impossible — all queries use D1 parameterised bindings |
-| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all leaderboard tracking |
+| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all workspace tracking |
 | OASIS/non-OASIS comment separation | Only comments matching the OASIS validation template affect reputation and consensus; plain comments are tracked separately and do not influence scores |
 | IP privacy | SHA-256 hashed before storage — raw IPs never persisted |
 | Error messages | Generic client-facing errors — no stack traces or internal details exposed |

@@ -47,7 +47,7 @@ tests/worker/
     ├── auth.test.ts             # OAuth flow (with GitHub API mocks)
     ├── preferences.test.ts      # GET/PUT /api/preferences/mine (tests PUT method fix)
     ├── vote.test.ts             # POST /api/vote
-    ├── leaderboard.test.ts      # GET /api/leaderboard/* endpoints
+    ├── workspace.test.ts        # GET /api/workspace/* endpoints
     └── prPanel.test.ts          # GET /api/pr-panel/:id/* endpoints
 ```
 
@@ -141,15 +141,15 @@ Full handler tests with real workerd + in-memory D1/KV:
 - D1 updates (user_votes, pull_requests consensus, pr_participants)
 - Rate limiting (5 votes/60s per user)
 
-**`leaderboard.test.ts`**
-- GET /api/leaderboard/meta → sync status
-- GET /api/leaderboard/repos → repo list, filtering, sorting
-- GET /api/leaderboard/repos/:id → repo detail with PRs & contributors, addressed by immutable GitHub repository ID
-- GET /api/leaderboard/prs → PR list
-- GET /api/leaderboard/contributors → contributor list with scores
+**`workspace.test.ts`**
+- GET /api/workspace/meta → sync status
+- GET /api/workspace/repos → repo list, filtering, sorting
+- GET /api/workspace/repos/:id → repo detail with PRs & contributors, addressed by immutable GitHub repository ID
+- GET /api/workspace/prs → PR list
+- GET /api/workspace/contributors → contributor list with scores
 - GET /api/contributors/:login → contributor detail with bonus computation
-- GET /api/leaderboard/maintainers → maintainer stats
-- GET /api/leaderboard/tools → tool cards
+- GET /api/workspace/maintainers → maintainer stats
+- GET /api/workspace/tools → tool cards
 
 **`prPanel.test.ts`** (with GitHub API mocking)
 - GET /api/pr-panel/:id/details → parse PR metadata (CWE, severity, etc.)

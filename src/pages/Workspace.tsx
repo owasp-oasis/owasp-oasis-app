@@ -111,11 +111,11 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
     try {
       const endpoints: Record<WorkspaceTab, string> = {
-        projects:     '/api/leaderboard/repos',
-        prs:          '/api/leaderboard/prs',
-        contributors: '/api/leaderboard/contributors',
-        tools:        '/api/leaderboard/tools',
-        maintainers:  '/api/leaderboard/maintainers',
+        projects:     '/api/workspace/repos',
+        prs:          '/api/workspace/prs',
+        contributors: '/api/workspace/contributors',
+        tools:        '/api/workspace/tools',
+        maintainers:  '/api/workspace/maintainers',
       }
       const res = await fetch(endpoints[tab])
       if (!res.ok) {

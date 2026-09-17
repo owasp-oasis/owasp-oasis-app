@@ -1,6 +1,6 @@
 /**
- * Integration tests for leaderboard endpoints.
- * Tests: /api/leaderboard/meta, /repos, /prs, /contributors, /maintainers, /tools
+ * Integration tests for workspace API endpoints.
+ * Tests: /api/workspace/meta, /repos, /prs, /contributors, /maintainers, /tools
  */
 
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
@@ -17,9 +17,9 @@ describe('Leaderboard endpoints', () => {
     await cleanDB(env);
   });
 
-  describe('GET /api/leaderboard/meta', () => {
+  describe('GET /api/workspace/meta', () => {
     it('returns sync status', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/meta'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/meta'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -28,7 +28,7 @@ describe('Leaderboard endpoints', () => {
     });
 
     it('returns ISO-8601 timestamp', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/meta'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/meta'));
       const body = await res.json();
 
       // Should parse as valid ISO date
@@ -36,9 +36,9 @@ describe('Leaderboard endpoints', () => {
     });
   });
 
-  describe('GET /api/leaderboard/repos', () => {
+  describe('GET /api/workspace/repos', () => {
     it('returns empty array on fresh DB', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -52,7 +52,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestPR(env, { id: 1001, repo_name: 'test-repo-1' });
       await insertTestPR(env, { id: 1002, repo_name: 'test-repo-2' });
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -70,7 +70,7 @@ describe('Leaderboard endpoints', () => {
         'UPDATE pull_requests SET deleted = 1, deleted_at = ? WHERE id = ?',
       ).bind(new Date().toISOString(), 1002).run();
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -84,7 +84,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestRepo(env, { id: 202, name: 'reused-name' });
       await insertTestPR(env, { id: 1002, repo_id: 202, repo_name: 'reused-name' });
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -93,14 +93,14 @@ describe('Leaderboard endpoints', () => {
     });
 
     it('includes security headers', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.headers.get('X-Frame-Options')).toBe('DENY');
       expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
     });
 
     it('has cache headers', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/repos'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
 
       expect(res.headers.get('Cache-Control')).toContain('max-age');
     });
@@ -112,7 +112,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestPR(env, { id: 1002, repo_name: 'go-repo' });
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos?q=python'),
+        new Request('http://localhost/api/workspace/repos?q=python'),
       );
 
       expect(res.status).toBe(200);
@@ -127,7 +127,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestPR(env, { id: 1002, repo_name: 'repo-b' });
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos?sort=open_prs&dir=DESC'),
+        new Request('http://localhost/api/workspace/repos?sort=open_prs&dir=DESC'),
       );
 
       expect(res.status).toBe(200);
@@ -137,7 +137,7 @@ describe('Leaderboard endpoints', () => {
 
     it('rejects invalid sort column (SQL injection guard)', async () => {
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos?sort=invalid_column'),
+        new Request('http://localhost/api/workspace/repos?sort=invalid_column'),
       );
 
       // Should either default or reject gracefully
@@ -145,9 +145,9 @@ describe('Leaderboard endpoints', () => {
     });
   });
 
-  describe('GET /api/leaderboard/prs', () => {
+  describe('GET /api/workspace/prs', () => {
     it('returns empty array on fresh DB', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/prs'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -158,7 +158,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestRepo(env);
       await insertTestPR(env);
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/prs'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -172,7 +172,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestRepo(env, { id: 202, name: 'reused-name' });
       await insertTestPR(env, { id: 2002, repo_id: 202, repo_name: 'reused-name', number: 1 });
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/prs'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -188,7 +188,7 @@ describe('Leaderboard endpoints', () => {
         await insertTestPR(env, { id: 2000 + i, number: i });
       }
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/prs'));
       const body = await res.json();
 
       expect(body.length).toBeLessThanOrEqual(500);
@@ -199,7 +199,7 @@ describe('Leaderboard endpoints', () => {
       await insertTestPR(env, { repo_name: 'filter-test' });
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/prs?q=filter-test'),
+        new Request('http://localhost/api/workspace/prs?q=filter-test'),
       );
 
       expect(res.status).toBe(200);
@@ -208,10 +208,10 @@ describe('Leaderboard endpoints', () => {
     });
   });
 
-  describe('GET /api/leaderboard/contributors', () => {
+  describe('GET /api/workspace/contributors', () => {
     it('returns empty array on fresh DB', async () => {
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/contributors'),
+        new Request('http://localhost/api/workspace/contributors'),
       );
 
       expect(res.status).toBe(200);
@@ -230,7 +230,7 @@ describe('Leaderboard endpoints', () => {
         .run();
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/contributors'),
+        new Request('http://localhost/api/workspace/contributors'),
       );
 
       expect(res.status).toBe(200);
@@ -254,7 +254,7 @@ describe('Leaderboard endpoints', () => {
         .run();
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/contributors'),
+        new Request('http://localhost/api/workspace/contributors'),
       );
 
       const body = await res.json();
@@ -309,10 +309,10 @@ describe('Leaderboard endpoints', () => {
     });
   });
 
-  describe('GET /api/leaderboard/maintainers', () => {
+  describe('GET /api/workspace/maintainers', () => {
     it('returns maintainer stats', async () => {
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/maintainers'),
+        new Request('http://localhost/api/workspace/maintainers'),
       );
 
       expect(res.status).toBe(200);
@@ -321,9 +321,9 @@ describe('Leaderboard endpoints', () => {
     });
   });
 
-  describe('GET /api/leaderboard/tools', () => {
+  describe('GET /api/workspace/tools', () => {
     it('returns tool cards', async () => {
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/tools'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/tools'));
 
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -350,7 +350,7 @@ describe('Leaderboard endpoints', () => {
         `).bind(detectionTool, id).run();
       }
 
-      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/tools'));
+      const res = await SELF.fetch(new Request('http://localhost/api/workspace/tools'));
 
       expect(res.status).toBe(200);
       const body = await res.json<any[]>();
@@ -367,12 +367,12 @@ describe('Leaderboard endpoints', () => {
   });
 
   describe('Detailed repo endpoint', () => {
-    it('GET /api/leaderboard/repos/:id returns repo with PRs', async () => {
+    it('GET /api/workspace/repos/:id returns repo with PRs', async () => {
       await insertTestRepo(env, { id: 4242, name: 'detail-repo' });
       await insertTestPR(env, { repo_id: 4242, repo_name: 'detail-repo' });
 
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos/4242'),
+        new Request('http://localhost/api/workspace/repos/4242'),
       );
 
       expect(res.status).toBe(200);
@@ -384,7 +384,7 @@ describe('Leaderboard endpoints', () => {
 
     it('returns 404 for non-existent repo', async () => {
       const res = await SELF.fetch(
-        new Request('http://localhost/api/leaderboard/repos/999999'),
+        new Request('http://localhost/api/workspace/repos/999999'),
       );
 
       expect(res.status).toBe(404);

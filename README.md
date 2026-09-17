@@ -141,7 +141,7 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   sync.ts                  ← GitHub sync engine (cron full sync + chunked manual sync)
   hubspot.ts               ← Durable registration and application contact sync
   handlers/
-    leaderboard.ts         ← /api/leaderboard/* endpoint handlers
+    workspace.ts           ← /api/workspace/* endpoint handlers
     register.ts            ← POST /api/register
     apply.ts               ← POST /api/apply
     feedback.ts            ← POST /api/feedback — creates GitHub issue from preview banner form
@@ -219,7 +219,7 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `github.ts` | GitHub REST API client (`ghFetch`, `ghFetchAll` with pagination); parses OASIS decision comments (`accept`/`modify`/`reject`); detects SAST tool from PR body; filters automated/bot accounts |
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
 | `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
-| `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
+| `handlers/workspace.ts` | Six read-only API endpoints: `/api/workspace/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
 | `handlers/register.ts` | `POST /api/register` — validates and atomically queues registration contact data for HubSpot |
 | `handlers/apply.ts` | `POST /api/apply` — stores role applications and queues contact fields for HubSpot while keeping narrative text in D1 |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
@@ -447,7 +447,7 @@ wrangler d1 execute oasis-db --remote \
 # Apply schema to a fresh database
 wrangler d1 execute oasis-db --remote --file=schema.sql
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 ```
@@ -522,7 +522,7 @@ npm run build && npm run deploy
 ## Commit convention
 
 ```
-feat: add leaderboard tools tab
+feat: add workspace tools tab
 fix: CSRF cookie not sent on mobile Safari
 chore: update wrangler to 4.x
 docs: update README for TypeScript refactor
