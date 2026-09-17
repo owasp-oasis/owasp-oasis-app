@@ -14,11 +14,14 @@ interface Event {
   date: string
   day: string
   month: string
+  dateLabel: string
+  venue: string
+  kind: string
   title: string
   time: string
   location: string
   details: string
-  href: string
+  href?: string
 }
 
 const articles: Article[] = [
@@ -37,11 +40,52 @@ const upcomingEvents: Event[] = [
     date: '2026-09-16',
     day: '16',
     month: 'SEP',
+    dateLabel: 'September 16, 2026',
+    venue: 'CYBR.SEC.CON. 2026',
+    kind: 'Speaking',
     title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
     time: '3:30–4:15 PM',
     location: 'Room 361 · General Session · Houston, TX',
     details: 'Daryl “Radar” Riley presents the OASIS model at CYBR.SEC.CON. 2026.',
     href: 'https://www.cybrseccon.com/attend',
+  },
+  {
+    date: '2026-09-25',
+    day: '25–26',
+    month: 'SEP',
+    dateLabel: 'September 25–26, 2026',
+    venue: 'B-Sides Orlando',
+    kind: 'Speaking',
+    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
+    time: 'Talk time to be announced · Sep 25–26',
+    location: 'Full Sail University · Winter Park, FL',
+    details: 'Chris Holt presents the OASIS project at B-Sides Orlando.',
+    href: 'https://bsidesorlando.org/',
+  },
+  {
+    date: '2026-10-01',
+    day: '1',
+    month: 'OCT',
+    dateLabel: 'October 1, 2026',
+    venue: 'Online · Zoom Webinar',
+    kind: 'Webinar',
+    title: 'The Future of AppSec, Open Source, and Your Role in the Age of AI',
+    time: '1:00 PM ET · 11:00 AM MT · Thu, October 1',
+    location: 'Online · Zoom Webinar',
+    details: 'Founding members AppSecAI, DryRun Security, and Intigriti discuss why they built OASIS together.',
+  },
+  {
+    date: '2026-10-06',
+    day: '6',
+    month: 'OCT',
+    dateLabel: 'October 6, 2026',
+    venue: 'THREATCON1',
+    kind: 'Speaking',
+    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
+    time: '1:10–1:40 PM · Tue, October 6',
+    location: 'Sheraton Reston Hotel · Reston, VA',
+    details: 'Chris Holt presents the OASIS project during the THREATCON1 technical track.',
+    href: 'https://threatcon1.org',
   },
 ]
 
@@ -72,26 +116,28 @@ export default function News() {
           <div className="event-grid">
             {upcomingEvents.map(event => (
               <article key={event.date} className="event-card">
-                <div className="event-date" aria-label="September 16, 2026">
+                <div className="event-date" aria-label={event.dateLabel}>
                   <time dateTime={event.date}>
                     <span className="event-date-month">{event.month}</span>
-                    <span className="event-date-day">{event.day}</span>
+                    <span className={`event-date-day${event.day.includes('–') ? ' event-date-day--range' : ''}`}>{event.day}</span>
                   </time>
                 </div>
                 <div className="event-card-content">
                   <div className="event-card-meta">
-                    <span className="badge badge-green">Speaking</span>
-                    <span>CYBR.SEC.CON. 2026</span>
+                    <span className="badge badge-green">{event.kind}</span>
+                    <span>{event.venue}</span>
                   </div>
                   <h2 className="event-card-title">{event.title}</h2>
                   <p className="event-card-details">{event.details}</p>
                   <div className="event-card-facts">
-                    <span><strong>When</strong>{event.time} · Wed, September 16</span>
+                    <span><strong>When</strong>{event.time}</span>
                     <span><strong>Where</strong>{event.location}</span>
                   </div>
-                  <a href={event.href} target="_blank" rel="noopener noreferrer" className="news-card-read-more">
-                    Conference details <ArrowIcon />
-                  </a>
+                  {event.href && (
+                    <a href={event.href} target="_blank" rel="noopener noreferrer" className="news-card-read-more">
+                      Event details <ArrowIcon />
+                    </a>
+                  )}
                 </div>
               </article>
             ))}
