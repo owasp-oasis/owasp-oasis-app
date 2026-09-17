@@ -74,6 +74,43 @@
 }
 .prp-gh-link:hover { text-decoration: underline; }
 
+/* ── Maintainer and upstream workflow ───────────────────────── */
+.prp-workflow { display: grid; gap: 14px; }
+.prp-workflow-hero {
+  padding: 16px;
+  border: 1px solid #cfe1f7;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eef6ff, #f7fbff);
+}
+.prp-workflow-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.prp-workflow-hero strong { font-size: 1.15rem; color: var(--ink); }
+.prp-workflow-hero p, .prp-workflow-record p { margin: 7px 0 0; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+.prp-workflow-section { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
+.prp-workflow-section h3 { margin: 0 0 10px; font-size: 0.9rem; color: var(--ink); }
+.prp-workflow-section h3 span { margin-left: 6px; color: var(--muted); font-size: 0.68rem; font-weight: 500; }
+.prp-workflow-record { display: grid; gap: 5px; font-size: 0.8rem; color: var(--muted); }
+.prp-workflow-record strong { color: var(--ink); }
+.prp-workflow-record a { color: var(--blue); text-decoration: none; }
+.prp-workflow-record a:hover { text-decoration: underline; }
+.prp-workflow-record code { font-family: var(--mono); }
+.prp-workflow-controls { display: grid; gap: 8px; background: #fbfdff; }
+.prp-workflow-controls label { color: var(--muted); font-size: 0.75rem; }
+.prp-workflow-controls textarea { min-height: 76px; resize: vertical; padding: 9px; border: 1px solid var(--line); border-radius: 7px; font: inherit; font-size: 0.8rem; }
+.prp-workflow-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.prp-workflow-actions button, .prp-workflow-submit { padding: 7px 10px; border: 1px solid #b9d1ec; border-radius: 7px; background: var(--white); color: var(--ink); cursor: pointer; font-size: 0.75rem; font-weight: 600; }
+.prp-workflow-actions button:hover, .prp-workflow-submit:hover { border-color: var(--blue); color: var(--blue); }
+.prp-workflow-actions button:disabled, .prp-workflow-submit:disabled { opacity: 0.55; cursor: wait; }
+.prp-workflow-submit { width: 100%; border-color: var(--blue); background: var(--blue); color: var(--white); }
+.prp-workflow-error { margin: 0; color: #b42318; font-size: 0.78rem; }
+
 /* ── Vote bar ────────────────────────────────────────────────── */
 .prp-vote-bar {
   display: flex;

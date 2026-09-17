@@ -243,6 +243,7 @@ node export-db.js
 | `user_roles` | Temporary GitHub-ID-backed application role assignments |
 | `privileged_action_audit` | Append-only outcome log for role-protected server actions |
 | `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
+| `validation_requests` | Availability clock and lifecycle used only for response recognition; historical backfill rows are not badge eligible |
 | `analytics_daily_routes` | Daily normalized route, page-view, navigation-duration, and response-class aggregates; no visitor identifiers |
 | `analytics_daily_cloudflare` | Daily estimated Cloudflare request, visit, response, bandwidth, and cache aggregates |
 | `analytics_collection_days` | Idempotent daily archive checkpoint and retry state |

@@ -39,6 +39,7 @@ tests/worker/
 ├── unit/                        # Pure function tests (no D1/KV)
 │   ├── validation.test.ts       # Input validation (~60 tests)
 │   ├── github.test.ts           # GitHub parsers (~80 tests)
+│   ├── responseBadges.test.ts   # Response-recognition thresholds and evidence
 │   └── security.test.ts         # CSRF, encryption, headers (~50 tests)
 └── integration/                 # Full handler tests (real workerd + in-memory D1/KV)
     ├── helpers.ts               # applySchema, cleanDB, createTestSession, test data factories
@@ -48,6 +49,7 @@ tests/worker/
     ├── preferences.test.ts      # GET/PUT /api/preferences/mine (tests PUT method fix)
     ├── vote.test.ts             # POST /api/vote
     ├── workspace.test.ts        # GET /api/workspace/* endpoints
+    ├── responseBadges.test.ts   # Availability clocks, exclusions, and profile badges
     └── prPanel.test.ts          # GET /api/pr-panel/:id/* endpoints
 ```
 
@@ -150,6 +152,13 @@ Full handler tests with real workerd + in-memory D1/KV:
 - GET /api/contributors/:login → contributor detail with bonus computation
 - GET /api/workspace/maintainers → maintainer stats
 - GET /api/workspace/tools → tool cards
+
+**`responseBadges.test.ts`**
+- New open PR availability starts an eligible response clock
+- Historical PRs remain observation-only
+- First, fast, and unattended coverage thresholds
+- Deterministic ties and author/cancellation/time exclusions
+- Existing reputation fields remain unchanged
 
 **`prPanel.test.ts`** (with GitHub API mocking)
 - GET /api/pr-panel/:id/details → parse PR metadata (CWE, severity, etc.)
