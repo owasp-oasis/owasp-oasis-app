@@ -17,7 +17,7 @@ import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
 import { trackReviewEngagement } from '../../analytics'
 
-/* ── Shared PR type (from leaderboard API) ───────────────────── */
+/* ── Shared PR type (from workspace API) ────────────────────── */
 export interface PanelPR {
   id: number
   repo_name: string
@@ -229,7 +229,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     { id: 'workflow', label: 'Workflow' },
   ]
 
-  // SummaryTab needs details augmented with consensus counts from the leaderboard PR
+  // SummaryTab needs details augmented with consensus counts from the workspace PR
   const summaryDetails = details ? {
     ...details,
     consensus_accept: activePR.consensus_accept,

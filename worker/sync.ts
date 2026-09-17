@@ -79,7 +79,7 @@ async function processPR(
     // ── Validator-bot special path ────────────────────────────────
     // Validator bots (e.g. dryrun-security[bot]) post real OASIS-template comments
     // with accept/modify/reject decisions. We write their pr_comments rows (and fetch
-    // reactions) so the validate-tools leaderboard can count them, but we skip
+    // reactions) so the validate-tools workspace tab can count them, but we skip
     // pr_participants and contributors tracking — they are not human contributors.
     if (login && isValidatorBot(login)) {
       const decision = parseDecision(comment.body);
