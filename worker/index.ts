@@ -19,7 +19,6 @@ import {
 import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
 import { runTrackedHubSpot } from './scheduledJobs.js';
-import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
   setCanonicalScheduleEnabled,
@@ -348,14 +347,6 @@ export default {
       console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));
       return;
     }
-    if (event.cron === '30 2 * * *' && env.ENVIRONMENT === 'preview') {
-      const cutoff = await env.DB.prepare(
-        "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
-      ).first<{ value: string }>();
-      const reference = `preview-${new Date(event.scheduledTime).toISOString()}`;
-      await startShadowSync(env, reference, cutoff?.value ?? new Date(event.scheduledTime).toISOString());
-      return;
-    }
     if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
@@ -367,7 +358,6 @@ export default {
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
-export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
 export { OrphanCleanupWorkflow };
 export { HubSpotSyncWorkflow };

@@ -7,7 +7,7 @@ interface CancelRunRow {
   pipeline_run_id: string | null;
   workflow_instance_id: string | null;
   job_key: string;
-  mode: 'legacy' | 'shadow' | 'live';
+  mode: 'live';
   status: string;
 }
 
@@ -18,12 +18,10 @@ interface WorkflowReference {
 type TerminationOutcome = 'terminated' | 'not_running' | 'untracked' | 'failed';
 
 const WORKSPACE_PARENT_KEYS = new Set([
-  'legacy_workspace_sync',
   'canonical_workspace_sync',
 ]);
 
 function workflowBinding(env: Env, run: CancelRunRow, pipelineScoped: boolean) {
-  if (run.mode === 'shadow') return env.SHADOW_SYNC_WORKFLOW;
   if (pipelineScoped) return env.CANONICAL_SYNC_WORKFLOW;
   if (run.job_key === 'hubspot_contacts') return env.HUBSPOT_SYNC_WORKFLOW;
   if (run.job_key === 'orphan_cleanup') return env.ORPHAN_CLEANUP_WORKFLOW;
@@ -88,14 +86,13 @@ export async function handleCancelSyncRun(
   const parent = run.pipeline_run_id
     ? await env.DB.prepare(`
         SELECT id FROM sync_job_runs
-         WHERE pipeline_run_id = ?
-           AND job_key IN ('legacy_workspace_sync', 'canonical_workspace_sync')
+         WHERE pipeline_run_id = ? AND job_key = 'canonical_workspace_sync'
          LIMIT 1
       `).bind(run.pipeline_run_id).first<{ id: string }>()
     : null;
   const pipelineScoped = Boolean(
     run.pipeline_run_id
-    && (run.mode === 'shadow' || parent || WORKSPACE_PARENT_KEYS.has(run.job_key)),
+    && (parent || WORKSPACE_PARENT_KEYS.has(run.job_key)),
   );
 
   const workflowReference = pipelineScoped && run.pipeline_run_id
@@ -131,46 +128,44 @@ export async function handleCancelSyncRun(
          WHERE pipeline_run_id = ? AND status IN ('pending', 'leased', 'deferred')
       `).bind(reason, now, run.pipeline_run_id),
     );
-    if (run.mode !== 'shadow') {
-      statements.push(
-        env.DB.prepare(`
-          UPDATE sync_state SET value = '0'
-           WHERE key = 'sync_running'
-             AND EXISTS (
-               SELECT 1 FROM sync_pipeline_locks
-                WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
-             )
-        `).bind(run.pipeline_run_id),
-        env.DB.prepare(`
-          UPDATE sync_state SET value = 'cancelled'
-           WHERE key = 'canonical_pipeline_phase'
-             AND EXISTS (
-               SELECT 1 FROM sync_state current
-                WHERE current.key = 'canonical_pipeline_run_id' AND current.value = ?
-             )
-        `).bind(run.pipeline_run_id),
-        env.DB.prepare(`
-          UPDATE sync_state SET value = ?
-           WHERE key = 'canonical_pipeline_updated_at'
-             AND EXISTS (
-               SELECT 1 FROM sync_state current
-                WHERE current.key = 'canonical_pipeline_run_id' AND current.value = ?
-             )
-        `).bind(now, run.pipeline_run_id),
-        env.DB.prepare(`
-          DELETE FROM sync_state
-           WHERE key = 'sync_cursor'
-             AND EXISTS (
-               SELECT 1 FROM sync_pipeline_locks
-                WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
-             )
-        `).bind(run.pipeline_run_id),
-        env.DB.prepare(`
-          DELETE FROM sync_pipeline_locks
-           WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
-        `).bind(run.pipeline_run_id),
-      );
-    }
+    statements.push(
+      env.DB.prepare(`
+        UPDATE sync_state SET value = '0'
+         WHERE key = 'sync_running'
+           AND EXISTS (
+             SELECT 1 FROM sync_pipeline_locks
+              WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
+           )
+      `).bind(run.pipeline_run_id),
+      env.DB.prepare(`
+        UPDATE sync_state SET value = 'cancelled'
+         WHERE key = 'canonical_pipeline_phase'
+           AND EXISTS (
+             SELECT 1 FROM sync_state current
+              WHERE current.key = 'canonical_pipeline_run_id' AND current.value = ?
+           )
+      `).bind(run.pipeline_run_id),
+      env.DB.prepare(`
+        UPDATE sync_state SET value = ?
+         WHERE key = 'canonical_pipeline_updated_at'
+           AND EXISTS (
+             SELECT 1 FROM sync_state current
+              WHERE current.key = 'canonical_pipeline_run_id' AND current.value = ?
+           )
+      `).bind(now, run.pipeline_run_id),
+      env.DB.prepare(`
+        DELETE FROM sync_state
+         WHERE key = 'sync_cursor'
+           AND EXISTS (
+             SELECT 1 FROM sync_pipeline_locks
+              WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
+           )
+      `).bind(run.pipeline_run_id),
+      env.DB.prepare(`
+        DELETE FROM sync_pipeline_locks
+         WHERE lock_key = 'canonical_workspace_sync' AND pipeline_run_id = ?
+      `).bind(run.pipeline_run_id),
+    );
   } else {
     statements.push(
       env.DB.prepare(`

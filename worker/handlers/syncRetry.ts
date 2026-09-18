@@ -5,7 +5,6 @@ import { failHubSpotSyncDispatch, initializeHubSpotSyncRun } from '../hubSpotSyn
 import { failManualSyncJobDispatch, initializeManualSyncJob } from '../manualSyncJobWorkflow.js';
 import { failOrphanCleanupDispatch, initializeOrphanCleanupRun } from '../orphanCleanupWorkflow.js';
 import { jsonErr, secHeaders, validateCSRF } from '../security.js';
-import { startShadowSync } from '../shadowSync.js';
 import { finishSyncJob, startSyncJob } from '../syncJobs.js';
 import { runAnalyticsCollector, runHistoricalAnalyticsBackfill } from '../analytics.js';
 
@@ -20,9 +19,7 @@ const MANUAL_JOB_KEYS = new Set<ManualSyncJobKey>([
   'contributor_scores',
 ]);
 const PARENT_JOB_KEYS = new Set([
-  'legacy_workspace_sync',
   'canonical_workspace_sync',
-  'shadow_sync_dispatch',
 ]);
 const ANALYTICS_JOB_KEYS = new Set([
   'cloudflare_analytics',
@@ -36,13 +33,12 @@ const TRIGGERABLE_JOB_KEYS = new Set([
   'cloudflare_analytics',
   'cloudflare_analytics_backfill',
 ]);
-type PipelineTarget = 'legacy' | 'canonical' | 'shadow' | 'integration' | 'analytics';
+type PipelineTarget = 'canonical' | 'integration' | 'analytics';
 
 interface RetryTarget { id: string }
 
 function isPipelineTarget(value: unknown): value is PipelineTarget {
-  return value === 'legacy' || value === 'canonical' || value === 'shadow'
-    || value === 'integration' || value === 'analytics';
+  return value === 'canonical' || value === 'integration' || value === 'analytics';
 }
 
 async function requestedPipeline(request: Request, jobKey: string): Promise<PipelineTarget> {
@@ -51,8 +47,6 @@ async function requestedPipeline(request: Request, jobKey: string): Promise<Pipe
     value = (await request.clone().json<{ pipeline?: unknown }>()).pipeline;
   } catch { /* Existing clients may send an empty body. */ }
   if (isPipelineTarget(value)) return value;
-  if (jobKey === 'legacy_workspace_sync') return 'legacy';
-  if (jobKey === 'shadow_sync_dispatch') return 'shadow';
   if (jobKey === 'hubspot_contacts') return 'integration';
   if (ANALYTICS_JOB_KEYS.has(jobKey)) return 'analytics';
   return 'canonical';
@@ -84,19 +78,6 @@ async function latestRunId(env: Env, jobKey: string, mode?: string): Promise<str
   `).bind(jobKey).first<RetryTarget>())?.id ?? null;
 }
 
-async function startManualShadow(env: Env): Promise<{ started: boolean; workflowInstanceId: string | null }> {
-  const cutoff = await env.DB.prepare(
-    "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
-  ).first<{ value: string }>();
-  const workflowInstanceId = await startShadowSync(
-    env,
-    `manual-${crypto.randomUUID()}`,
-    cutoff?.value ?? new Date().toISOString(),
-    'manual',
-  );
-  return { started: workflowInstanceId !== null, workflowInstanceId };
-}
-
 async function activeManualWorkspaceRun(env: Env): Promise<string | null> {
   const run = await env.DB.prepare(`
     SELECT id FROM sync_job_runs
@@ -121,36 +102,15 @@ export async function handleRetrySyncJob(
   if (!TRIGGERABLE_JOB_KEYS.has(jobKey)) return jsonErr('This job is not currently runnable', 409, request);
 
   const pipeline = await requestedPipeline(request, jobKey);
-  if (pipeline === 'legacy' || jobKey === 'legacy_workspace_sync') {
-    return jsonErr('Legacy Workspace synchronization is retired.', 410, request);
-  }
   const pipelineMismatch =
     (jobKey === 'canonical_workspace_sync' && pipeline !== 'canonical')
-    || (jobKey === 'shadow_sync_dispatch' && pipeline !== 'shadow')
     || (jobKey === 'hubspot_contacts' && pipeline !== 'integration')
     || (ANALYTICS_JOB_KEYS.has(jobKey) && pipeline !== 'analytics')
     || (pipeline === 'integration' && jobKey !== 'hubspot_contacts')
     || (pipeline === 'analytics' && !ANALYTICS_JOB_KEYS.has(jobKey));
   if (pipelineMismatch) return jsonErr('Job does not belong to the requested pipeline', 400, request);
-  const mode = pipeline === 'shadow' ? 'shadow' : 'live';
+  const mode = 'live';
   const retriedRunId = await latestRunId(env, jobKey, mode);
-
-  if (pipeline === 'shadow') {
-    if (!env.SHADOW_SYNC_WORKFLOW) return jsonErr('Shadow Workflow binding is unavailable', 503, request);
-    await recordPrivilegedAction(env, principal, {
-      action: 'sync_job.retry', targetType: 'sync_job', targetId: `${pipeline}:${jobKey}`, outcome: 'accepted',
-    });
-    const dispatch = await startManualShadow(env);
-    return secHeaders(Response.json({
-      ok: dispatch.started,
-      accepted: dispatch.started,
-      job_key: jobKey,
-      pipeline,
-      retried_run_id: retriedRunId,
-      workflow_instance_id: dispatch.workflowInstanceId,
-      execution_scope: 'shadow_pipeline',
-    }, { status: dispatch.started ? 202 : 409 }), request);
-  }
 
   if (jobKey === 'canonical_workspace_sync') {
     if (await activeManualWorkspaceRun(env)) {
@@ -241,7 +201,6 @@ export async function handleRetrySyncJob(
       jobRunId: runId,
       pipelineRunId,
       jobKey: jobKey as ManualSyncJobKey,
-      pipeline: pipeline as 'legacy' | 'canonical',
       auditActor,
     };
     ctx.waitUntil(

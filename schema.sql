@@ -378,6 +378,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_external_pr
   ON upstream_submissions(upstream_full_name, upstream_pr_number)
   WHERE upstream_pr_number IS NOT NULL;
 
--- Sync observability and shadow validation tables are introduced by
--- migrations/0007_sync_job_observability.sql. Apply migrations after this
--- bootstrap schema when creating a fresh local database.
+-- Sync observability tables are introduced by migrations/0007_sync_job_observability.sql.
+-- Apply migrations after this bootstrap schema when creating a fresh local database.
