@@ -165,6 +165,27 @@ describe('Leaderboard endpoints', () => {
       expect(body.length).toBeGreaterThan(0);
     });
 
+    it('still returns PRs while workflow migrations are catching up', async () => {
+      await insertTestRepo(env);
+      await insertTestPR(env, { id: 1003 });
+      await env.DB.prepare('DROP TABLE upstream_submissions').run();
+      await env.DB.prepare('DROP TABLE maintainer_decisions').run();
+
+      try {
+        const res = await SELF.fetch(new Request('http://localhost/api/workspace/prs'));
+        const body = await res.json();
+
+        expect(res.status).toBe(200);
+        expect(body[0]).toMatchObject({
+          id: 1003,
+          maintainer_decision: null,
+          upstream_status: null,
+        });
+      } finally {
+        await applySchema(env);
+      }
+    });
+
     it('returns PRs only from the active repository ID when a name is reused', async () => {
       await insertTestRepo(env, { id: 101, name: 'reused-name' });
       await insertTestPR(env, { id: 1001, repo_id: 101, repo_name: 'reused-name', number: 1 });

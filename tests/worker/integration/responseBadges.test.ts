@@ -239,4 +239,23 @@ describe('response badge integration', () => {
     expect(body.responseBadges.badges).toHaveLength(3);
     expect(body.responseBadges.badges[0]).toMatchObject({ id: 'first_responder', state: 'active' });
   });
+
+  it('keeps the profile endpoint available before the badge migration lands', async () => {
+    await env.DB.prepare(`
+      INSERT INTO contributors (login, base_reputation, modified_reputation)
+      VALUES ('migration-lag-user', 12, 24)
+    `).run();
+    await env.DB.prepare('DROP TABLE validation_requests').run();
+
+    try {
+      const response = await SELF.fetch(new Request('http://localhost/api/contributors/migration-lag-user'));
+      const body = await response.json<any>();
+
+      expect(response.status).toBe(200);
+      expect(body.responseBadges.badges.every((badge: any) => badge.state === 'locked')).toBe(true);
+      expect(body.contributor).toMatchObject({ base_reputation: 12, modified_reputation: 24 });
+    } finally {
+      await applySchema(env);
+    }
+  });
 });

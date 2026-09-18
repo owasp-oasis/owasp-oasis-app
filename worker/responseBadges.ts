@@ -5,6 +5,8 @@
  * engine. Badges never change scores, ranks, vote weight, or permissions.
  */
 
+import { isMissingSchemaObject } from './schemaCompatibility.js';
+
 export const RESPONSE_BADGE_RULES = {
   criteriaVersion: 1,
   fastWindowDays: 90,
@@ -164,7 +166,9 @@ export async function getResponseBadgeSummary(
   const cutoff90d = new Date(now.getTime() - RESPONSE_BADGE_RULES.fastWindowDays * 86_400_000).toISOString();
   const cutoff180d = new Date(now.getTime() - RESPONSE_BADGE_RULES.coverageWindowDays * 86_400_000).toISOString();
 
-  const row = await db.prepare(`
+  let row: MetricsRow | null;
+  try {
+    row = await db.prepare(`
     WITH eligible_responses AS (
       SELECT
         uv.github_login,
@@ -197,14 +201,21 @@ export async function getResponseBadgeSummary(
       END), 0) AS coverage_responses_180d
     FROM eligible_responses
     WHERE github_login = ?
-  `).bind(
-    cutoff90d,
-    cutoff90d,
-    RESPONSE_BADGE_RULES.fastResponseHours,
-    cutoff180d,
-    RESPONSE_BADGE_RULES.coverageWaitHours,
-    login,
-  ).first<MetricsRow>();
+    `).bind(
+      cutoff90d,
+      cutoff90d,
+      RESPONSE_BADGE_RULES.fastResponseHours,
+      cutoff180d,
+      RESPONSE_BADGE_RULES.coverageWaitHours,
+      login,
+    ).first<MetricsRow>();
+  } catch (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    // The badge migration is additive. During a rolling preview deployment,
+    // keep contributor profiles usable and show all badges as locked until
+    // validation_requests is available.
+    row = null;
+  }
 
   return buildResponseBadgeSummary(row ?? {
     total_responses: 0,
