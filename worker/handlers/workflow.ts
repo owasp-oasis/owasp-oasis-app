@@ -11,6 +11,7 @@ import type { Env } from '../types.js';
 import { ghFetch, parseGitHubUrl, ORG } from '../github.js';
 import { getRequestPrincipal, roleAllows, recordPrivilegedAction } from '../authorization.js';
 import { jsonErr, jsonOk, validateCSRF } from '../security.js';
+import { isMissingSchemaObject } from '../schemaCompatibility.js';
 
 const DECISIONS = new Set(['changes_requested', 'accepted', 'declined']);
 const TRUST_MIN_CONTRIBUTORS = 10;
@@ -118,22 +119,32 @@ async function getPR(env: Env, prId: number): Promise<PRWorkflowRow | null> {
 }
 
 async function getLatestDecision(env: Env, prId: number): Promise<DecisionRow | null> {
-  return env.DB.prepare(`
-    SELECT id, decision, reason, head_sha, github_user_id, github_login, created_at
-      FROM maintainer_decisions
-     WHERE pr_id = ?
-     ORDER BY created_at DESC, id DESC
-     LIMIT 1
-  `).bind(prId).first<DecisionRow>();
+  try {
+    return await env.DB.prepare(`
+      SELECT id, decision, reason, head_sha, github_user_id, github_login, created_at
+        FROM maintainer_decisions
+       WHERE pr_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1
+    `).bind(prId).first<DecisionRow>();
+  } catch (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    return null;
+  }
 }
 
 async function getLatestSubmission(env: Env, prId: number): Promise<SubmissionRow | null> {
-  return env.DB.prepare(`
-    SELECT * FROM upstream_submissions
-     WHERE source_pr_id = ?
-     ORDER BY created_at DESC, id DESC
-     LIMIT 1
-  `).bind(prId).first<SubmissionRow>();
+  try {
+    return await env.DB.prepare(`
+      SELECT * FROM upstream_submissions
+       WHERE source_pr_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1
+    `).bind(prId).first<SubmissionRow>();
+  } catch (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    return null;
+  }
 }
 
 function communityReady(pr: PRWorkflowRow): boolean {
