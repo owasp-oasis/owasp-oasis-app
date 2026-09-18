@@ -358,27 +358,6 @@ CREATE TABLE IF NOT EXISTS sync_work_items (
   updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)
 );
 
-CREATE TABLE IF NOT EXISTS sync_shadow_entities (
-  pipeline_run_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
-  repository_id INTEGER, source_updated_at TEXT, fingerprint TEXT NOT NULL,
-  payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
-  PRIMARY KEY(pipeline_run_id, entity_type, entity_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_parity_runs (
-  pipeline_run_id TEXT PRIMARY KEY, canonical_cutoff_at TEXT NOT NULL,
-  status TEXT NOT NULL, comparable_entities INTEGER NOT NULL DEFAULT 0,
-  matched_entities INTEGER NOT NULL DEFAULT 0, changed_during_run INTEGER NOT NULL DEFAULT 0,
-  difference_count INTEGER NOT NULL DEFAULT 0, consecutive_matches INTEGER NOT NULL DEFAULT 0,
-  eligible_for_cutover INTEGER NOT NULL DEFAULT 0, compared_at TEXT, created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_parity_differences (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_run_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, difference_type TEXT NOT NULL,
-  fields_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS sync_daily_budgets (
   budget_date TEXT NOT NULL, budget_key TEXT NOT NULL, label TEXT NOT NULL,
   unit TEXT NOT NULL, configured_limit INTEGER, consumed INTEGER NOT NULL DEFAULT 0,
