@@ -198,10 +198,10 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      fetch('/api/leaderboard/prs').then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/leaderboard/repos').then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/leaderboard/contributors').then(r => r.ok ? r.json() : Promise.reject()),
-      fetch('/api/leaderboard/meta').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/workspace/prs').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/workspace/repos').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/workspace/contributors').then(r => r.ok ? r.json() : Promise.reject()),
+      fetch('/api/workspace/meta').then(r => r.ok ? r.json() : Promise.reject()),
       fetch('/api/count').then(r => r.ok ? r.json() : Promise.reject()),
     ]).then(([prData, repoData, contributorData, meta, countData]) => {
       if (cancelled || !Array.isArray(prData) || !Array.isArray(repoData) || prData.length === 0) return
