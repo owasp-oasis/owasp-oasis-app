@@ -5,7 +5,7 @@ Thank you for helping improve OWASP Open Source Application Security Insights
 and people working with AI assistants are welcome.
 
 By participating, you agree to follow the
-[OWASP Code of Conduct](https://owasp.org/www-policy/operational/code-of-conduct).
+[OWASP Code of Conduct](https://owasp.org/legal/code-of-conduct).
 Be respectful, assume good intent, and keep technical disagreement focused on
 the work.
 
