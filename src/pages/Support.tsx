@@ -187,7 +187,7 @@ export default function Support() {
           <div className="community-card">
             <div className="community-card-icon" aria-hidden="true">💬</div>
             <div className="community-card-content">
-              <h3>OWASP Slack #oasis channel</h3>
+              <h3>OWASP Slack #project-oasis channel</h3>
               <p>
                 The OASIS community lives in the #oasis channel on the OWASP Slack workspace.
                 Validators, maintainers, and project leads hang out here to collaborate, answer questions,
