@@ -23,7 +23,7 @@ function retryRequest(
   sessionCookie?: string,
   tokenCookie?: string,
   csrf?: string,
-  pipeline?: 'legacy' | 'canonical' | 'shadow' | 'integration' | 'analytics',
+  pipeline?: 'canonical' | 'integration' | 'analytics',
 ): Request {
   const headers = new Headers();
   if (sessionCookie && tokenCookie) {
@@ -223,7 +223,7 @@ describe('server-side roles and sync retries', () => {
     await waitOnExecutionContext(catalogCtx);
 
     const completeRunId = await startSyncJob(env.DB, {
-      jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'legacy',
+      jobKey: 'repository_inventory', trigger: 'scheduled', mode: 'live',
     });
     await finishSyncJob(env.DB, completeRunId, 'succeeded');
 
@@ -363,67 +363,4 @@ describe('server-side roles and sync retries', () => {
     })));
   });
 
-  it('rejects retired legacy runs while dispatching canonical and shadow parents', async () => {
-    const workspaceDispatches: Array<{ params: { action: string; pipelineKind?: string } }> = [];
-    const shadowDispatches: Array<{ params: { action: string; legacyPipelineRunId: string } }> = [];
-    const productionEnv = {
-      ...env,
-      ENVIRONMENT: 'production',
-      CANONICAL_SYNC_WORKFLOW: {
-        async create(options: { params: { action: string; pipelineKind?: string } }) {
-          workspaceDispatches.push(options);
-          return { id: `${options.params.pipelineKind}-workflow` };
-        },
-      },
-      SHADOW_SYNC_WORKFLOW: {
-        async create(options: { params: { action: string; legacyPipelineRunId: string } }) {
-          shadowDispatches.push(options);
-          return { id: 'shadow-workflow' };
-        },
-      },
-    } as Env;
-    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
-    const csrf = makeCsrf();
-
-    const legacy = await handleRetrySyncJob(
-      retryRequest('legacy_workspace_sync', admin.sessionCookie, admin.tokenCookie, csrf, 'legacy'),
-      productionEnv,
-      createExecutionContext(),
-      'legacy_workspace_sync',
-    );
-    expect(legacy.status).toBe(410);
-    await expect(legacy.json()).resolves.toEqual(expect.objectContaining({
-      error: 'Legacy Workspace synchronization is retired.',
-    }));
-
-    const canonical = await handleRetrySyncJob(
-      retryRequest('canonical_workspace_sync', admin.sessionCookie, admin.tokenCookie, csrf, 'canonical'),
-      productionEnv,
-      createExecutionContext(),
-      'canonical_workspace_sync',
-    );
-    expect(canonical.status).toBe(202);
-    await env.DB.prepare(
-      "UPDATE sync_job_runs SET status = 'succeeded', finished_at = ? WHERE status IN ('queued', 'running')",
-    ).bind(new Date().toISOString()).run();
-    await env.DB.prepare('DELETE FROM sync_pipeline_locks').run();
-
-    const shadow = await handleRetrySyncJob(
-      retryRequest('shadow_sync_dispatch', admin.sessionCookie, admin.tokenCookie, csrf, 'shadow'),
-      productionEnv,
-      createExecutionContext(),
-      'shadow_sync_dispatch',
-    );
-    expect(shadow.status).toBe(202);
-    expect(workspaceDispatches.map(item => item.params)).toEqual([
-      expect.objectContaining({ action: 'inventory', pipelineKind: 'canonical' }),
-    ]);
-    expect(shadowDispatches).toHaveLength(1);
-
-    const shadowRun = await env.DB.prepare(`
-      SELECT trigger_type, mode FROM sync_job_runs
-       WHERE job_key = 'shadow_sync_dispatch' ORDER BY started_at DESC LIMIT 1
-    `).first<{ trigger_type: string; mode: string }>();
-    expect(shadowRun).toEqual({ trigger_type: 'manual', mode: 'shadow' });
-  });
 });

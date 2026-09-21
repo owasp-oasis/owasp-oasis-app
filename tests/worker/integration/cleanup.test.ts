@@ -6,7 +6,6 @@ import {
 } from '../../../worker/cleanup.js';
 import { upsertRepo } from '../../../worker/db.js';
 import {
-  failOrphanCleanupDispatch,
   ORPHAN_CLEANUP_CHUNK_SIZE,
   processOrphanCleanupChunk,
   seedOrphanCleanupWorkItems,
@@ -241,7 +240,7 @@ describe('Bounded orphan cleanup', () => {
     )).respondWith(new Response(null, { status: 401 }));
 
     const runId = await startSyncJob(env.DB, {
-      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'legacy', status: 'queued',
+      jobKey: 'orphan_cleanup', trigger: 'scheduled', mode: 'live', status: 'queued',
     });
     await seedOrphanCleanupWorkItems(env.DB, runId, runId);
 
@@ -258,51 +257,4 @@ describe('Bounded orphan cleanup', () => {
     ]);
   });
 
-  it('fails the legacy parent when the cleanup Workflow cannot be dispatched', async () => {
-    const pipelineRunId = crypto.randomUUID();
-    const parentRunId = await startSyncJob(env.DB, {
-      jobKey: 'legacy_workspace_sync', pipelineRunId, trigger: 'scheduled', mode: 'legacy',
-    });
-    await env.DB.prepare(
-      'UPDATE sync_job_runs SET metrics_json = ? WHERE id = ?',
-    ).bind(JSON.stringify({ repository_errors: 0, sync_errors: 0, cleanup_pending: true }), parentRunId).run();
-    const cleanupRunId = await startSyncJob(env.DB, {
-      jobKey: 'orphan_cleanup', pipelineRunId, trigger: 'scheduled', mode: 'legacy', status: 'queued',
-    });
-
-    await failOrphanCleanupDispatch(env, {
-      jobRunId: cleanupRunId,
-      pipelineRunId,
-      legacyParentRunId: parentRunId,
-    }, new Error('Workflow binding unavailable'));
-
-    const runs = await env.DB.prepare(`
-      SELECT job_key, status, error_code, metrics_json FROM sync_job_runs
-       WHERE id IN (?, ?) ORDER BY job_key
-    `).bind(parentRunId, cleanupRunId).all<{
-      job_key: string;
-      status: string;
-      error_code: string;
-      metrics_json: string;
-    }>();
-    expect(runs.results?.map(run => ({
-      job_key: run.job_key,
-      status: run.status,
-      error_code: run.error_code,
-      metrics: JSON.parse(run.metrics_json),
-    }))).toEqual([
-      {
-        job_key: 'legacy_workspace_sync',
-        status: 'failed',
-        error_code: 'legacy_pipeline_incomplete',
-        metrics: expect.objectContaining({ cleanup_pending: false, cleanup_errors: 1 }),
-      },
-      {
-        job_key: 'orphan_cleanup',
-        status: 'failed',
-        error_code: 'orphan_cleanup_workflow_failed',
-        metrics: expect.objectContaining({ bounded_workflow: true, errors: 1 }),
-      },
-    ]);
-  });
 });

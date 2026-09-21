@@ -102,7 +102,7 @@ describe('bounded manual synchronization jobs', () => {
       jobKey: 'comment_reactions',
       pipelineRunId,
       trigger: 'manual',
-      mode: 'legacy',
+      mode: 'live',
       status: 'queued',
     });
     const created: Array<{ params: ManualSyncJobParams }> = [];
