@@ -15,11 +15,11 @@ Before opening an issue, decide which system the report concerns:
 
 | You want to… | Use… |
 |---|---|
-| Report a bug in the OASIS website, API, sync jobs, or infrastructure | This repository's bug-report form |
+| Report a bug in the OASIS website, API, sync jobs, or infrastructure | [This repository's bug-report form](https://github.com/owasp-oasis/owasp-oasis-app/issues/new?template=security-contact.yml) |
 | Propose an OASIS feature, improvement, or code change | This repository's change-proposal form |
 | Improve this repository's documentation | This repository's documentation form |
 | Report a possible security flaw in OASIS itself | The private process in [`SECURITY.md`](SECURITY.md); do not disclose details publicly |
-| Review, vote on, or discuss a vulnerability-fix PR shown in the Workspace | The relevant OASIS Workspace PR page |
+| Review, vote on, or discuss a vulnerability-fix PR shown in the Workspace | The relevant [OASIS Workspace PR](https://www.owasp-oasis.org/workspace/pull-requests) page |
 | Report a vulnerability in another open-source project | That project's security policy or coordinated-disclosure channel, not this repository's public issues |
 
 If you are uncertain, open a change proposal with the non-sensitive context you
