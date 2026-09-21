@@ -28,7 +28,7 @@ describe('sync job public-data sanitization', () => {
 
   it('recognizes only missing observability tables as migration gaps', () => {
     expect(isMissingSyncObservabilityTableError(
-      new Error('D1_ERROR: no such table: sync_parity_runs: SQLITE_ERROR'),
+      new Error('D1_ERROR: no such table: sync_job_runs: SQLITE_ERROR'),
     )).toBe(true);
     expect(isMissingSyncObservabilityTableError(
       new Error('D1_ERROR: no such table: pull_requests: SQLITE_ERROR'),
