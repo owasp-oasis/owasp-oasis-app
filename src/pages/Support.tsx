@@ -189,7 +189,7 @@ export default function Support() {
             <div className="community-card-content">
               <h3>OWASP Slack #project-oasis channel</h3>
               <p>
-                The OASIS community lives in the #oasis channel on the OWASP Slack workspace.
+                The OASIS community lives in the #project-oasis channel on the OWASP Slack workspace.
                 Validators, maintainers, and project leads hang out here to collaborate, answer questions,
                 and coordinate on fixes.
               </p>
