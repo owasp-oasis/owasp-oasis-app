@@ -20,7 +20,6 @@ Before opening an issue, decide which system the report concerns:
 | Improve this repository's documentation | This repository's documentation form |
 | Report a possible security flaw in OASIS itself | The private process in [`SECURITY.md`](SECURITY.md); do not disclose details publicly |
 | Review, vote on, or discuss a vulnerability-fix PR shown in the Workspace | The relevant [OASIS Workspace PR](https://www.owasp-oasis.org/workspace/pull-requests) page |
-| Report a vulnerability in another open-source project | That project's security policy or coordinated-disclosure channel, not this repository's public issues |
 
 If you are uncertain, open a change proposal with the non-sensitive context you
 have. Never include credentials, tokens, personal data, exploit details, or
