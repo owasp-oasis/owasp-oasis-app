@@ -14,6 +14,7 @@
     "migrate:production": "wrangler d1 migrations apply oasis-db --remote --env production",
     "deploy:preview": "npm run migrate:preview && wrangler deploy --env=\"\"",
     "deploy": "npm run migrate:production && wrangler deploy --env production",
+    "db:seed": "wrangler d1 execute oasis-db --local --file schema.sql && wrangler d1 migrations apply oasis-db --local && wrangler d1 execute oasis-db --local --file seeds/dev.sql",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/worker/unit",
