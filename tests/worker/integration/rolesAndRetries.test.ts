@@ -355,7 +355,6 @@ describe('server-side roles and sync retries', () => {
 
     expect(created.map(entry => entry.params)).toEqual(jobKeys.map(jobKey => ({
       jobKey,
-      pipeline: 'canonical',
       jobRunId: expect.any(String),
       pipelineRunId: expect.any(String),
       chunk: 0,
