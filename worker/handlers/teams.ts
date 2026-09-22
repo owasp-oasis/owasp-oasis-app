@@ -71,7 +71,7 @@ async function addMembership(env: Env, teamId: number, login: string, role: Team
 
 async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Promise<unknown[]> {
   const sql = `
-    SELECT t.id, t.name, t.description, t.status, t.created_at,
+    SELECT t.id, t.name, t.description, t.membership_mode, t.status, t.created_at,
       (SELECT COUNT(*) FROM team_memberships tm WHERE tm.team_id = t.id AND tm.left_at IS NULL) AS member_count,
       (SELECT COUNT(*) FROM user_votes uv WHERE uv.team_id = t.id) AS attributed_validations,
       (SELECT COUNT(*) FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id
@@ -85,6 +85,14 @@ async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Pr
 /** GET /api/teams — public aggregate Team directory. */
 export async function handleTeams(env: Env, request: Request): Promise<Response> {
   return jsonOk({ teams: await publicSummary(env) }, request, { cache: 'public, max-age=60' });
+}
+
+/** GET /api/teams/repository-options — active OASIS repositories for Team focus. */
+export async function handleTeamRepositoryOptions(env: Env, request: Request): Promise<Response> {
+  const rows = await env.DB.prepare(`
+    SELECT id, name FROM repos WHERE active = 1 ORDER BY name COLLATE NOCASE
+  `).all();
+  return jsonOk({ repositories: rows.results ?? [] }, request, { cache: 'public, max-age=60' });
 }
 
 /** GET /api/teams/leaderboard?period=all_time|90d */
@@ -112,19 +120,38 @@ export async function handleTeamLeaderboard(env: Env, request: Request, url: URL
 export async function handleMyTeams(request: Request, env: Env): Promise<Response> {
   const user = await getSession(request, env);
   if (!user) return jsonErr('Not authenticated — please sign in with GitHub', 401, request);
-  const memberships = await env.DB.prepare(`
-    SELECT t.id, t.name, t.description, t.membership_mode, t.status, tm.role, tm.joined_at
-      FROM team_memberships tm JOIN teams t ON t.id = tm.team_id
-     WHERE tm.github_login = ? AND tm.left_at IS NULL
-     ORDER BY t.name COLLATE NOCASE
-  `).bind(user.github_login).all();
-  const invites = await env.DB.prepare(`
-    SELECT i.id, i.team_id, t.name AS team_name, i.created_at
-      FROM team_invites i JOIN teams t ON t.id = i.team_id
-     WHERE i.invitee_login = ? AND i.status = 'pending' AND t.status = 'active'
-     ORDER BY i.created_at DESC
-  `).bind(user.github_login).all();
-  return jsonOk({ teams: memberships.results ?? [], invites: invites.results ?? [] }, request);
+  const [memberships, invites, joinRequests, ownershipTransfers] = await Promise.all([
+    env.DB.prepare(`
+      SELECT t.id, t.name, t.description, t.membership_mode, t.status, tm.role, tm.joined_at
+        FROM team_memberships tm JOIN teams t ON t.id = tm.team_id
+       WHERE tm.github_login = ? AND tm.left_at IS NULL
+       ORDER BY t.name COLLATE NOCASE
+    `).bind(user.github_login).all(),
+    env.DB.prepare(`
+      SELECT i.id, i.team_id, t.name AS team_name, i.created_at
+        FROM team_invites i JOIN teams t ON t.id = i.team_id
+       WHERE i.invitee_login = ? AND i.status = 'pending' AND t.status = 'active'
+       ORDER BY i.created_at DESC
+    `).bind(user.github_login).all(),
+    env.DB.prepare(`
+      SELECT jr.id, jr.team_id, t.name AS team_name, jr.created_at
+        FROM team_join_requests jr JOIN teams t ON t.id = jr.team_id
+       WHERE jr.requester_login = ? AND jr.status = 'pending' AND t.status = 'active'
+       ORDER BY jr.created_at DESC
+    `).bind(user.github_login).all(),
+    env.DB.prepare(`
+      SELECT ot.id, ot.team_id, t.name AS team_name, ot.created_at
+        FROM team_ownership_transfers ot JOIN teams t ON t.id = ot.team_id
+       WHERE ot.proposed_owner = ? AND ot.status = 'pending' AND t.status = 'active'
+       ORDER BY ot.created_at DESC
+    `).bind(user.github_login).all(),
+  ]);
+  return jsonOk({
+    teams: memberships.results ?? [],
+    invites: invites.results ?? [],
+    join_requests: joinRequests.results ?? [],
+    ownership_transfers: ownershipTransfers.results ?? [],
+  }, request);
 }
 
 /** POST /api/teams */
@@ -207,6 +234,8 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
     }
   } else if (action === 'archive' || action === 'reactivate') {
     if (membership.role !== 'owner') return jsonErr('Only the Team owner can archive or reactivate this Team', 403, request);
+    if (action === 'archive' && team.status !== 'active') return jsonErr('Only an active Team can be archived', 409, request);
+    if (action === 'reactivate' && team.status !== 'archived') return jsonErr('Only an archived Team can be reactivated', 409, request);
     const archived = action === 'archive';
     await env.DB.prepare('UPDATE teams SET status = ?, archived_at = ?, updated_at = ? WHERE id = ?')
       .bind(archived ? 'archived' : 'active', archived ? timestamp : null, timestamp, teamId).run();
@@ -248,6 +277,15 @@ export async function handleTeamMembers(request: Request, env: Env, teamId: numb
       env.DB.prepare(`UPDATE team_ownership_transfers SET status = 'accepted', resolved_at = ? WHERE id = ?`).bind(timestamp, transfer.id),
     ]);
     return jsonOk({ transferred: true }, request);
+  }
+
+  if (action === 'leave') {
+    const current = await currentMembership(env, teamId, user.github_login);
+    if (!current) return jsonErr('You are not a current member of this Team', 404, request);
+    if (current.role === 'owner') return jsonErr('Transfer ownership before leaving this Team', 409, request);
+    await env.DB.prepare(`UPDATE team_memberships SET left_at = ?, left_reason = 'left' WHERE id = ?`)
+      .bind(timestamp, current.id).run();
+    return jsonOk({ left: true }, request);
   }
 
   const membership = await requireManager(env, teamId, user.github_login);

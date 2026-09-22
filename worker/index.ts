@@ -45,6 +45,7 @@ import {
   handleTeamLeaderboard,
   handleTeamMembers,
   handleTeamRepositories,
+  handleTeamRepositoryOptions,
   handleTeams,
   handleTeamSettings,
 } from './handlers/teams.js';
@@ -139,6 +140,7 @@ export default {
        if (method === 'POST' && url.pathname === '/api/teams')             return await handleCreateTeam(request, env);
        if (method === 'GET'  && url.pathname === '/api/teams/mine')        return await handleMyTeams(request, env);
        if (method === 'GET'  && url.pathname === '/api/teams/leaderboard') return await handleTeamLeaderboard(env, request, url);
+       if (method === 'GET'  && url.pathname === '/api/teams/repository-options') return await handleTeamRepositoryOptions(env, request);
        const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|join-requests|repositories|admin))?$/);
        if (teamMatch) {
          const teamId = Number(teamMatch[1]);

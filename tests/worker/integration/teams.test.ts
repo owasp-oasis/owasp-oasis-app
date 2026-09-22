@@ -87,9 +87,56 @@ describe('Community Teams', () => {
     const teamId = ((await created.json()) as { team: { id: number } }).team.id;
     await insertTestRepo(env, { id: 17, name: 'focus-repo' });
 
+    const repositoryOptions = await SELF.fetch(new Request('http://localhost/api/teams/repository-options'));
+    expect((await repositoryOptions.json() as { repositories: Array<{ id: number }> }).repositories).toContainEqual(expect.objectContaining({ id: 17 }));
+
     const rejected = await post(`/api/teams/${teamId}/repositories`, { action: 'add', repo_id: 17 }, makeCsrf(), outsider.sessionCookie, outsider.tokenCookie);
     expect(rejected.status).toBe(403);
     const added = await post(`/api/teams/${teamId}/repositories`, { action: 'add', repo_id: 17 }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
     expect(added.status).toBe(200);
+  });
+
+  it('allows an opened Team to accept a join request', async () => {
+    const owner = await createTestSession(env, { github_login: 'owner' });
+    const requester = await createTestSession(env, { github_login: 'requester' });
+    const created = await post('/api/teams', { name: 'Open by request', description: '', membership_mode: 'request' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+
+    const requested = await post(`/api/teams/${teamId}/join-requests`, { action: 'request' }, makeCsrf(), requester.sessionCookie, requester.tokenCookie);
+    expect(requested.status).toBe(200);
+    const ownerDetail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, {
+      headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` },
+    }));
+    const requests = (await ownerDetail.json() as { join_requests: Array<{ id: number; requester_login: string }> }).join_requests;
+    expect(requests).toEqual([{ id: expect.any(Number), requester_login: 'requester', created_at: expect.any(String) }]);
+
+    const accepted = await post(`/api/teams/${teamId}/join-requests`, { action: 'resolve', request_id: requests[0].id, status: 'accepted' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(accepted.status).toBe(200);
+    const requesterDetail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, {
+      headers: { Cookie: `${requester.sessionCookie}; ${requester.tokenCookie}` },
+    }));
+    expect((await requesterDetail.json() as { membership: string }).membership).toBe('member');
+  });
+
+  it('makes ownership transfer discoverable and requires acceptance', async () => {
+    const owner = await createTestSession(env, { github_login: 'owner' });
+    const candidate = await createTestSession(env, { github_login: 'candidate' });
+    const created = await post('/api/teams', { name: 'Transfer ownership', description: '' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+    await post(`/api/teams/${teamId}/members`, { action: 'invite', github_login: 'candidate' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const candidateMine = await SELF.fetch(new Request('http://localhost/api/teams/mine', { headers: { Cookie: `${candidate.sessionCookie}; ${candidate.tokenCookie}` } }));
+    const invite = (await candidateMine.json() as { invites: Array<{ id: number }> }).invites[0];
+    await post(`/api/teams/${teamId}/members`, { action: 'accept_invite', invite_id: invite.id }, makeCsrf(), candidate.sessionCookie, candidate.tokenCookie);
+
+    const proposed = await post(`/api/teams/${teamId}/members`, { action: 'propose_transfer', github_login: 'candidate' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(proposed.status).toBe(200);
+    const pendingMine = await SELF.fetch(new Request('http://localhost/api/teams/mine', { headers: { Cookie: `${candidate.sessionCookie}; ${candidate.tokenCookie}` } }));
+    const transfer = (await pendingMine.json() as { ownership_transfers: Array<{ id: number; team_id: number }> }).ownership_transfers[0];
+    expect(transfer.team_id).toBe(teamId);
+
+    const accepted = await post(`/api/teams/${teamId}/members`, { action: 'accept_transfer', transfer_id: transfer.id }, makeCsrf(), candidate.sessionCookie, candidate.tokenCookie);
+    expect(accepted.status).toBe(200);
+    const detail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, { headers: { Cookie: `${candidate.sessionCookie}; ${candidate.tokenCookie}` } }));
+    expect((await detail.json() as { membership: string }).membership).toBe('owner');
   });
 });
