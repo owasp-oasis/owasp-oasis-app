@@ -169,16 +169,29 @@ Do not describe an unperformed check as passing.
 
 ## Commits
 
-Each commit must be a coherent unit that can be reviewed and reverted without
-discarding unrelated work. Avoid mixing formatting, refactors, generated files,
-and behavior changes unless they are inseparable.
+Each commit must be a coherent unit that can be reviewed and reverted
+without discarding unrelated work. Avoid mixing formatting, refactors,
+generated files, and behavior changes unless they are inseparable.
 
-Use an imperative subject and a detailed body covering:
+### Subject line
 
-- why the change is needed;
-- what behavior it produces;
-- how it was verified; and
-- what reverting the commit would undo or require.
+- Use the imperative mood ("Add", "Fix", "Document"), capitalize the
+  first word, and omit the trailing period.
+- Keep it to 50 characters or fewer; 72 is the hard limit.
+- Add a type prefix such as `feat:`, `fix:` or `docs:`. This is optional, since this information should be included in the short-lived, purpose-named branch, as described in [Branch and promotion workflow](https://github.com/owasp-oasis/owasp-oasis-app/blob/main/CONTRIBUTING.md#branch-and-promotion-workflow).
+- Describe what the commit does, not which files it touches.
+
+### Body
+
+Separate the body from the subject with a blank line and wrap lines at
+72 characters. Write short paragraphs, without headings, in this order:
+
+1. **Why** the change is needed.
+2. **What** behavior it produces.
+3. **How** it was verified, naming the exact commands or manual checks.
+4. **Revert impact:** what reverting the commit would undo or require
+   (for example, a migration rollback or configuration cleanup).
+
 
 For example:
 
@@ -196,9 +209,23 @@ Verified with npm run check and manual link review. Reverting this commit
 removes contributor guidance only and does not change runtime behavior.
 ```
 
-Do not bump the application version, release tag, onboarding version, or
-changelog unless the issue or a maintainer specifically includes release work
-in the change. Maintainers assign release versions.
+Do not bump the application version, release tag, onboarding version,
+or changelog unless the issue or a maintainer specifically includes
+release work in the change. Maintainers assign release versions.
+
+### Small commits
+
+A subject-only commit is acceptable for typo fixes, comment-only
+changes, and formatting-only changes. Any commit that changes behavior,
+configuration, schemas, or dependencies needs the full body.
+
+See the following examples of potential subject-only commits.
+
+```
+* feat(api): add contributor search endpoint
+* fix: handle empty D1 result in sync job
+* docs: clarify promotion workflow
+```
 
 ## Pull requests
 
