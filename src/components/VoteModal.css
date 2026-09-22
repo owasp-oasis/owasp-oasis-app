@@ -212,6 +212,13 @@
   box-shadow: 0 0 0 3px rgba(11, 79, 138, 0.1);
 }
 
+.vm-help {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .vm-textarea {
   width: 100%;
   padding: 8px 12px;

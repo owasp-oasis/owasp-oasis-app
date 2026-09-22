@@ -36,6 +36,18 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import {
+  handleCreateTeam,
+  handleMyTeams,
+  handleTeamAdmin,
+  handleTeamDetail,
+  handleTeamJoinRequests,
+  handleTeamLeaderboard,
+  handleTeamMembers,
+  handleTeamRepositories,
+  handleTeams,
+  handleTeamSettings,
+} from './handlers/teams.js';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -121,6 +133,24 @@ export default {
        /* ── Voting ─────────────────────────────────────────────────── */
        if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
        if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
+
+       /* ── Community Teams ───────────────────────────────────────── */
+       if (method === 'GET'  && url.pathname === '/api/teams')             return await handleTeams(env, request);
+       if (method === 'POST' && url.pathname === '/api/teams')             return await handleCreateTeam(request, env);
+       if (method === 'GET'  && url.pathname === '/api/teams/mine')        return await handleMyTeams(request, env);
+       if (method === 'GET'  && url.pathname === '/api/teams/leaderboard') return await handleTeamLeaderboard(env, request, url);
+       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|join-requests|repositories|admin))?$/);
+       if (teamMatch) {
+         const teamId = Number(teamMatch[1]);
+         const action = teamMatch[2];
+         if (method === 'GET' && !action) return await handleTeamDetail(request, env, teamId);
+         if (method === 'POST' && action === 'settings') return await handleTeamSettings(request, env, teamId);
+         if (method === 'POST' && action === 'members') return await handleTeamMembers(request, env, teamId);
+         if (method === 'POST' && action === 'join-requests') return await handleTeamJoinRequests(request, env, teamId);
+         if (method === 'POST' && action === 'repositories') return await handleTeamRepositories(request, env, teamId);
+         if (method === 'POST' && action === 'admin') return await handleTeamAdmin(request, env, teamId);
+         return jsonErr('Method not allowed for this Team action', 405, request);
+       }
 
       /* ── PR Panel (proxy to GitHub API) ─────────────────────────── */
       const prPanelMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/(details|files|comments|react)$/);

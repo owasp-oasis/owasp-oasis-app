@@ -6,15 +6,17 @@ import PRsTab from './leaderboards/PRsTab'
 import ContributorsTab from './leaderboards/ContributorsTab'
 import MaintainersTab from './leaderboards/MaintainersTab'
 import ToolsTab from './leaderboards/ToolsTab'
+import TeamsTab from './leaderboards/TeamsTab'
 import './Leaderboards.css'
 
-export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers'
+export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers' | 'teams'
 
 const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
   { id: 'projects',      label: 'Projects',      path: '/workspace/projects' },
   { id: 'prs',           label: 'Pull Requests', path: '/workspace/pull-requests' },
   { id: 'contributors', label: 'Contributors',  path: '/workspace/contributors' },
   { id: 'maintainers',  label: 'Maintainers',   path: '/workspace/maintainers' },
+  { id: 'teams',        label: 'Teams',         path: '/workspace/teams' },
 ]
 
 interface Meta {
@@ -59,6 +61,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   const [contributors, setContributors] = useState<any[]>([])
   const [tools, setTools]               = useState<any[]>([])
   const [maintainers, setMaintainers]   = useState<any[]>([])
+  const [teams, setTeams]               = useState<any[]>([])
   const [loaded, setLoaded]             = useState<Set<WorkspaceTab>>(new Set())
   const [loading, setLoading]           = useState<WorkspaceTab | null>(null)
   const [tabErrors, setTabErrors]       = useState<Partial<Record<WorkspaceTab, string>>>({})
@@ -108,13 +111,14 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
         contributors: '/api/leaderboard/contributors',
         tools:        '/api/leaderboard/tools',
         maintainers:  '/api/leaderboard/maintainers',
+        teams:        '/api/teams',
       }
       const res = await fetch(endpoints[tab])
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} — ${res.statusText || 'server error'}`)
       }
       const data = await res.json()
-      if (!Array.isArray(data)) {
+      if (tab !== 'teams' && !Array.isArray(data)) {
         throw new Error('Server returned an unexpected format (not an array)')
       }
       if (tab === 'projects')     setRepos(data)
@@ -122,6 +126,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
       if (tab === 'contributors') setContributors(data)
       if (tab === 'tools')        setTools(data)
       if (tab === 'maintainers')  setMaintainers(data)
+      if (tab === 'teams')        setTeams(data.teams ?? [])
       setLoaded(prev => new Set([...prev, tab]))
     } catch (e) {
       const msg = (e as Error).message ?? 'Unknown error'
@@ -242,6 +247,8 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
               <ToolsTab data={tools} loading={loading === 'tools'} />
             ) : activeTab === 'maintainers' ? (
               <MaintainersTab data={maintainers} loading={loading === 'maintainers'} />
+            ) : activeTab === 'teams' ? (
+              <TeamsTab data={teams} loading={loading === 'teams'} onCreated={() => handleRetry('teams')} />
             ) : null}
           </div>
 

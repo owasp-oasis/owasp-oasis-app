@@ -40,6 +40,12 @@ const NEXT_STEP_OPTIONS: { value: NextStepSelection; label: string }[] = [
   { value: 'other',     label: 'Other' },
 ]
 
+interface MyTeam {
+  id: number
+  name: string
+  status: 'active' | 'archived' | 'suspended'
+}
+
 export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDecisionChange }: Props) {
   const [decision, setDecision] = useState<Decision>(initialDecision)
   const [confidence, setConfidence] = useState<string>('Medium')
@@ -51,6 +57,8 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
   const [parentPrNumber, setParentPrNumber] = useState('')
   const [notes, setNotes] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
+  const [teams, setTeams] = useState<MyTeam[]>([])
+  const [teamId, setTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,6 +83,16 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
       .catch(() => setError('Failed to load security token — please refresh.'))
   }, [])
 
+  // Team attribution is optional and chosen immediately before submission.
+  // The worker independently verifies current membership and stores the choice
+  // with the submitted validation, so it cannot later be reassigned.
+  useEffect(() => {
+    fetch('/api/teams/mine', { credentials: 'include' })
+      .then(async response => response.ok ? await response.json() as { teams?: MyTeam[] } : { teams: [] })
+      .then(data => setTeams((data.teams ?? []).filter(team => team.status === 'active')))
+      .catch(() => setTeams([]))
+  }, [])
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!csrfToken) { setError('Missing security token — please refresh.'); return }
@@ -93,6 +111,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
 
     try {
       const body: Record<string, unknown> = { pr_id: pr.id, decision }
+      if (teamId) body.team_id = Number(teamId)
       if (decision === 'duplicate') {
         body.parent_pr_number = parseInt(parentPrNumber, 10)
         body.notes            = notes
@@ -129,6 +148,17 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
 
   return (
     <form onSubmit={handleSubmit} className="vm-form">
+      {teams.length > 0 && (
+        <div className="vm-field">
+          <label className="vm-label" htmlFor="vf-team">Credit this validation</label>
+          <select id="vf-team" className="vm-input" value={teamId} onChange={event => setTeamId(event.target.value)}>
+            <option value="">Personal only</option>
+            {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+          </select>
+          <p className="vm-help">Optional. Your validation remains your own work; this adds it to one Team’s public totals when you submit.</p>
+        </div>
+      )}
+
       {/* Decision toggle */}
       <div className="vm-field">
         <label className="vm-label">Decision</label>
