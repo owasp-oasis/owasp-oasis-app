@@ -271,7 +271,8 @@ CREATE TABLE IF NOT EXISTS teams (
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL,
   archived_at     TEXT,
-  suspended_at    TEXT
+  suspended_at    TEXT,
+  logo_key        TEXT NOT NULL DEFAULT 'initials'
 );
 
 CREATE TABLE IF NOT EXISTS team_memberships (

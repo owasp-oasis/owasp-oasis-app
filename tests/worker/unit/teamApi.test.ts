@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { teamGet, teamPost, teamInitials } from '../../../src/pages/leaderboards/teamApi'
+import { teamGet, teamPost, teamInitials, teamLogoMark } from '../../../src/pages/leaderboards/teamApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -42,5 +42,11 @@ describe('Teams browser API boundary', () => {
     expect(teamInitials('')).toBe('')
     expect(teamInitials('  Python   security reviewers ')).toBe('PS')
     expect(teamInitials('OASIS')).toBe('O')
+  })
+
+  it('uses a built-in mark while retaining initials as the fallback', () => {
+    expect(teamLogoMark('shield')).toBe('◇')
+    expect(teamLogoMark('initials')).toBeNull()
+    expect(teamLogoMark('unknown')).toBeNull()
   })
 })

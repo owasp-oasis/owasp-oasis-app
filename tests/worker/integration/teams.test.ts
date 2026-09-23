@@ -42,6 +42,20 @@ describe('Community Teams', () => {
     expect(privateBody.members).toEqual([{ github_login: 'owner', role: 'owner', joined_at: expect.any(String) }]);
   });
 
+  it('supports a curated logo and keeps invalid logo choices out of the API', async () => {
+    const owner = await createTestSession(env, { github_login: 'logo-owner' });
+    const created = await post('/api/teams', { name: 'Logo reviewers', description: '', logo_key: 'shield' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(created.status).toBe(200);
+    const team = ((await created.json()) as { team: { id: number; logo_key: string } }).team;
+    expect(team.logo_key).toBe('shield');
+
+    const invalid = await post(`/api/teams/${team.id}/settings`, { action: 'update', name: 'Logo reviewers', description: '', logo_key: 'data:image/svg+xml;base64,unsafe' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(invalid.status).toBe(400);
+
+    const updated = await post(`/api/teams/${team.id}/settings`, { action: 'update', name: 'Logo reviewers', description: '', logo_key: 'spark' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(((await updated.json()) as { team: { logo_key: string } }).team.logo_key).toBe('spark');
+  });
+
   it('requires an accepted invitation before a member can see private activity', async () => {
     const owner = await createTestSession(env, { github_login: 'owner' });
     const member = await createTestSession(env, { github_login: 'member' });
@@ -78,6 +92,22 @@ describe('Community Teams', () => {
     const leaderboard = await SELF.fetch(new Request('http://localhost/api/teams/leaderboard?period=all_time'));
     const body = await leaderboard.json() as { teams: Array<{ id: number; attributed_validations: number }> };
     expect(body.teams.find(team => team.id === teamId)?.attributed_validations).toBe(1);
+  });
+
+  it('returns the recent activity leaderboard with per-contributor context', async () => {
+    const owner = await createTestSession(env, { github_login: 'recent-owner' });
+    const created = await post('/api/teams', { name: 'Recent reviewers', description: '' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+    await insertTestRepo(env, { id: 8, name: 'recent-repo' });
+    await insertTestPR(env, { id: 81, repo_id: 8, repo_name: 'recent-repo', merged_upstream: 1 });
+    await env.DB.prepare(`INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).bind('recent-owner', 81, 'recent-repo', 1, 'accept', teamId, new Date().toISOString()).run();
+
+    const response = await SELF.fetch(new Request('http://localhost/api/teams/leaderboard?period=90d'));
+    const body = await response.json() as { period: string; teams: Array<{ id: number; active_contributors: number; validations_per_active_contributor: number }> };
+    const row = body.teams.find(team => team.id === teamId);
+    expect(body.period).toBe('90d');
+    expect(row).toEqual(expect.objectContaining({ active_contributors: 1, validations_per_active_contributor: 1 }));
   });
 
   it('only allows a Team manager to set a repository focus', async () => {

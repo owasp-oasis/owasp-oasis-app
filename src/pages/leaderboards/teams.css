@@ -16,6 +16,7 @@
 .team-profile-heading > .team-button { flex-shrink: 0; }
 .team-avatar { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 11px; color: #136049; background: #e5f2ec; border: 1px solid #cfe4d9; font-size: .9rem; font-weight: 700; }
 .team-avatar--large { width: 58px; height: 58px; flex-basis: 58px; font-size: 1.2rem; border-radius: 14px; }
+.team-avatar:has(> svg), .team-avatar { font-variant-numeric: tabular-nums; }
 .team-person-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; background: var(--gray-100); color: var(--team-muted); font-size: .75rem; font-weight: 650; }
 .team-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: .78rem; color: var(--team-muted); }
 .team-badge { display: inline-flex; align-items: center; border-radius: 5px; padding: 3px 7px; background: #edf2f6; color: #45586b; font-size: .72rem; font-weight: 550; line-height: 1.3; text-transform: capitalize; }
@@ -60,6 +61,23 @@
 .team-empty p { max-width: 460px; font-size: .88rem; }
 .team-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .team-create { max-width: 680px; width: 100%; }
+.team-logo-picker { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+.team-logo-picker legend { padding: 0; font-size: .84rem; font-weight: 550; }
+.team-logo-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-logo-option { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid #cbd6df; border-radius: 7px; background: #fff; color: #40566a; font-size: .78rem; cursor: pointer; }
+.team-logo-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.team-logo-option:focus-within { outline: 3px solid #3695d6; outline-offset: 2px; }
+.team-logo-option.is-selected { border-color: #0b6550; background: #edf7f1; color: #125b46; font-weight: 650; }
+.team-logo-swatch { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: #e4f1ea; color: #12624c; font-weight: 700; font-size: .83rem; }
+.team-leaderboard { overflow: hidden; }
+.team-period-tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--team-border); border-radius: 7px; background: #f4f7f9; }
+.team-period-tabs button { border: 0; border-radius: 5px; padding: 7px 10px; background: transparent; color: var(--team-muted); font: inherit; font-size: .77rem; cursor: pointer; }
+.team-period-tabs button.is-selected { background: #fff; color: #125b46; box-shadow: 0 1px 2px #1c344012; font-weight: 650; }
+.team-leaderboard-list { list-style: none; margin: 0; padding: 0; }
+.team-leaderboard-row { display: flex; align-items: center; gap: 13px; padding: 14px 24px; border-top: 1px solid #e8edf1; }
+.team-rank { width: 20px; color: var(--team-muted); font-size: .8rem; text-align: center; font-variant-numeric: tabular-nums; }
+.team-leaderboard-row .team-avatar { width: 34px; height: 34px; flex-basis: 34px; border-radius: 9px; font-size: .77rem; }
+.team-leaderboard-row .team-directory-stats { min-width: 175px; }
 .team-form { padding: 0 24px 24px; max-width: 620px; }
 .team-form fieldset { display: grid; gap: 20px; border: 0; padding: 0; margin: 0; }
 .team-form label, .team-inline-form label, .team-repo-form label { display: grid; gap: 8px; font-size: .84rem; font-weight: 550; }
@@ -122,6 +140,8 @@
   .team-sidebar nav a { font-size: .8rem; padding-inline: 9px; }
   .team-metrics > div { padding: 18px 14px; }
   .team-section-heading .team-search { max-width: 220px; }
+  .team-period-tabs { width: 100%; }
+  .team-period-tabs button { flex: 1; }
 }
 @media (max-width: 680px) {
   .workspace--teams .container { padding-inline: 16px; }
@@ -144,6 +164,9 @@
   .team-directory-stats + .team-row-arrow { display: none; }
   .team-section-heading { padding: 18px 16px; }
   .team-section-heading .team-search { max-width: none; }
+  .team-leaderboard-row { padding: 14px 16px; flex-wrap: wrap; }
+  .team-leaderboard-row .team-row-main { flex-basis: calc(100% - 88px); }
+  .team-leaderboard-row .team-directory-stats { min-width: 0; padding-left: 33px; }
   .team-row { padding: 16px; gap: 12px; flex-wrap: wrap; }
   .team-row .team-actions { flex-wrap: wrap; }
   .team-row-main { flex-basis: 50%; }

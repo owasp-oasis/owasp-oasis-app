@@ -14,6 +14,10 @@ outside OASIS. Outbound Worker requests are blocked. This is not a deployment.
   in Your teams. The selected team and section are retained in the URL.
 - The left menu separates Stats & activity, Members, Repository focus, and
   Team administration. On small screens, a labelled section selector replaces it.
+- Team creation and Team administration offer a curated logo picker. Teams
+  without a selected mark use generated initials.
+- Explore teams includes an all-time leaderboard and a Last 90 days activity
+  view with validations-per-active-contributor context.
 - Members contains invitations, join requests, the searchable roster, and role
   management. Administration is available to owners/admins; ownership transfer
   and archive/reactivate remain owner-only.
@@ -26,11 +30,16 @@ outside OASIS. Outbound Worker requests are blocked. This is not a deployment.
    that sample persona to accept from Your teams.
 4. Open Manage beside a member; check owner-only role actions and removal
    confirmation. Cancel must leave membership unchanged.
-5. Search/add a focused repository. Confirm it remains on refresh and Find
+5. Select a logo while creating a Team, then replace it from Team administration.
+   Confirm the mark appears in the Team workspace and directory; reset to
+   Initials and confirm the fallback.
+6. Switch the Explore teams leaderboard between All time and Last 90 days.
+   Confirm the period label, rank, and recent activity context update.
+7. Search/add a focused repository. Confirm it remains on refresh and Find
    reviews opens the existing repository-filtered pull request workspace.
-6. Check admin/member/public personas. Members cannot manage others; public
+8. Check admin/member/public personas. Members cannot manage others; public
    visitors see aggregate stats, not the roster or individual activity.
-7. Review at desktop and phone widths: section navigation remains available,
+9. Review at desktop and phone widths: section navigation remains available,
    forms and rows fit, and key actions have visible labels and focus indicators.
 
 The persona toolbar is injected only by the local harness. Switching a persona
@@ -39,7 +48,7 @@ OAuth and real upstream pull requests require separate environment validation.
 
 ## Validation on 2026-09-22
 
-- `npm run check`: 297 tests passed across 18 files; frontend and Worker builds
+- `npm run check`: 300 tests passed across 18 files; frontend and Worker builds
   passed. Existing large-bundle and runtime deprecation warnings remain.
 - Desktop browser: checked the sidebar, expanded member management, invitation
   creation, repository addition, administration layout, and repository/section

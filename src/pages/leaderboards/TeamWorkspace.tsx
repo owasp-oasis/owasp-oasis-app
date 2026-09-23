@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { emptyMyTeams, errorMessage, teamGet, teamInitials, teamPost, type MembershipMode, type MyTeams, type Team, type TeamRole } from './teamApi'
+import { emptyMyTeams, errorMessage, teamGet, teamInitials, teamLogoMark, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey, type TeamRole } from './teamApi'
+import TeamLogoPicker from './TeamLogoPicker'
 
 interface Member { github_login: string; role: TeamRole; joined_at: string }
 interface Repository { id: number; name: string; description?: string }
@@ -39,6 +40,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<MembershipMode>('invite_only')
+  const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -63,7 +65,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const load = useCallback(async () => {
     const result = await teamGet<TeamDetail>('/api/teams/' + teamId)
     setDetail(result)
-    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode)
+    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode); setLogoKey(result.team.logo_key ?? 'initials')
   }, [teamId])
   useEffect(() => { void load().catch(caught => setError(errorMessage(caught))) }, [load])
   useEffect(() => { if (user) void teamGet<MyTeams>('/api/teams/mine').then(setMine).catch(caught => setError(errorMessage(caught))) }, [user])
@@ -110,7 +112,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   return <div className="teams-ui">
     <button className="team-link team-back" onClick={onClose}>← Teams</button>
     <header className="teams-heading team-profile-heading">
-      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open to requests' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
+      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamLogoMark(detail.team.logo_key) ?? teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open to requests' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
       {detail.membership && active && <Link className="team-button" to={sectionUrl(canManage ? 'members' : 'repositories')}>{canManage ? 'Invite members' : 'Find a review'}</Link>}
     </header>
 
@@ -162,10 +164,11 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
 
     {section === 'settings' && <div className="team-content-stack">
       <section className="team-surface"><div className="team-section-heading"><div><h3>Team details</h3><p>Name and description appear in the public directory.</p></div></div>
-        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
+        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
           <label>Team name<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
           <label>Description<textarea rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Anyone can request to join</option></select></label>
+          <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />
           <p className="team-help">Roster and individual activity are visible only to current members.</p>
           <button className="team-button team-button--primary" disabled={!name.trim()}>Save changes</button>
         </fieldset></form>

@@ -13,11 +13,14 @@ import { parseBody, vGitHub, vText } from '../validation.js';
 
 type TeamRole = 'owner' | 'admin' | 'member';
 type MembershipMode = 'invite_only' | 'request';
+type TeamLogoKey = 'initials' | 'shield' | 'bug' | 'lock' | 'spark' | 'code' | 'leaf';
+const TEAM_LOGO_KEYS = new Set<TeamLogoKey>(['initials', 'shield', 'bug', 'lock', 'spark', 'code', 'leaf']);
 
 interface TeamRow {
   id: number;
   name: string;
   description: string;
+  logo_key: TeamLogoKey;
   membership_mode: MembershipMode;
   status: 'active' | 'archived' | 'suspended';
   owner_login: string;
@@ -44,7 +47,7 @@ function isResponse(value: SessionUser | Response): value is Response {
 
 async function getTeam(env: Env, teamId: number): Promise<TeamRow | null> {
   return env.DB.prepare(
-    `SELECT id, name, description, membership_mode, status, owner_login,
+    `SELECT id, name, description, logo_key, membership_mode, status, owner_login,
             created_at, updated_at, archived_at, suspended_at
        FROM teams WHERE id = ?`,
   ).bind(teamId).first<TeamRow>();
@@ -71,7 +74,7 @@ async function addMembership(env: Env, teamId: number, login: string, role: Team
 
 async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Promise<unknown[]> {
   const sql = `
-    SELECT t.id, t.name, t.description, t.membership_mode, t.status, t.created_at,
+    SELECT t.id, t.name, t.description, t.logo_key, t.membership_mode, t.status, t.created_at,
       (SELECT COUNT(*) FROM team_memberships tm WHERE tm.team_id = t.id AND tm.left_at IS NULL) AS member_count,
       (SELECT COUNT(*) FROM user_votes uv WHERE uv.team_id = t.id) AS attributed_validations,
       (SELECT COUNT(*) FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id
@@ -80,6 +83,11 @@ async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Pr
     ORDER BY t.name COLLATE NOCASE`;
   const rows = await env.DB.prepare(sql).bind(...bindings).all();
   return rows.results ?? [];
+}
+
+function logoKey(value: unknown, fallback: TeamLogoKey = 'initials'): TeamLogoKey | null {
+  if (value === undefined || value === null || value === '') return fallback;
+  return typeof value === 'string' && TEAM_LOGO_KEYS.has(value as TeamLogoKey) ? value as TeamLogoKey : null;
 }
 
 /** GET /api/teams — public aggregate Team directory. */
@@ -100,7 +108,7 @@ export async function handleTeamLeaderboard(env: Env, request: Request, url: URL
   const period = url.searchParams.get('period') === '90d' ? '90d' : 'all_time';
   const windowClause = period === '90d' ? "AND uv.voted_at >= datetime('now', '-90 days')" : '';
   const rows = await env.DB.prepare(`
-    SELECT t.id, t.name, t.status,
+    SELECT t.id, t.name, t.logo_key, t.status,
       (SELECT COUNT(*) FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id
         WHERE uv.team_id = t.id AND pr.merged_upstream = 1 ${windowClause}) AS accepted_outcome_reviews,
       (SELECT COUNT(*) FROM user_votes uv WHERE uv.team_id = t.id ${period === '90d' ? "AND uv.voted_at >= datetime('now', '-90 days')" : ''}) AS attributed_validations,
@@ -164,13 +172,15 @@ export async function handleCreateTeam(request: Request, env: Env): Promise<Resp
   const description = vText(parsed.val.description, TEAM_DESCRIPTION_MAX, 'Description');
   if (!name.ok || !name.val) return jsonErr(name.ok ? 'Team name is required' : name.error, 400, request);
   if (!description.ok) return jsonErr(description.error, 400, request);
+  const selectedLogo = logoKey(parsed.val.logo_key);
+  if (!selectedLogo) return jsonErr('Choose a supported Team logo', 400, request);
   const mode = parsed.val.membership_mode === 'request' ? 'request' : 'invite_only';
   const timestamp = now();
   try {
     const result = await env.DB.prepare(
-      `INSERT INTO teams (name, description, membership_mode, status, owner_login, created_at, updated_at)
-       VALUES (?, ?, ?, 'active', ?, ?, ?)`,
-    ).bind(name.val, description.val, mode, user.github_login, timestamp, timestamp).run();
+      `INSERT INTO teams (name, description, logo_key, membership_mode, status, owner_login, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+    ).bind(name.val, description.val, selectedLogo, mode, user.github_login, timestamp, timestamp).run();
     const teamId = Number(result.meta.last_row_id);
     await addMembership(env, teamId, user.github_login, 'owner', timestamp);
     return jsonOk({ team: await getTeam(env, teamId) }, request);
@@ -224,10 +234,12 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
     const description = vText(parsed.val.description ?? team.description, TEAM_DESCRIPTION_MAX, 'Description');
     if (!name.ok || !name.val) return jsonErr(name.ok ? 'Team name is required' : name.error, 400, request);
     if (!description.ok) return jsonErr(description.error, 400, request);
+    const selectedLogo = logoKey(parsed.val.logo_key, team.logo_key);
+    if (!selectedLogo) return jsonErr('Choose a supported Team logo', 400, request);
     const mode = parsed.val.membership_mode === 'request' ? 'request' : 'invite_only';
     try {
-      await env.DB.prepare('UPDATE teams SET name = ?, description = ?, membership_mode = ?, updated_at = ? WHERE id = ?')
-        .bind(name.val, description.val, mode, timestamp, teamId).run();
+      await env.DB.prepare('UPDATE teams SET name = ?, description = ?, logo_key = ?, membership_mode = ?, updated_at = ? WHERE id = ?')
+        .bind(name.val, description.val, selectedLogo, mode, timestamp, teamId).run();
     } catch (error) {
       if ((error as Error).message.includes('UNIQUE')) return jsonErr('A Team with that name already exists', 409, request);
       throw error;

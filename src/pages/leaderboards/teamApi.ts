@@ -1,9 +1,24 @@
 export type TeamRole = 'owner' | 'admin' | 'member'
 export type MembershipMode = 'invite_only' | 'request'
+export type TeamLogoKey = 'initials' | 'shield' | 'bug' | 'lock' | 'spark' | 'code' | 'leaf'
+export interface TeamLogoOption { key: TeamLogoKey; label: string; mark: string }
+export const teamLogoOptions: TeamLogoOption[] = [
+  { key: 'initials', label: 'Initials', mark: 'Aa' },
+  { key: 'shield', label: 'Shield', mark: '◇' },
+  { key: 'bug', label: 'Bug', mark: '✣' },
+  { key: 'lock', label: 'Lock', mark: '▣' },
+  { key: 'spark', label: 'Spark', mark: '✦' },
+  { key: 'code', label: 'Code', mark: '</>' },
+  { key: 'leaf', label: 'Leaf', mark: '⌁' },
+]
+export function teamLogoMark(key: string | null | undefined): string | null {
+  return teamLogoOptions.find(option => option.key === key && key !== 'initials')?.mark ?? null
+}
 export interface Team {
   id: number
   name: string
   description: string
+  logo_key: TeamLogoKey
   membership_mode: MembershipMode
   status: 'active' | 'archived' | 'suspended'
   member_count: number
