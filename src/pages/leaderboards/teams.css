@@ -1,9 +1,4 @@
 /* Teams is a working area: restrained surfaces, a stable sidebar, and one task per view. */
-.workspace--teams .workspace-hero { padding: 22px 0; border-bottom-width: 2px; }
-.workspace--teams .workspace-hero::after { display: none; }
-.workspace--teams .workspace-hero h1 { font-size: 1.35rem; margin: 0; }
-.workspace--teams .workspace-hero p,
-.workspace--teams .workspace-hero__eyebrow { display: none; }
 .workspace--teams > .section { padding: 24px 0 64px; }
 .workspace--teams .container { max-width: 1240px; }
 .workspace--teams .lb-sync-chip { display: none; }
@@ -96,8 +91,6 @@
 .team-metrics dt { font-size: .8rem; font-weight: 500; color: var(--team-muted); }
 .team-metrics dd { font-size: 1.9rem; line-height: 1; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
 .team-metrics p { font-size: .72rem; }
-.team-get-started { display: grid; gap: 18px; padding: 24px; background: #edf6f1; border: 1px solid #d0e4d8; border-radius: 10px; }
-.team-get-started p { margin-top: 7px; font-size: .86rem; }
 .team-inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 0 24px 24px; }
 .team-inline-form label { flex: 1; max-width: 400px; min-width: 160px; }
 .team-repo-form { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 14px; padding: 0 24px 24px; }
@@ -132,7 +125,6 @@
 }
 @media (max-width: 680px) {
   .workspace--teams .container { padding-inline: 16px; }
-  .workspace--teams .workspace-hero { padding: 16px 0; }
   .workspace--teams > .section { padding-top: 12px; }
   .teams-ui { gap: 20px; }
   .teams-heading { gap: 12px; flex-wrap: wrap; }
