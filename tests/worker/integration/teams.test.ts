@@ -40,6 +40,47 @@ describe('Community Teams', () => {
     const privateBody = await privateDetail.json() as { membership: string; members: Array<{ github_login: string; role: string }> };
     expect(privateBody.membership).toBe('owner');
     expect(privateBody.members).toEqual([{ github_login: 'owner', role: 'owner', joined_at: expect.any(String) }]);
+    expect((privateBody as unknown as { badges: Array<{ badge_key: string }> }).badges).toEqual([
+      expect.objectContaining({ badge_key: 'membership' }),
+    ]);
+  });
+
+  it('lets a Team manager choose a bounded contribution badge bar', async () => {
+    const owner = await createTestSession(env, { github_login: 'badge-owner' });
+    const created = await post('/api/teams', { name: 'Badge threshold', description: '' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+
+    const invalid = await post(`/api/teams/${teamId}/settings`, { action: 'update', name: 'Badge threshold', description: '', contribution_threshold: 4 }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(invalid.status).toBe(400);
+    const updated = await post(`/api/teams/${teamId}/settings`, { action: 'update', name: 'Badge threshold', description: '', contribution_threshold: 3 }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(updated.status).toBe(200);
+
+    const detail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, {
+      headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` },
+    }));
+    expect((await detail.json() as { badge_settings: { contribution_threshold: number } }).badge_settings.contribution_threshold).toBe(3);
+  });
+
+  it('awards a contribution badge from qualifying Team-attributed work', async () => {
+    const owner = await createTestSession(env, { github_login: 'badge-contributor' });
+    const created = await post('/api/teams', { name: 'Contribution badges', description: '' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+    await post(`/api/teams/${teamId}/settings`, { action: 'update', name: 'Contribution badges', description: '', contribution_threshold: 3 }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    await insertTestRepo(env, { id: 90, name: 'badge-repo' });
+    for (const id of [901, 902, 903]) {
+      await insertTestPR(env, { id, repo_id: 90, repo_name: 'badge-repo', number: id - 900 });
+      await env.DB.prepare(`INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).bind('badge-contributor', id, 'badge-repo', id - 900, 'accept', teamId, new Date().toISOString()).run();
+    }
+
+    const detail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, {
+      headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` },
+    }));
+    const badges = (await detail.json() as { badges: Array<{ badge_key: string; threshold: number | null; qualifying_count: number }> }).badges;
+    expect(badges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ badge_key: 'membership' }),
+      expect.objectContaining({ badge_key: 'contributor_milestone', threshold: 3, qualifying_count: 3 }),
+    ]));
   });
 
   it('supports a curated logo and keeps invalid logo choices out of the API', async () => {

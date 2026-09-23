@@ -30,6 +30,11 @@ The feature should help members answer three questions quickly:
 - A member may attribute a validation to one Team or leave it personal. A
   contribution cannot count toward multiple Teams, and the choice is locked
   after submission.
+- Joining a Team awards a membership badge. OASIS-defined contribution badges
+  are awarded automatically when a member reaches the Team’s configured bar.
+  Owners/admins can choose only from OASIS-approved thresholds (3, 5, 10, or
+  25 attributed validations); earned badges are never revoked when the bar
+  changes.
 - Owners and admins manage members, invitations, join requests, repository
   focus, Team details, and the logo. Ownership transfer and archive/reactivate
   remain owner-only actions.
@@ -44,6 +49,9 @@ leaderboard results.
 The roster, detailed activity, repository focus, and individual attribution
 remain available only to current members. This keeps the Team useful for
 coordination without turning individual activity into a public scoreboard.
+The current badge collection follows the same member-only boundary; public
+badge/profile surfaces and user-controlled public display are intentionally
+deferred until those surfaces exist.
 
 ## Experience intent
 
@@ -64,6 +72,12 @@ The Team logo is a small identity aid, not a branding system. The MVP uses a
 fixed set of safe built-in marks and falls back to generated initials when no
 logo is selected. Owners and admins can change or remove the mark from Team
 administration.
+
+Team badges are recognition, not a second leaderboard. OASIS owns the badge
+definitions and minimum floor, Team owners/admins choose a bounded contribution
+bar, and the system awards badges from verified Team-attributed work. The
+first release has one membership badge and one contribution milestone badge;
+arbitrary custom badge authoring is deferred.
 
 ## Achievement model
 
@@ -101,6 +115,9 @@ individual-work and privacy model.
 - **OASIS PM Scrapbook feature #217 — Select and manage a Team logo:** adds the
   optional curated logo flow, consistent display, initials fallback, and safe
   built-in mark constraint.
+- **OASIS PM Scrapbook epic #219 — Team badges and recognition:** tracks
+  membership badges, bounded contribution thresholds, automatic awarding, and
+  privacy-aware badge display.
 - **Implementation:** Team directory/workspace, membership workflows, roles,
   repository focus, stats/activity, lifecycle, logo selection, and leaderboard
   views described above.

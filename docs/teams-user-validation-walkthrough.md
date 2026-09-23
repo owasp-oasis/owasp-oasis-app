@@ -14,6 +14,7 @@ The Team experience should make it easy to:
 - manage members, invitations, join requests, and roles;
 - choose repository focus;
 - inspect Team stats and activity; and
+- earn a membership badge and understand the contribution badge bar; and
 - change Team settings without exposing private member data.
 
 ## Personas
@@ -90,13 +91,28 @@ refresh, and the pull-request workspace opens with the repository filter.
 
 1. Open **Team administration**.
 2. Change the description or membership mode and save.
-3. Change the logo and save; confirm the header updates.
-4. As owner, open ownership transfer and verify only current members are
+3. Change the contribution badge bar to a supported value and save.
+4. Change the logo and save; confirm the header updates.
+5. As owner, open ownership transfer and verify only current members are
    offered as candidates.
-5. Open the archive confirmation, then cancel it.
+6. Open the archive confirmation, then cancel it.
 
 Expected: settings remain separate from daily activity, changes are explicit,
-and cancelling destructive actions leaves the Team unchanged.
+the badge bar offers only OASIS-approved thresholds, and cancelling destructive
+actions leaves the Team unchanged.
+
+### 7. Check Team badges
+
+1. As a current member, open **Stats & activity**.
+2. Confirm **Your Team badges** shows the membership badge.
+3. After enough validations attributed to the Team, confirm the contribution
+   milestone badge appears.
+4. Return to **Team administration** and raise the contribution bar.
+
+Expected: badges are awarded automatically from verified Team-attributed work;
+the membership badge does not require a contribution; earned badges remain
+visible after the threshold changes; and badge details stay inside the member
+workspace in this MVP.
 
 ## Record findings
 

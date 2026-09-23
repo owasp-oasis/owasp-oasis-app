@@ -1,6 +1,8 @@
 export type TeamRole = 'owner' | 'admin' | 'member'
 export type MembershipMode = 'invite_only' | 'request'
 export type TeamLogoKey = 'initials' | 'shield' | 'bug' | 'lock' | 'spark' | 'code' | 'leaf'
+export type TeamBadgeKey = 'membership' | 'contributor_milestone'
+export const teamBadgeThresholds = [3, 5, 10, 25] as const
 export interface TeamLogoOption { key: TeamLogoKey; label: string; mark: string }
 export const teamLogoOptions: TeamLogoOption[] = [
   { key: 'initials', label: 'Initials', mark: 'Aa' },
@@ -33,6 +35,16 @@ export interface MyTeams {
   join_requests: TeamOffer[]
   ownership_transfers: TeamOffer[]
 }
+export interface TeamBadge {
+  id: number
+  team_id: number
+  github_login: string
+  badge_key: TeamBadgeKey
+  qualifying_count: number
+  threshold: number | null
+  awarded_at: string
+}
+export interface TeamBadgeSettings { contribution_threshold: number; updated_at: string }
 export const emptyMyTeams: MyTeams = { teams: [], invites: [], join_requests: [], ownership_transfers: [] }
 export async function teamGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { credentials: 'include', cache: 'no-store', signal })

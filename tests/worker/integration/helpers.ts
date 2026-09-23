@@ -292,6 +292,23 @@ CREATE TABLE IF NOT EXISTS team_ownership_transfers (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_ownership_transfers_pending ON team_ownership_transfers(team_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_user_votes_team ON user_votes(team_id, voted_at);
+CREATE TABLE IF NOT EXISTS team_badge_settings (
+  team_id INTEGER PRIMARY KEY,
+  contribution_threshold INTEGER NOT NULL DEFAULT 5 CHECK(contribution_threshold IN (3, 5, 10, 25)),
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS team_badges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL,
+  badge_key TEXT NOT NULL CHECK(badge_key IN ('membership', 'contributor_milestone')),
+  qualifying_count INTEGER NOT NULL DEFAULT 0,
+  threshold INTEGER,
+  awarded_at TEXT NOT NULL,
+  UNIQUE(team_id, github_login, badge_key)
+);
+CREATE INDEX IF NOT EXISTS idx_team_badges_login ON team_badges(github_login, awarded_at);
   `;
 
   // Split by semicolon and execute each statement
@@ -308,6 +325,8 @@ CREATE INDEX IF NOT EXISTS idx_user_votes_team ON user_votes(team_id, voted_at);
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'team_badges',
+    'team_badge_settings',
     'team_ownership_transfers',
     'team_repositories',
     'team_join_requests',

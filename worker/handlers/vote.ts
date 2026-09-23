@@ -25,6 +25,7 @@ import {
 } from '../security.js';
 import { getSession } from './auth.js';
 import { ORG } from '../github.js';
+import { syncTeamBadges } from '../teamBadges.js';
 
 /* ─── POST /api/vote ─────────────────────────────────────────── */
 export async function handleVote(request: Request, env: Env): Promise<Response> {
@@ -368,6 +369,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now).run();
+    if (teamId) await syncTeamBadges(env, teamId, session.github_login);
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
   }

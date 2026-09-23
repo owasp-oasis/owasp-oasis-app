@@ -10,6 +10,7 @@ import type { Env } from '../types.js';
 import { isAdminRequest, jsonErr, jsonOk, validateCSRF } from '../security.js';
 import { getSession, type SessionUser } from './auth.js';
 import { parseBody, vGitHub, vText } from '../validation.js';
+import { isTeamBadgeThreshold, listTeamBadges, syncTeamBadges, type TeamBadgeSettings } from '../teamBadges.js';
 
 type TeamRole = 'owner' | 'admin' | 'member';
 type MembershipMode = 'invite_only' | 'request';
@@ -70,6 +71,7 @@ async function addMembership(env: Env, teamId: number, login: string, role: Team
     `INSERT INTO team_memberships (team_id, github_login, role, joined_at)
      VALUES (?, ?, ?, ?)`,
   ).bind(teamId, login, role, timestamp).run();
+  await syncTeamBadges(env, teamId, login);
 }
 
 async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Promise<unknown[]> {
@@ -182,6 +184,10 @@ export async function handleCreateTeam(request: Request, env: Env): Promise<Resp
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
     ).bind(name.val, description.val, selectedLogo, mode, user.github_login, timestamp, timestamp).run();
     const teamId = Number(result.meta.last_row_id);
+    await env.DB.prepare(
+      `INSERT INTO team_badge_settings (team_id, contribution_threshold, updated_by, updated_at)
+       VALUES (?, 5, ?, ?)`,
+    ).bind(teamId, user.github_login, timestamp).run();
     await addMembership(env, teamId, user.github_login, 'owner', timestamp);
     return jsonOk({ team: await getTeam(env, teamId) }, request);
   } catch (error) {
@@ -199,7 +205,9 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
   const membership = user ? await currentMembership(env, teamId, user.github_login) : null;
   if (!membership) return jsonOk({ team: summary }, request, { cache: 'public, max-age=60' });
 
-  const [members, activity, repositories, requests, invites, transfers] = await Promise.all([
+  await syncTeamBadges(env, teamId, user!.github_login);
+
+  const [members, activity, repositories, requests, invites, transfers, badgeSettings, badges] = await Promise.all([
     env.DB.prepare(`SELECT github_login, role, joined_at FROM team_memberships WHERE team_id = ? AND left_at IS NULL ORDER BY role = 'owner' DESC, role = 'admin' DESC, github_login COLLATE NOCASE`).bind(teamId).all(),
     env.DB.prepare(`SELECT uv.github_login, uv.pr_id, uv.repo_name, uv.pr_number, uv.decision, uv.voted_at, pr.title
       FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id WHERE uv.team_id = ? ORDER BY uv.voted_at DESC LIMIT 100`).bind(teamId).all(),
@@ -213,8 +221,10 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
     membership.role === 'owner'
       ? env.DB.prepare(`SELECT id, proposed_owner, created_at FROM team_ownership_transfers WHERE team_id = ? AND status = 'pending'`).bind(teamId).all()
       : Promise.resolve({ results: [] }),
+    env.DB.prepare(`SELECT contribution_threshold, updated_at FROM team_badge_settings WHERE team_id = ?`).bind(teamId).first<TeamBadgeSettings>(),
+    listTeamBadges(env, teamId, user!.github_login),
   ]);
-  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [] }, request);
+  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [], badge_settings: badgeSettings, badges }, request);
 }
 
 /** POST /api/teams/:id/settings */
@@ -237,9 +247,26 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
     const selectedLogo = logoKey(parsed.val.logo_key, team.logo_key);
     if (!selectedLogo) return jsonErr('Choose a supported Team logo', 400, request);
     const mode = parsed.val.membership_mode === 'request' ? 'request' : 'invite_only';
+    const contributionThreshold = parsed.val.contribution_threshold === undefined
+      ? null
+      : Number(parsed.val.contribution_threshold);
+    if (contributionThreshold !== null && !isTeamBadgeThreshold(contributionThreshold)) {
+      return jsonErr('Choose a supported contribution badge threshold', 400, request);
+    }
     try {
       await env.DB.prepare('UPDATE teams SET name = ?, description = ?, logo_key = ?, membership_mode = ?, updated_at = ? WHERE id = ?')
         .bind(name.val, description.val, selectedLogo, mode, timestamp, teamId).run();
+      if (contributionThreshold !== null) {
+        await env.DB.prepare(
+          `INSERT INTO team_badge_settings (team_id, contribution_threshold, updated_by, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(team_id) DO UPDATE SET contribution_threshold = excluded.contribution_threshold, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+        ).bind(teamId, contributionThreshold, user.github_login, timestamp).run();
+        const currentMembers = await env.DB.prepare(
+          'SELECT github_login FROM team_memberships WHERE team_id = ? AND left_at IS NULL',
+        ).bind(teamId).all<{ github_login: string }>();
+        for (const member of currentMembers.results ?? []) await syncTeamBadges(env, teamId, member.github_login);
+      }
     } catch (error) {
       if ((error as Error).message.includes('UNIQUE')) return jsonErr('A Team with that name already exists', 409, request);
       throw error;

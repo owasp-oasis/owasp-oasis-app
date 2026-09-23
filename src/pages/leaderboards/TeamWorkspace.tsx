@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { emptyMyTeams, errorMessage, teamGet, teamInitials, teamLogoMark, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey, type TeamRole } from './teamApi'
+import { emptyMyTeams, errorMessage, teamBadgeThresholds, teamGet, teamInitials, teamLogoMark, teamPost, type MembershipMode, type MyTeams, type Team, type TeamBadge, type TeamBadgeSettings, type TeamLogoKey, type TeamRole } from './teamApi'
 import TeamLogoPicker from './TeamLogoPicker'
 
 interface Member { github_login: string; role: TeamRole; joined_at: string }
@@ -15,6 +15,8 @@ interface TeamDetail {
   join_requests?: { id: number; requester_login: string }[]
   invites?: { id: number; invitee_login: string }[]
   ownership_transfers?: { id: number; proposed_owner: string }[]
+  badge_settings?: TeamBadgeSettings
+  badges?: TeamBadge[]
 }
 interface Props { teamId: number; onClose: () => void; onMembershipChanged: () => void }
 type Section = 'overview' | 'members' | 'repositories' | 'settings'
@@ -41,6 +43,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<MembershipMode>('invite_only')
   const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
+  const [contributionThreshold, setContributionThreshold] = useState(5)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -65,7 +68,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const load = useCallback(async () => {
     const result = await teamGet<TeamDetail>('/api/teams/' + teamId)
     setDetail(result)
-    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode); setLogoKey(result.team.logo_key ?? 'initials')
+    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode); setLogoKey(result.team.logo_key ?? 'initials'); setContributionThreshold(result.badge_settings?.contribution_threshold ?? 5)
   }, [teamId])
   useEffect(() => { void load().catch(caught => setError(errorMessage(caught))) }, [load])
   useEffect(() => { if (user) void teamGet<MyTeams>('/api/teams/mine').then(setMine).catch(caught => setError(errorMessage(caught))) }, [user])
@@ -135,6 +138,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
         <div><dt>Validations</dt><dd>{detail.team.attributed_validations}</dd><p>Personal work credited to this team</p></div>
         <div><dt>Members</dt><dd>{detail.team.member_count}</dd><p>Contributing together</p></div>
       </dl>
+      {detail.membership && <section className="team-surface team-badge-collection"><div className="team-section-heading"><div><h3>Your Team badges</h3><p>Recognition earned from membership and work attributed to this Team.</p></div></div>{(detail.badges ?? []).length === 0 ? <p className="team-empty">Your first badge will appear here when you join or reach the Team’s contribution bar.</p> : <ul className="team-badge-list">{detail.badges!.map(badge => <li className="team-badge-card" key={badge.id}><span className="team-badge-icon" aria-hidden="true">{badge.badge_key === 'membership' ? '◎' : '✦'}</span><div><strong>{badge.badge_key === 'membership' ? 'Team member' : 'Team contributor'}</strong><p>{badge.badge_key === 'membership' ? 'Membership badge' : `${badge.threshold} attributed validations`}</p></div></li>)}</ul>}</section>}
       {!detail.membership ? <section className="team-surface team-public-info"><h3>{offer ? 'You’re invited' : 'Join this team'}</h3><p>Team totals are public. The roster, repository focus, and activity are available to members.</p>
         {!user ? <a className="team-button team-button--primary" href="/api/auth/login">Sign in with GitHub</a> : !active ? <p className="team-help">This team is not accepting new members.</p> : offer ? <button disabled={busy} className="team-button team-button--primary" onClick={() => void run('members', { action: 'accept_invite', invite_id: offer.id }, 'Welcome to the team.')}>Accept invitation</button> : detail.team.membership_mode === 'request' ? <button disabled={busy || pending} className="team-button team-button--primary" onClick={async () => { if (await run('join-requests', { action: 'request' }, 'Join request sent. A team owner or admin will review it.')) setMine(previous => ({ ...previous, join_requests: [...previous.join_requests, { id: 0, team_id: teamId, team_name: detail.team.name }] })) }}>{pending ? 'Request pending' : 'Request to join'}</button> : <p className="team-help">Membership is by invitation from an owner or admin.</p>}
       </section> : <>
@@ -164,10 +168,11 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
 
     {section === 'settings' && <div className="team-content-stack">
       <section className="team-surface"><div className="team-section-heading"><div><h3>Team details</h3><p>Name and description appear in the public directory.</p></div></div>
-        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
+        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey, contribution_threshold: contributionThreshold }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
           <label>Team name<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
           <label>Description<textarea rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
+          <label>Contribution badge bar<select value={contributionThreshold} onChange={event => setContributionThreshold(Number(event.target.value))}>{teamBadgeThresholds.map(value => <option value={value} key={value}>{value} attributed validations</option>)}</select><span className="team-help">OASIS sets the available minimums. Earned badges are never revoked if this bar changes.</span></label>
           <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />
           <p className="team-help">Roster and individual activity are visible only to current members.</p>
           <button className="team-button team-button--primary" disabled={!name.trim()}>Save changes</button>

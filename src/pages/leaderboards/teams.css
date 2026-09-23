@@ -56,6 +56,12 @@
 .team-directory-stats span { display: grid; gap: 4px; color: var(--team-muted); font-size: .7rem; }
 .team-directory-stats strong { font-size: 1.05rem; color: var(--ink); font-variant-numeric: tabular-nums; }
 .team-help { font-size: .8rem; color: var(--team-muted); }
+.team-badge-collection { overflow: hidden; }
+.team-badge-list { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; padding: 0 24px 24px; margin: 0; }
+.team-badge-card { display: flex; align-items: center; gap: 10px; min-width: 210px; padding: 12px; border: 1px solid #d6e5dc; border-radius: 9px; background: #f5faf7; }
+.team-badge-card strong { display: block; color: #125b46; font-size: .85rem; }
+.team-badge-card p { margin-top: 3px; font-size: .75rem; }
+.team-badge-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #d9eee2; color: #0b6550; font-size: 1.1rem; }
 .team-optional { font-weight: 400; color: var(--team-muted); }
 .team-empty { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 40px 24px; }
 .team-empty p { max-width: 460px; font-size: .88rem; }
@@ -181,4 +187,5 @@
   .team-inline-form label { max-width: none; }
   .team-setting-block { padding: 18px 16px; }
   .team-inbox { padding-inline: 16px; }
+  .team-badge-list { padding-inline: 16px; }
 }
