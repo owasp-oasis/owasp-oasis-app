@@ -207,7 +207,7 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
 
   await syncTeamBadges(env, teamId, user!.github_login);
 
-  const [members, activity, repositories, requests, invites, transfers, badgeSettings, badges] = await Promise.all([
+  const [members, activity, repositories, requests, invites, transfers, badgeSettings, badges, userBadgePreference] = await Promise.all([
     env.DB.prepare(`SELECT github_login, role, joined_at FROM team_memberships WHERE team_id = ? AND left_at IS NULL ORDER BY role = 'owner' DESC, role = 'admin' DESC, github_login COLLATE NOCASE`).bind(teamId).all(),
     env.DB.prepare(`SELECT uv.github_login, uv.pr_id, uv.repo_name, uv.pr_number, uv.decision, uv.voted_at, pr.title
       FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id WHERE uv.team_id = ? ORDER BY uv.voted_at DESC LIMIT 100`).bind(teamId).all(),
@@ -221,10 +221,11 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
     membership.role === 'owner'
       ? env.DB.prepare(`SELECT id, proposed_owner, created_at FROM team_ownership_transfers WHERE team_id = ? AND status = 'pending'`).bind(teamId).all()
       : Promise.resolve({ results: [] }),
-    env.DB.prepare(`SELECT contribution_threshold, updated_at FROM team_badge_settings WHERE team_id = ?`).bind(teamId).first<TeamBadgeSettings>(),
+    env.DB.prepare(`SELECT contribution_threshold, public_display, updated_at FROM team_badge_settings WHERE team_id = ?`).bind(teamId).first<TeamBadgeSettings>(),
     listTeamBadges(env, teamId, user!.github_login),
+    env.DB.prepare('SELECT show_team_badges FROM user_preferences WHERE github_login = ?').bind(user!.github_login).first<{ show_team_badges: number }>(),
   ]);
-  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [], badge_settings: badgeSettings, badges }, request);
+  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [], badge_settings: badgeSettings, badges, user_badges_public: userBadgePreference?.show_team_badges === 1 }, request);
 }
 
 /** POST /api/teams/:id/settings */
@@ -253,6 +254,7 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
     if (contributionThreshold !== null && !isTeamBadgeThreshold(contributionThreshold)) {
       return jsonErr('Choose a supported contribution badge threshold', 400, request);
     }
+    const publicBadges = parsed.val.public_badges === undefined ? null : parsed.val.public_badges === true;
     try {
       await env.DB.prepare('UPDATE teams SET name = ?, description = ?, logo_key = ?, membership_mode = ?, updated_at = ? WHERE id = ?')
         .bind(name.val, description.val, selectedLogo, mode, timestamp, teamId).run();
@@ -266,6 +268,13 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
           'SELECT github_login FROM team_memberships WHERE team_id = ? AND left_at IS NULL',
         ).bind(teamId).all<{ github_login: string }>();
         for (const member of currentMembers.results ?? []) await syncTeamBadges(env, teamId, member.github_login);
+      }
+      if (publicBadges !== null) {
+        await env.DB.prepare(
+          `INSERT INTO team_badge_settings (team_id, contribution_threshold, public_display, updated_by, updated_at)
+           VALUES (?, COALESCE((SELECT contribution_threshold FROM team_badge_settings WHERE team_id = ?), 5), ?, ?, ?)
+           ON CONFLICT(team_id) DO UPDATE SET public_display = excluded.public_display, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+        ).bind(teamId, teamId, publicBadges ? 1 : 0, user.github_login, timestamp).run();
       }
     } catch (error) {
       if ((error as Error).message.includes('UNIQUE')) return jsonErr('A Team with that name already exists', 409, request);

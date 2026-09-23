@@ -16,6 +16,7 @@ export interface TeamBadge {
 
 export interface TeamBadgeSettings {
   contribution_threshold: TeamBadgeThreshold;
+  public_display: number;
   updated_at: string;
 }
 

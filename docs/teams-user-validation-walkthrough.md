@@ -110,9 +110,23 @@ actions leaves the Team unchanged.
 4. Return to **Team administration** and raise the contribution bar.
 
 Expected: badges are awarded automatically from verified Team-attributed work;
-the membership badge does not require a contribution; earned badges remain
-visible after the threshold changes; and badge details stay inside the member
-workspace in this MVP.
+the membership badge does not require a contribution; and earned badges remain
+visible after the threshold changes.
+
+### 8. Validate public badge display
+
+1. As the Team owner/admin, open **Team administration** and change **Public
+   badge display** to **Allow opted-in members to display badges publicly**.
+2. As a member, return to the Team overview and enable **Allow eligible badges
+   from this Team on my public contributor profile**.
+3. Open **Workspace → Contributors**, select that member, and confirm the
+   **Team badges** section shows the Team membership badge.
+4. Turn off either the Team setting or the member preference and reload the
+   contributor panel.
+
+Expected: both controls are required before a badge appears publicly. Turning
+off either control hides public badges without removing the underlying award or
+the private Team badge collection.
 
 ## Record findings
 

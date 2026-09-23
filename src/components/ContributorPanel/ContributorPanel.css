@@ -355,6 +355,75 @@
   margin: 0;
 }
 
+.cp-team-badges {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.cp-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.cp-section-heading h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.cp-section-heading span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.cp-team-badge-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.cp-team-badge-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #cfe4dc;
+  border-radius: 9px;
+  background: #f1faf6;
+}
+
+.cp-team-badge-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  color: #0f766e;
+  background: #d5f3e6;
+}
+
+.cp-team-badge-card strong,
+.cp-team-badge-card span {
+  display: block;
+}
+
+.cp-team-badge-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.cp-team-badge-card div span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
 /* ── Contributions tab ───────────────────────────────────────── */
 .cp-contributions-grid {
   display: grid !important;

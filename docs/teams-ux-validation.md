@@ -19,6 +19,8 @@ outside OASIS. Outbound Worker requests are blocked. This is not a deployment.
 - Current members see a Team badge collection. Owners/admins can set the
   contribution badge bar to 3, 5, 10, or 25 attributed validations; earned
   badges remain after threshold changes.
+- Public badge display requires both a Team-admin setting and member opt-in;
+  eligible badges then appear in the member's public contributor panel.
 - Explore teams includes an all-time leaderboard and a Last 90 days activity
   view with validations-per-active-contributor context.
 - Members contains invitations, join requests, the searchable roster, and role

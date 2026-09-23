@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   severities           TEXT,
   experience           TEXT,
   onboarding_version   TEXT,
+  show_team_badges     INTEGER NOT NULL DEFAULT 0,
   created_at           TEXT NOT NULL,
   updated_at           TEXT NOT NULL
 );
@@ -295,6 +296,7 @@ CREATE INDEX IF NOT EXISTS idx_user_votes_team ON user_votes(team_id, voted_at);
 CREATE TABLE IF NOT EXISTS team_badge_settings (
   team_id INTEGER PRIMARY KEY,
   contribution_threshold INTEGER NOT NULL DEFAULT 5 CHECK(contribution_threshold IN (3, 5, 10, 25)),
+  public_display INTEGER NOT NULL DEFAULT 0,
   updated_by TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

@@ -62,6 +62,8 @@
 .team-badge-card strong { display: block; color: #125b46; font-size: .85rem; }
 .team-badge-card p { margin-top: 3px; font-size: .75rem; }
 .team-badge-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #d9eee2; color: #0b6550; font-size: 1.1rem; }
+.team-badge-privacy { display: grid; gap: 4px; padding: 0 24px 24px; color: #40566a; font-size: .8rem; }
+.team-badge-privacy input { display: inline-block; width: auto; min-height: 0; margin-right: 7px; }
 .team-optional { font-weight: 400; color: var(--team-muted); }
 .team-empty { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 40px 24px; }
 .team-empty p { max-width: 460px; font-size: .88rem; }
@@ -188,4 +190,5 @@
   .team-setting-block { padding: 18px 16px; }
   .team-inbox { padding-inline: 16px; }
   .team-badge-list { padding-inline: 16px; }
+  .team-badge-privacy { padding-inline: 16px; }
 }

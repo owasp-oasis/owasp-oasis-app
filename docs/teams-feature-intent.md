@@ -49,9 +49,9 @@ leaderboard results.
 The roster, detailed activity, repository focus, and individual attribution
 remain available only to current members. This keeps the Team useful for
 coordination without turning individual activity into a public scoreboard.
-The current badge collection follows the same member-only boundary; public
-badge/profile surfaces and user-controlled public display are intentionally
-deferred until those surfaces exist.
+Team badge details are private by default. A Team admin must allow public badge
+display, and each member must separately opt in before eligible badges appear
+on that member's public contributor profile.
 
 ## Experience intent
 
@@ -77,7 +77,8 @@ Team badges are recognition, not a second leaderboard. OASIS owns the badge
 definitions and minimum floor, Team owners/admins choose a bounded contribution
 bar, and the system awards badges from verified Team-attributed work. The
 first release has one membership badge and one contribution milestone badge;
-arbitrary custom badge authoring is deferred.
+arbitrary custom badge authoring is deferred. Public display uses a two-key
+privacy gate: Team-level permission plus member-level opt-in.
 
 ## Achievement model
 
@@ -118,6 +119,10 @@ individual-work and privacy model.
 - **OASIS PM Scrapbook epic #219 — Team badges and recognition:** tracks
   membership badges, bounded contribution thresholds, automatic awarding, and
   privacy-aware badge display.
+- **OLLY AppSec PM Scrapbook epic #1708 — Teams: membership badges and public
+  recognition:** tracks the implementation in the AppSecAI OLLY instance;
+  completed stories #1709 and #1710 cover public privacy controls and durable
+  badge awards.
 - **Implementation:** Team directory/workspace, membership workflows, roles,
   repository focus, stats/activity, lifecycle, logo selection, and leaderboard
   views described above.

@@ -54,10 +54,21 @@ interface Contribution {
   influencer_bonus: number;
 }
 
+interface PublicBadge {
+  team_id: number;
+  team_name: string;
+  team_status: string;
+  badge_key: 'membership' | 'contributor_milestone';
+  qualifying_count: number;
+  threshold: number | null;
+  awarded_at: string;
+}
+
 interface PanelData {
   contributor: ContributorDetail;
   allTimeRank: number;
   contributions: Contribution[];
+  public_badges: PublicBadge[];
 }
 
 type ActiveTab = 'score' | 'contributions' | 'formula';
@@ -100,7 +111,7 @@ function ScoreRow({ label, value, note, highlight }: {
 }
 
 /* ─── SUB-COMPONENTS ──────────────────────────────────────────── */
-function ScoreTab({ contributor, allTimeRank }: { contributor: ContributorDetail; allTimeRank: number }) {
+function ScoreTab({ contributor, allTimeRank, publicBadges }: { contributor: ContributorDetail; allTimeRank: number; publicBadges: PublicBadge[] }) {
   const totalBonus = contributor.modified_reputation > 0 && contributor.base_reputation > 0
     ? (contributor.modified_reputation / contributor.base_reputation - 1)
     : 0;
@@ -182,6 +193,26 @@ function ScoreTab({ contributor, allTimeRank }: { contributor: ContributorDetail
           <span className="cp-rank-value">{contributor.rejects}</span>
         </div>
       </div>
+
+      {publicBadges.length > 0 && (
+        <section className="cp-team-badges" aria-labelledby="cp-team-badges-title">
+          <div className="cp-section-heading">
+            <h3 id="cp-team-badges-title">Team badges</h3>
+            <span>Shared by the member and Team admin</span>
+          </div>
+          <div className="cp-team-badge-list">
+            {publicBadges.map((badge, index) => (
+              <div className="cp-team-badge-card" key={`${badge.team_id}-${badge.badge_key}-${badge.threshold ?? 'member'}-${index}`}>
+                <span className="cp-team-badge-mark" aria-hidden="true">★</span>
+                <div>
+                  <strong>{badge.team_name}</strong>
+                  <span>{badge.badge_key === 'membership' ? 'Team member' : `Team contributor · ${badge.threshold ?? badge.qualifying_count} attributed validations`}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {contributor.rank_90d_oldest_activity && (
         <p className="cp-staleness-note">
@@ -480,7 +511,7 @@ export default function ContributorPanel({ login, onClose }: Props) {
         {error   && <div className="cp-error">{error}</div>}
         {!loading && !error && data && contributor && (
           <>
-            {activeTab === 'score'         && <ScoreTab contributor={contributor} allTimeRank={data.allTimeRank} />}
+            {activeTab === 'score'         && <ScoreTab contributor={contributor} allTimeRank={data.allTimeRank} publicBadges={data.public_badges ?? []} />}
             {activeTab === 'contributions' && <ContributionsTab contributions={data.contributions} />}
             {activeTab === 'formula'       && <FormulaTab />}
           </>

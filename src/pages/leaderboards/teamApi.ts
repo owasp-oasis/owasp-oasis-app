@@ -44,7 +44,7 @@ export interface TeamBadge {
   threshold: number | null
   awarded_at: string
 }
-export interface TeamBadgeSettings { contribution_threshold: number; updated_at: string }
+export interface TeamBadgeSettings { contribution_threshold: number; public_display: number; updated_at: string }
 export const emptyMyTeams: MyTeams = { teams: [], invites: [], join_requests: [], ownership_transfers: [] }
 export async function teamGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { credentials: 'include', cache: 'no-store', signal })
@@ -61,6 +61,17 @@ export async function teamPost<T = unknown>(path: string, body: Record<string, u
   })
   const result = await response.json()
   if (!response.ok) throw new Error(result.error ?? 'Could not save this change. Please try again.')
+  return result as T
+}
+export async function teamPut<T = unknown>(path: string, body: Record<string, unknown>): Promise<T> {
+  const { token } = await teamGet<{ token: string }>('/api/csrf')
+  const response = await fetch(path, {
+    method: 'PUT', credentials: 'include',
+    headers: { 'content-type': 'application/json', 'x-csrf-token': token },
+    body: JSON.stringify(body),
+  })
+  const result = await response.json()
+  if (!response.ok) throw new Error(result.error ?? 'Could not save this preference. Please try again.')
   return result as T
 }
 export function teamInitials(name: string): string {
