@@ -16,6 +16,9 @@ outside OASIS. Outbound Worker requests are blocked. This is not a deployment.
   Team administration. On small screens, a labelled section selector replaces it.
 - Team creation and Team administration offer a curated logo picker. Teams
   without a selected mark use generated initials.
+- Current members see a Team badge collection. Owners/admins can set the
+  contribution badge bar to 3, 5, 10, or 25 attributed validations; earned
+  badges remain after threshold changes.
 - Explore teams includes an all-time leaderboard and a Last 90 days activity
   view with validations-per-active-contributor context.
 - Members contains invitations, join requests, the searchable roster, and role
@@ -48,7 +51,7 @@ OAuth and real upstream pull requests require separate environment validation.
 
 ## Validation on 2026-09-22
 
-- `npm run check`: 300 tests passed across 18 files; frontend and Worker builds
+- `npm run check`: 302 tests passed across 18 files; frontend and Worker builds
   passed. Existing large-bundle and runtime deprecation warnings remain.
 - Desktop browser: checked the sidebar, expanded member management, invitation
   creation, repository addition, administration layout, and repository/section
