@@ -22,6 +22,8 @@ interface TeamRow {
   name: string;
   description: string;
   logo_key: TeamLogoKey;
+  logo_image_data: string | null;
+  banner_image_data: string | null;
   membership_mode: MembershipMode;
   status: 'active' | 'archived' | 'suspended';
   owner_login: string;
@@ -48,7 +50,7 @@ function isResponse(value: SessionUser | Response): value is Response {
 
 async function getTeam(env: Env, teamId: number): Promise<TeamRow | null> {
   return env.DB.prepare(
-    `SELECT id, name, description, logo_key, membership_mode, status, owner_login,
+    `SELECT id, name, description, logo_key, logo_image_data, banner_image_data, membership_mode, status, owner_login,
             created_at, updated_at, archived_at, suspended_at
        FROM teams WHERE id = ?`,
   ).bind(teamId).first<TeamRow>();
@@ -76,7 +78,7 @@ async function addMembership(env: Env, teamId: number, login: string, role: Team
 
 async function publicSummary(env: Env, where = '', bindings: unknown[] = []): Promise<unknown[]> {
   const sql = `
-    SELECT t.id, t.name, t.description, t.logo_key, t.membership_mode, t.status, t.created_at,
+    SELECT t.id, t.name, t.description, t.logo_key, t.logo_image_data, t.banner_image_data, t.membership_mode, t.status, t.created_at,
       (SELECT COUNT(*) FROM team_memberships tm WHERE tm.team_id = t.id AND tm.left_at IS NULL) AS member_count,
       (SELECT COUNT(*) FROM user_votes uv WHERE uv.team_id = t.id) AS attributed_validations,
       (SELECT COUNT(*) FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id
@@ -290,6 +292,53 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
   } else {
     return jsonErr('Unknown Team settings action', 400, request);
   }
+  return jsonOk({ team: await getTeam(env, teamId) }, request);
+}
+
+type TeamMediaKind = 'logo' | 'banner';
+const TEAM_MEDIA_LIMITS: Record<TeamMediaKind, number> = { logo: 256 * 1024, banner: 768 * 1024 };
+const TEAM_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+function mediaBytesMatch(bytes: Uint8Array, type: string): boolean {
+  if (type === 'image/png') return bytes.length >= 8 && bytes.slice(0, 8).every((value, index) => value === [137, 80, 78, 71, 13, 10, 26, 10][index]);
+  if (type === 'image/jpeg') return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  return bytes.length >= 12 && new TextDecoder().decode(bytes.slice(0, 4)) === 'RIFF' && new TextDecoder().decode(bytes.slice(8, 12)) === 'WEBP';
+}
+
+function dataUrl(bytes: Uint8Array, type: string): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  return `data:${type};base64,${btoa(binary)}`;
+}
+
+/** POST /api/teams/:id/media — owner/admin upload or remove a Team visual. */
+export async function handleTeamMedia(request: Request, env: Env, teamId: number): Promise<Response> {
+  const user = await requireUser(request, env);
+  if (isResponse(user)) return user;
+  const team = await getTeam(env, teamId);
+  if (!team) return jsonErr('Team not found', 404, request);
+  const membership = await requireManager(env, teamId, user.github_login);
+  if (!membership) return jsonErr('Only a Team owner or admin can manage this Team', 403, request);
+  if (team.status !== 'active') return jsonErr('This Team is not active', 409, request);
+  if (!request.headers.get('Content-Type')?.includes('multipart/form-data')) return jsonErr('Upload must use multipart form data', 400, request);
+  let form: FormData;
+  try { form = await request.formData(); } catch { return jsonErr('Could not read the uploaded image', 400, request); }
+  const kind = form.get('kind');
+  if (kind !== 'logo' && kind !== 'banner') return jsonErr('Choose whether to upload a logo or banner', 400, request);
+  const column = kind === 'logo' ? 'logo_image_data' : 'banner_image_data';
+  if (form.get('remove') === 'true') {
+    await env.DB.prepare(`UPDATE teams SET ${column} = NULL, updated_at = ? WHERE id = ?`).bind(now(), teamId).run();
+    return jsonOk({ team: await getTeam(env, teamId) }, request);
+  }
+  const file = form.get('file');
+  if (typeof file !== 'object' || file === null || !('arrayBuffer' in file)) return jsonErr('Choose an image to upload', 400, request);
+  const image = file as { type: string; size: number; arrayBuffer: () => Promise<ArrayBuffer> };
+  if (!TEAM_MEDIA_TYPES.has(image.type)) return jsonErr('Use a PNG, JPEG, or WebP image', 400, request);
+  if (image.size === 0 || image.size > TEAM_MEDIA_LIMITS[kind]) return jsonErr(`${kind === 'logo' ? 'Logo' : 'Banner'} image is too large`, 400, request);
+  const bytes = new Uint8Array(await image.arrayBuffer());
+  if (!mediaBytesMatch(bytes, image.type)) return jsonErr('The uploaded file is not a valid image', 400, request);
+  await env.DB.prepare(`UPDATE teams SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(dataUrl(bytes, image.type), now(), teamId).run();
   return jsonOk({ team: await getTeam(env, teamId) }, request);
 }
 

@@ -243,7 +243,9 @@ CREATE TABLE IF NOT EXISTS teams (
   updated_at TEXT NOT NULL,
   archived_at TEXT,
   suspended_at TEXT,
-  logo_key TEXT NOT NULL DEFAULT 'initials'
+  logo_key TEXT NOT NULL DEFAULT 'initials',
+  logo_image_data TEXT,
+  banner_image_data TEXT
 );
 CREATE TABLE IF NOT EXISTS team_memberships (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

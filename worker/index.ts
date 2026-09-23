@@ -48,6 +48,7 @@ import {
   handleTeamRepositoryOptions,
   handleTeams,
   handleTeamSettings,
+  handleTeamMedia,
 } from './handlers/teams.js';
 
 export default {
@@ -141,7 +142,7 @@ export default {
        if (method === 'GET'  && url.pathname === '/api/teams/mine')        return await handleMyTeams(request, env);
        if (method === 'GET'  && url.pathname === '/api/teams/leaderboard') return await handleTeamLeaderboard(env, request, url);
        if (method === 'GET'  && url.pathname === '/api/teams/repository-options') return await handleTeamRepositoryOptions(env, request);
-       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|join-requests|repositories|admin))?$/);
+       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|join-requests|repositories|admin|media))?$/);
        if (teamMatch) {
          const teamId = Number(teamMatch[1]);
          const action = teamMatch[2];
@@ -151,6 +152,7 @@ export default {
          if (method === 'POST' && action === 'join-requests') return await handleTeamJoinRequests(request, env, teamId);
          if (method === 'POST' && action === 'repositories') return await handleTeamRepositories(request, env, teamId);
          if (method === 'POST' && action === 'admin') return await handleTeamAdmin(request, env, teamId);
+         if (method === 'POST' && action === 'media') return await handleTeamMedia(request, env, teamId);
          return jsonErr('Method not allowed for this Team action', 405, request);
        }
 

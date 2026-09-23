@@ -21,6 +21,8 @@ export interface Team {
   name: string
   description: string
   logo_key: TeamLogoKey
+  logo_image_data?: string | null
+  banner_image_data?: string | null
   membership_mode: MembershipMode
   status: 'active' | 'archived' | 'suspended'
   member_count: number
@@ -72,6 +74,17 @@ export async function teamPut<T = unknown>(path: string, body: Record<string, un
   })
   const result = await response.json()
   if (!response.ok) throw new Error(result.error ?? 'Could not save this preference. Please try again.')
+  return result as T
+}
+export async function teamUpload<T = unknown>(path: string, file: File | null, kind: 'logo' | 'banner', remove = false): Promise<T> {
+  const { token } = await teamGet<{ token: string }>('/api/csrf')
+  const form = new FormData()
+  form.set('kind', kind)
+  if (file) form.set('file', file)
+  if (remove) form.set('remove', 'true')
+  const response = await fetch(path, { method: 'POST', credentials: 'include', headers: { 'x-csrf-token': token }, body: form })
+  const result = await response.json()
+  if (!response.ok) throw new Error(result.error ?? 'Could not upload this image. Please try again.')
   return result as T
 }
 export function teamInitials(name: string): string {

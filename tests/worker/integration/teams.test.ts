@@ -97,6 +97,30 @@ describe('Community Teams', () => {
     expect(((await updated.json()) as { team: { logo_key: string } }).team.logo_key).toBe('spark');
   });
 
+  it('allows a Team manager to upload and remove bounded logo and banner visuals', async () => {
+    const owner = await createTestSession(env, { github_login: 'media-owner' });
+    const outsider = await createTestSession(env, { github_login: 'media-outsider' });
+    const created = await post('/api/teams', { name: 'Visual reviewers', description: '' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const upload = async (kind: string, session: { sessionCookie: string; tokenCookie: string }, bytes = png) => {
+      const form = new FormData(); form.set('kind', kind); form.set('file', new File([bytes], kind + '.png', { type: 'image/png' }));
+      const csrf = makeCsrf();
+      return SELF.fetch(new Request(`http://localhost/api/teams/${teamId}/media`, { method: 'POST', headers: { 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}; ${session.sessionCookie}; ${session.tokenCookie}` }, body: form }));
+    };
+    expect((await upload('logo', outsider)).status).toBe(403);
+    expect((await upload('logo', owner)).status).toBe(200);
+    expect((await upload('banner', owner)).status).toBe(200);
+    const detail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, { headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` } }));
+    const team = (await detail.json() as { team: { logo_image_data: string; banner_image_data: string } }).team;
+    expect(team.logo_image_data).toMatch(/^data:image\/png;base64,/);
+    expect(team.banner_image_data).toMatch(/^data:image\/png;base64,/);
+    const csrf = makeCsrf();
+    const removeForm = new FormData(); removeForm.set('kind', 'logo'); removeForm.set('remove', 'true');
+    const removed = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}/media`, { method: 'POST', headers: { 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}; ${owner.sessionCookie}; ${owner.tokenCookie}` }, body: removeForm }));
+    expect(removed.status).toBe(200);
+  });
+
   it('requires an accepted invitation before a member can see private activity', async () => {
     const owner = await createTestSession(env, { github_login: 'owner' });
     const member = await createTestSession(env, { github_login: 'member' });
