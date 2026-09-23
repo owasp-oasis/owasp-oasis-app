@@ -1,275 +1,186 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { emptyMyTeams, errorMessage, teamGet, teamInitials, teamPost, type MembershipMode, type MyTeams, type Team, type TeamRole } from './teamApi'
 
-type Role = 'owner' | 'admin' | 'member'
-type MembershipMode = 'invite_only' | 'request'
-
-interface Member {
-  github_login: string
-  role: Role
-  joined_at: string
-}
-
-interface Repository {
-  id: number
-  name: string
-  full_name: string | null
-  description: string | null
-}
-
-interface RepoOption { id: number; name: string }
-
-interface JoinRequest { id: number; requester_login: string; created_at: string }
-interface Invite { id: number; invitee_login: string; created_at: string }
-interface Transfer { id: number; proposed_owner: string; created_at: string }
-interface Activity {
-  github_login: string
-  pr_id: number
-  repo_name: string
-  pr_number: number
-  decision: string
-  voted_at: string
-  title: string
-}
-
+interface Member { github_login: string; role: TeamRole; joined_at: string }
+interface Repository { id: number; name: string; description?: string }
 interface TeamDetail {
-  team: {
-    id: number
-    name: string
-    description: string
-    status: 'active' | 'archived' | 'suspended'
-    membership_mode: MembershipMode
-    member_count: number
-    attributed_validations: number
-    accepted_outcome_reviews: number
-  }
-  membership: Role
-  members: Member[]
-  repositories: Repository[]
-  activity: Activity[]
-  join_requests: JoinRequest[]
-  invites: Invite[]
-  ownership_transfers: Transfer[]
+  team: Team
+  membership?: TeamRole
+  members?: Member[]
+  repositories?: Repository[]
+  activity?: { github_login: string; pr_id: number; repo_name: string; pr_number: number; decision: string; voted_at: string; title: string }[]
+  join_requests?: { id: number; requester_login: string }[]
+  invites?: { id: number; invitee_login: string }[]
+  ownership_transfers?: { id: number; proposed_owner: string }[]
 }
-
-interface Props {
-  teamId: number
-  onClose: () => void
-  onMembershipChanged: () => void
-}
-
-function when(iso: string): string {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString()
-}
-
-async function post(path: string, body: Record<string, unknown>): Promise<void> {
-  const csrf = await fetch('/api/csrf', { credentials: 'include' })
-  if (!csrf.ok) throw new Error('Could not start a secure request. Please try again.')
-  const { token } = await csrf.json() as { token: string }
-  const response = await fetch(path, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', 'x-csrf-token': token },
-    body: JSON.stringify(body),
-  })
-  const result = await response.json() as { error?: string }
-  if (!response.ok) throw new Error(result.error ?? 'The request could not be completed.')
-}
+interface Props { teamId: number; onClose: () => void; onMembershipChanged: () => void }
+type Section = 'overview' | 'members' | 'repositories' | 'settings'
+interface Confirmation { title: string; explanation: string; label: string; action: () => Promise<boolean> }
 
 export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: Props) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const requestedSection = params.get('section') ?? 'overview'
   const [detail, setDetail] = useState<TeamDetail | null>(null)
-  const [repoOptions, setRepoOptions] = useState<RepoOption[]>([])
-  const [loading, setLoading] = useState(true)
+  const [mine, setMine] = useState<MyTeams>(emptyMyTeams)
+  const [repos, setRepos] = useState<Repository[]>([])
+  const [repoError, setRepoError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [invitee, setInvitee] = useState('')
   const [repoId, setRepoId] = useState('')
+  const [repoQuery, setRepoQuery] = useState('')
+  const [memberQuery, setMemberQuery] = useState('')
   const [transferTo, setTransferTo] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [membershipMode, setMembershipMode] = useState<MembershipMode>('invite_only')
-
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch(`/api/teams/${teamId}`, { credentials: 'include' })
-      const result = await response.json() as TeamDetail & { error?: string }
-      if (!response.ok || !result.membership) throw new Error(result.error ?? 'This Team is no longer available to you.')
-      setDetail(result)
-      setName(result.team.name)
-      setDescription(result.team.description)
-      setMembershipMode(result.team.membership_mode)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load this Team.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { void load() }, [teamId])
-
+  const [mode, setMode] = useState<MembershipMode>('invite_only')
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+  const dialog = useRef<HTMLDialogElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const path = '/api/teams/' + teamId
   const canManage = detail?.membership === 'owner' || detail?.membership === 'admin'
   const isOwner = detail?.membership === 'owner'
   const active = detail?.team.status === 'active'
+  const section: Section = !detail?.membership ? 'overview' :
+    requestedSection === 'members' || requestedSection === 'repositories' || (requestedSection === 'settings' && canManage) ? requestedSection : 'overview'
+  const sections: { id: Section; label: string; icon: string }[] = [
+    { id: 'overview', label: 'Stats & activity', icon: '◷' },
+    { id: 'members', label: 'Members', icon: '◎' },
+    { id: 'repositories', label: 'Repository focus', icon: '⌘' },
+    ...(canManage ? [{ id: 'settings' as Section, label: 'Team administration', icon: '⚙' }] : []),
+  ]
+  const sectionUrl = (value: Section) => {
+    const next = new URLSearchParams(params)
+    next.set('section', value)
+    return '?' + next.toString()
+  }
 
-  useEffect(() => {
-    if (!canManage || !active) return
-    fetch('/api/teams/repository-options')
-      .then(async response => response.ok ? await response.json() as { repositories?: RepoOption[] } : {})
-      .then(result => setRepoOptions(result.repositories ?? []))
-      .catch(() => setRepoOptions([]))
-  }, [canManage, active])
+  const load = useCallback(async () => {
+    const result = await teamGet<TeamDetail>('/api/teams/' + teamId)
+    setDetail(result)
+    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode)
+  }, [teamId])
+  useEffect(() => { void load().catch(caught => setError(errorMessage(caught))) }, [load])
+  useEffect(() => { if (user) void teamGet<MyTeams>('/api/teams/mine').then(setMine).catch(caught => setError(errorMessage(caught))) }, [user])
+  useEffect(() => { heading.current?.focus() }, [detail?.team.id])
+  useEffect(() => { if (confirmation) dialog.current?.showModal() }, [confirmation])
+  const loadRepos = useCallback(async () => {
+    setRepoError(null)
+    try { setRepos((await teamGet<{ repositories: Repository[] }>('/api/teams/repository-options')).repositories) }
+    catch (caught) { setRepoError(errorMessage(caught)) }
+  }, [])
+  useEffect(() => { if (canManage && section === 'repositories') void loadRepos() }, [canManage, section, loadRepos])
 
-  const run = async (path: string, body: Record<string, unknown>, message: string, membershipChanged = false): Promise<boolean> => {
-    setError(null)
-    setNotice(null)
+  async function run(endpoint: string, body: Record<string, unknown>, message: string, close = false): Promise<boolean> {
+    if (busy) return false
+    setBusy(true); setError(null); setNotice(null)
     try {
-      await post(path, body)
+      await teamPost(path + '/' + endpoint, body)
       setNotice(message)
-      if (membershipChanged) onMembershipChanged()
-      await load()
+      onMembershipChanged()
+      if (close) { onClose(); return true }
+      try { await load() } catch { setError('Saved, but the view could not refresh. Reload this page to see the latest state.') }
       return true
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The request could not be completed.')
-      return false
-    }
+    } catch (caught) { setError(errorMessage(caught)); return false }
+    finally { setBusy(false) }
   }
-
-  const invite = async (event: FormEvent<HTMLFormElement>) => {
+  const submitInvite = async (event: FormEvent) => {
     event.preventDefault()
-    if (!invitee.trim()) return
-    await run(`/api/teams/${teamId}/members`, { action: 'invite', github_login: invitee.trim() }, `Invitation sent to ${invitee.trim()}.`)
-    setInvitee('')
+    if (await run('members', { action: 'invite', github_login: invitee.trim() }, 'Invitation added. They can accept it from Your teams in OASIS.')) setInvitee('')
   }
-
-  const addRepository = async (event: FormEvent<HTMLFormElement>) => {
+  const submitRepo = async (event: FormEvent) => {
     event.preventDefault()
-    if (!repoId) return
-    await run(`/api/teams/${teamId}/repositories`, { action: 'add', repo_id: Number(repoId) }, 'Repository focus added.')
-    setRepoId('')
+    if (await run('repositories', { action: 'add', repo_id: Number(repoId) }, 'Repository added to this team’s focus.')) setRepoId('')
   }
 
-  const saveSettings = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    await run(`/api/teams/${teamId}/settings`, {
-      action: 'update', name, description, membership_mode: membershipMode,
-    }, 'Team settings saved.')
-  }
+  if (!detail) return <div className="teams-ui"><button className="team-link" onClick={onClose}>← Teams</button>{error ? <div className="team-error" role="alert">{error} <button className="team-link" onClick={() => { setError(null); void load().catch(caught => setError(errorMessage(caught))) }}>Retry</button></div> : <p className="team-empty" role="status">Loading team…</p>}</div>
+  const members = detail.members ?? []
+  const repositories = detail.repositories ?? []
+  const requests = detail.join_requests ?? []
+  const invites = detail.invites ?? []
+  const pending = mine.join_requests.some(request => request.team_id === teamId)
+  const offer = mine.invites.find(invite => invite.team_id === teamId)
+  const availableRepos = repos.filter(repo => !repositories.some(focus => focus.id === repo.id) && repo.name.toLowerCase().includes(repoQuery.toLowerCase()))
 
-  if (loading) return <div className="tab-loading">Loading your Team…</div>
-  if (!detail) return <div className="team-workspace team-workspace--error">{error ?? 'Could not load this Team.'}</div>
+  return <div className="teams-ui">
+    <button className="team-link team-back" onClick={onClose}>← Teams</button>
+    <header className="teams-heading team-profile-heading">
+      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open to requests' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
+      {detail.membership && active && <Link className="team-button" to={sectionUrl(canManage ? 'members' : 'repositories')}>{canManage ? 'Invite members' : 'Find a review'}</Link>}
+    </header>
 
-  const focusedRepoIds = new Set(detail.repositories.map(repository => repository.id))
-  const availableRepos = repoOptions.filter(repository => !focusedRepoIds.has(repository.id))
+    <div className={detail.membership ? 'team-layout' : ''}>
+    {detail.membership && <aside className="team-sidebar">
+      <nav aria-label="Team sections">{sections.map(item => <Link key={item.id} to={sectionUrl(item.id)} aria-current={section === item.id ? 'page' : undefined}><span className="team-menu-icon" aria-hidden="true">{item.icon}</span>{item.label}{item.id === 'members' && requests.length > 0 && <span className="team-badge" aria-label={requests.length + ' pending requests'}>{requests.length}</span>}</Link>)}</nav>
+      <p className="team-help">Member workspace<br />Team totals are public.</p>
+      <label className="team-mobile-menu">Team section<select value={section} onChange={event => navigate(sectionUrl(event.target.value as Section))}>{sections.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+    </aside>}
+    <div className="team-main">
+    {detail.membership && <h3 className="team-view-title">{sections.find(item => item.id === section)?.label}</h3>}
+    {!active && <p className="team-notice">This team is {detail.team.status}. Its history is preserved.{detail.team.status === 'archived' && isOwner ? ' Reactivate it in Team administration to resume.' : ''}</p>}
+    {error && <p className="team-error" role="alert">{error}</p>}
+    {notice && <p className="team-success" role="status">{notice}</p>}
+    {busy && <p className="team-help" role="status">Saving…</p>}
 
-  return (
-    <section className="team-workspace" aria-live="polite">
-      <header className="team-workspace__header">
-        <div>
-          <button type="button" className="team-back" onClick={onClose}>← All Teams</button>
-          <span className="teams-kicker">Your Team · {detail.membership}</span>
-          <h2>{detail.team.name}</h2>
-          {detail.team.description && <p>{detail.team.description}</p>}
-        </div>
-        <dl className="team-workspace__totals">
-          <div><dt>Members</dt><dd>{detail.team.member_count}</dd></div>
-          <div><dt>Validations</dt><dd>{detail.team.attributed_validations}</dd></div>
-          <div><dt>Accepted outcomes</dt><dd>{detail.team.accepted_outcome_reviews}</dd></div>
-        </dl>
-      </header>
-
-      {detail.team.status !== 'active' && (
-        <p className="team-status-notice">This Team is {detail.team.status}. Its history is preserved, but membership and repository changes are paused.</p>
-      )}
-      {error && <p className="teams-form-error" role="alert">{error}</p>}
-      {notice && <p className="teams-form-success" role="status">{notice}</p>}
-
-      <div className="team-workspace__grid">
-        <section className="team-workspace-card">
-          <div className="team-card-heading"><h3>Members</h3><span>{detail.members.length}</span></div>
-          <ul className="team-member-list">
-            {detail.members.map(member => (
-              <li key={member.github_login}>
-                <div><strong>{member.github_login}</strong><span>{member.role}</span></div>
-                {active && canManage && member.role !== 'owner' && (
-                  <div className="team-inline-actions">
-                    {isOwner && <button type="button" onClick={() => void run(`/api/teams/${teamId}/members`, { action: 'set_admin', github_login: member.github_login, role: member.role === 'admin' ? 'member' : 'admin' }, member.role === 'admin' ? 'Admin role removed.' : 'Made a Team admin.')}>{member.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>}
-                    <button type="button" className="team-action-danger" onClick={() => void run(`/api/teams/${teamId}/members`, { action: 'remove', github_login: member.github_login }, `${member.github_login} was removed.`, true)}>Remove</button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          {active && canManage && (
-            <form className="team-compact-form" onSubmit={invite}>
-              <label htmlFor="team-invite">Invite by GitHub login</label>
-              <div><input id="team-invite" value={invitee} onChange={event => setInvitee(event.target.value)} placeholder="octocat" required /><button type="submit">Invite</button></div>
-            </form>
-          )}
-          {active && !isOwner && (
-            <button type="button" className="team-text-button team-action-danger" onClick={() => void run(`/api/teams/${teamId}/members`, { action: 'leave' }, 'You left the Team.', true).then(left => { if (left) onClose() })}>Leave Team</button>
-          )}
+    {section === 'overview' && <>
+      <dl className="team-metrics">
+        <div><dt>Accepted outcomes</dt><dd>{detail.team.accepted_outcome_reviews}</dd><p>Reviews on PRs accepted upstream</p></div>
+        <div><dt>Validations</dt><dd>{detail.team.attributed_validations}</dd><p>Personal work credited to this team</p></div>
+        <div><dt>Members</dt><dd>{detail.team.member_count}</dd><p>Contributing together</p></div>
+      </dl>
+      {!detail.membership ? <section className="team-surface team-public-info"><h3>{offer ? 'You’re invited' : 'Join this team'}</h3><p>Team totals are public. The roster, repository focus, and activity are available to members.</p>
+        {!user ? <a className="team-button team-button--primary" href="/api/auth/login">Sign in with GitHub</a> : !active ? <p className="team-help">This team is not accepting new members.</p> : offer ? <button disabled={busy} className="team-button team-button--primary" onClick={() => void run('members', { action: 'accept_invite', invite_id: offer.id }, 'Welcome to the team.')}>Accept invitation</button> : detail.team.membership_mode === 'request' ? <button disabled={busy || pending} className="team-button team-button--primary" onClick={async () => { if (await run('join-requests', { action: 'request' }, 'Join request sent. A team owner or admin will review it.')) setMine(previous => ({ ...previous, join_requests: [...previous.join_requests, { id: 0, team_id: teamId, team_name: detail.team.name }] })) }}>{pending ? 'Request pending' : 'Request to join'}</button> : <p className="team-help">Membership is by invitation from an owner or admin.</p>}
+      </section> : <>
+        {active && canManage && (members.length === 1 || repositories.length === 0) && <section className="team-get-started"><div><h3>Make this team your own</h3><p>Invite a fellow reviewer and choose the repositories you care about.</p></div><div className="team-actions">{members.length === 1 && <Link className="team-button team-button--primary" to={sectionUrl('members')}>Invite your first member</Link>}{repositories.length === 0 && <Link className="team-button" to={sectionUrl('repositories')}>Choose repositories</Link>}</div></section>}
+        <section className="team-surface"><div className="team-section-heading"><div><h3>Recent activity</h3><p>Validations credited to this team · members only</p></div></div>
+          {(detail.activity ?? []).length === 0 ? <div className="team-empty"><h4>Your team’s first validation starts with you.</h4><p>Review a pull request and choose this team before submitting.</p><Link className="team-button" to="/workspace/pull-requests">Browse pull requests</Link></div> : <ul className="team-list">{detail.activity!.map(activity => <li className="team-row" key={activity.pr_id + '-' + activity.github_login}><span className="team-person-avatar" aria-hidden="true">{teamInitials(activity.github_login)}</span><div className="team-row-main"><strong>{activity.github_login}</strong><p><a href={'https://github.com/owasp-oasis/' + encodeURIComponent(activity.repo_name) + '/pull/' + activity.pr_number} target="_blank" rel="noopener noreferrer">{activity.title || activity.repo_name + ' #' + activity.pr_number}</a></p><span className="team-help">{activity.repo_name} #{activity.pr_number}</span></div><div className="team-activity-meta"><span className="team-badge">{activity.decision}</span><time dateTime={activity.voted_at}>{new Date(activity.voted_at).toLocaleDateString()}</time></div></li>)}</ul>}
         </section>
+        {!isOwner && active && <details className="team-secondary-options"><summary>Membership options</summary><button className="team-button team-button--danger" disabled={busy} onClick={() => setConfirmation({ title: 'Leave ' + detail.team.name + '?', explanation: 'You will lose access to the private workspace. Your past contributions will remain credited to the team.', label: 'Leave team', action: () => run('members', { action: 'leave' }, 'You left the team.', true) })}>Leave team</button></details>}
+      </>}
+    </>}
 
-        <section className="team-workspace-card">
-          <div className="team-card-heading"><h3>Focused repositories</h3><span>{detail.repositories.length}</span></div>
-          {detail.repositories.length === 0 ? <p className="team-empty">No repository focus yet.</p> : (
-            <ul className="team-repository-list">
-              {detail.repositories.map(repository => <li key={repository.id}><span>{repository.name}</span>{active && canManage && <button type="button" className="team-action-danger" onClick={() => void run(`/api/teams/${teamId}/repositories`, { action: 'remove', repo_id: repository.id }, 'Repository focus removed.')}>Remove</button>}</li>)}
-            </ul>
-          )}
-          {active && canManage && availableRepos.length > 0 && (
-            <form className="team-compact-form" onSubmit={addRepository}>
-              <label htmlFor="team-repository">Add a repository focus</label>
-              <div><select id="team-repository" value={repoId} onChange={event => setRepoId(event.target.value)} required><option value="">Choose a repository</option>{availableRepos.map(repository => <option key={repository.id} value={repository.id}>{repository.name}</option>)}</select><button type="submit">Add</button></div>
-            </form>
-          )}
-        </section>
+    {section === 'members' && <div className="team-content-stack">
+      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Invite a member</h3><p>They’ll find the invitation in Your teams when they sign in to OASIS.</p></div></div><form className="team-inline-form" onSubmit={submitInvite}><label>GitHub username<input value={invitee} onChange={event => setInvitee(event.target.value)} placeholder="e.g. octocat" required disabled={busy} /></label><button className="team-button team-button--primary" disabled={busy || !invitee.trim()}>Send invitation</button></form></section>}
+      {canManage && requests.length > 0 && <section className="team-surface"><div className="team-section-heading"><h3>Join requests <span className="team-badge">{requests.length}</span></h3></div><ul className="team-list">{requests.map(request => <li className="team-row" key={request.id}><span className="team-person-avatar" aria-hidden="true">{teamInitials(request.requester_login)}</span><strong className="team-row-main">{request.requester_login}</strong>{active && <div className="team-actions"><button disabled={busy} className="team-button team-button--primary" onClick={() => void run('join-requests', { action: 'resolve', request_id: request.id, status: 'accepted' }, request.requester_login + ' joined the team.')}>Accept</button><button disabled={busy} className="team-button" onClick={() => void run('join-requests', { action: 'resolve', request_id: request.id, status: 'declined' }, 'Request declined.')}>Decline</button></div>}</li>)}</ul></section>}
+      <section className="team-surface"><div className="team-section-heading"><h3>Members <span className="team-badge">{members.length}</span></h3><label className="team-search"><span className="team-sr-only">Search members</span><input type="search" placeholder="Find a member…" value={memberQuery} onChange={event => setMemberQuery(event.target.value)} /></label></div>
+        <ul className="team-list">{members.filter(member => member.github_login.toLowerCase().includes(memberQuery.toLowerCase())).map(member => <li className="team-row" key={member.github_login}><span className="team-person-avatar" aria-hidden="true">{teamInitials(member.github_login)}</span><div className="team-row-main"><strong>{member.github_login}{member.github_login === user?.login ? ' (you)' : ''}</strong><p>{member.role}</p></div>
+          {canManage && active && member.role !== 'owner' && member.github_login !== user?.login && <details className="team-member-actions"><summary>Manage<span className="team-sr-only"> {member.github_login}</span></summary><div>{isOwner && <button className="team-button" disabled={busy} onClick={() => void run('members', { action: 'set_admin', github_login: member.github_login, role: member.role === 'admin' ? 'member' : 'admin' }, 'Member role updated.')}>{member.role === 'admin' ? 'Make member' : 'Make admin'}</button>}<button className="team-button team-button--danger" disabled={busy} onClick={() => setConfirmation({ title: 'Remove ' + member.github_login + '?', explanation: 'Their past contributions stay credited to the team. They will need a new invitation to return.', label: 'Remove member', action: () => run('members', { action: 'remove', github_login: member.github_login }, 'Member removed.') })}>Remove</button></div></details>}
+        </li>)}</ul>
+        {!members.some(member => member.github_login.toLowerCase().includes(memberQuery.toLowerCase())) && <p className="team-empty">No members match your search.</p>}
+      </section>
+      {canManage && <section className="team-surface"><div className="team-section-heading"><h3>Pending invitations <span className="team-badge">{invites.length}</span></h3></div>{invites.length === 0 ? <p className="team-empty">No invitations waiting for a response.</p> : <ul className="team-list">{invites.map(invite => <li className="team-row" key={invite.id}><strong className="team-row-main">{invite.invitee_login}</strong><span className="team-badge">Awaiting acceptance</span></li>)}</ul>}</section>}
+    </div>}
 
-        <section className="team-workspace-card team-workspace-card--wide">
-          <div className="team-card-heading"><h3>Team activity</h3><span>Members only</span></div>
-          {detail.activity.length === 0 ? <p className="team-empty">No attributed validations yet.</p> : (
-            <ul className="team-activity-list">
-              {detail.activity.map(activity => <li key={`${activity.pr_id}-${activity.github_login}`}><strong>{activity.github_login}</strong><span>{activity.decision} · {activity.repo_name} #{activity.pr_number}</span><time dateTime={activity.voted_at}>{when(activity.voted_at)}</time></li>)}
-            </ul>
-          )}
-        </section>
+    {section === 'repositories' && <div className="team-content-stack">
+      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Choose your focus</h3><p>Keep the repositories your team cares about close at hand.</p></div></div>{repoError ? <p className="team-error">{repoError} <button className="team-link" onClick={() => void loadRepos()}>Retry</button></p> : <form className="team-repo-form" onSubmit={submitRepo}><label>Find a repository<input type="search" value={repoQuery} onChange={event => { setRepoQuery(event.target.value); setRepoId('') }} placeholder="Filter by name…" /></label><label>Repository<select required value={repoId} onChange={event => setRepoId(event.target.value)}><option value="">{availableRepos.length ? 'Choose a repository' : 'No matching repositories'}</option>{availableRepos.map(repo => <option value={repo.id} key={repo.id}>{repo.name}</option>)}</select></label><button className="team-button team-button--primary" disabled={busy || !repoId}>Add repository</button></form>}</section>}
+      <section className="team-surface"><div className="team-section-heading"><h3>Focused repositories <span className="team-badge">{repositories.length}</span></h3></div>{repositories.length === 0 ? <div className="team-empty"><h4>No repositories selected yet</h4><p>{canManage ? 'Choose a repository above to give your team a starting point.' : 'An owner or admin can add repositories for the team.'}</p></div> : <ul className="team-list">{repositories.map(repo => <li className="team-row" key={repo.id}><div className="team-row-main"><strong>{repo.name}</strong>{repo.description && <p>{repo.description}</p>}</div><div className="team-actions"><Link className="team-button" to={'/workspace/pull-requests?repo=' + repo.id}>Find reviews →</Link>{canManage && active && <button disabled={busy} className="team-link" aria-label={'Remove ' + repo.name + ' from focus'} onClick={() => void run('repositories', { action: 'remove', repo_id: repo.id }, 'Repository removed from team focus.')}>Remove</button>}</div></li>)}</ul>}</section>
+    </div>}
 
-        {canManage && active && (
-          <section className="team-workspace-card">
-            <div className="team-card-heading"><h3>Join requests</h3><span>{detail.join_requests.length}</span></div>
-            {detail.join_requests.length === 0 ? <p className="team-empty">No pending requests.</p> : <ul className="team-request-list">{detail.join_requests.map(request => <li key={request.id}><strong>{request.requester_login}</strong><div className="team-inline-actions"><button type="button" onClick={() => void run(`/api/teams/${teamId}/join-requests`, { action: 'resolve', request_id: request.id, status: 'accepted' }, `${request.requester_login} joined the Team.`, true)}>Accept</button><button type="button" className="team-action-danger" onClick={() => void run(`/api/teams/${teamId}/join-requests`, { action: 'resolve', request_id: request.id, status: 'declined' }, 'Join request declined.')}>Decline</button></div></li>)}</ul>}
-          </section>
-        )}
+    {section === 'settings' && <div className="team-content-stack">
+      <section className="team-surface"><div className="team-section-heading"><div><h3>Team details</h3><p>Name and description appear in the public directory.</p></div></div>
+        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
+          <label>Team name<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
+          <label>Description<textarea rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
+          <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Anyone can request to join</option></select></label>
+          <p className="team-help">Roster and individual activity are visible only to current members.</p>
+          <button className="team-button team-button--primary" disabled={!name.trim()}>Save changes</button>
+        </fieldset></form>
+      </section>
+      {isOwner && <section className="team-surface"><div className="team-section-heading"><div><h3>Ownership & lifecycle</h3><p>Owner-only actions. Team history is always preserved.</p></div></div>
+        {active && <div className="team-setting-block"><h4>Transfer ownership</h4><p>The new owner must accept. You’ll remain a member afterward.</p>{(detail.ownership_transfers ?? []).length > 0 ? detail.ownership_transfers!.map(transfer => <p className="team-notice" key={transfer.id}>Waiting for {transfer.proposed_owner} to accept ownership.</p>) : members.length < 2 ? <p className="team-help">Invite another member before transferring ownership.</p> : <div className="team-inline-form"><label>New owner<select value={transferTo} onChange={event => setTransferTo(event.target.value)}><option value="">Choose a member</option>{members.filter(member => member.role !== 'owner').map(member => <option key={member.github_login} value={member.github_login}>{member.github_login}</option>)}</select></label><button disabled={busy || !transferTo} className="team-button" onClick={() => setConfirmation({ title: 'Offer ownership to ' + transferTo + '?', explanation: 'You remain the owner until they accept. After acceptance, you become a regular member.', label: 'Offer ownership', action: () => run('members', { action: 'propose_transfer', github_login: transferTo }, 'Ownership offer sent.') })}>Offer ownership</button></div>}</div>}
+        {detail.team.status !== 'suspended' && <div className="team-setting-block"><h4>{active ? 'Archive team' : 'Reactivate team'}</h4><p>{active ? 'Pause membership changes and new contributions. You can reactivate the team later.' : 'Resume invitations, join requests, and contribution attribution.'}</p><button className={'team-button' + (active ? ' team-button--danger' : '')} disabled={busy} onClick={() => setConfirmation({ title: active ? 'Archive this team?' : 'Reactivate this team?', explanation: active ? 'The team’s members, repositories, and history will be preserved.' : 'Your team can resume work with its existing members and history.', label: active ? 'Archive team' : 'Reactivate team', action: () => run('settings', { action: active ? 'archive' : 'reactivate' }, active ? 'Team archived. Its history is preserved.' : 'Team reactivated.') })}>{active ? 'Archive team' : 'Reactivate team'}</button></div>}
+      </section>}
+    </div>}
 
-        {canManage && active && (
-          <section className="team-workspace-card">
-            <div className="team-card-heading"><h3>Pending invitations</h3><span>{detail.invites.length}</span></div>
-            {detail.invites.length === 0 ? <p className="team-empty">No pending invitations.</p> : <ul className="team-request-list">{detail.invites.map(invite => <li key={invite.id}><strong>{invite.invitee_login}</strong><span>Sent {when(invite.created_at)}</span></li>)}</ul>}
-          </section>
-        )}
-
-        {canManage && (
-          <section className="team-workspace-card team-workspace-card--wide">
-            <div className="team-card-heading"><h3>Team settings</h3><span>{isOwner ? 'Owner' : 'Admin'}</span></div>
-            <form className="team-settings-form" onSubmit={saveSettings}>
-              <label>Team name<input value={name} onChange={event => setName(event.target.value)} maxLength={80} required disabled={!active} /></label>
-              <label>Description<input value={description} onChange={event => setDescription(event.target.value)} maxLength={500} disabled={!active} /></label>
-              <label>Membership<select value={membershipMode} onChange={event => setMembershipMode(event.target.value as MembershipMode)} disabled={!active}><option value="invite_only">Invite only</option><option value="request">Open to join requests</option></select></label>
-              {active && <button type="submit">Save settings</button>}
-            </form>
-            {isOwner && (
-              <div className="team-owner-controls">
-                {active && detail.members.filter(member => member.role !== 'owner').length > 0 && <div className="team-compact-form"><label htmlFor="team-transfer">Transfer ownership</label><div><select id="team-transfer" value={transferTo} onChange={event => setTransferTo(event.target.value)}><option value="">Choose a current member</option>{detail.members.filter(member => member.role !== 'owner').map(member => <option key={member.github_login} value={member.github_login}>{member.github_login}</option>)}</select><button type="button" disabled={!transferTo} onClick={() => void run(`/api/teams/${teamId}/members`, { action: 'propose_transfer', github_login: transferTo }, `Ownership transfer proposed to ${transferTo}.`)}>Request transfer</button></div></div>}
-                {detail.ownership_transfers.map(transfer => <p className="team-empty" key={transfer.id}>Waiting for {transfer.proposed_owner} to accept ownership.</p>)}
-                {detail.team.status !== 'suspended' && <button type="button" className="team-text-button team-action-danger" onClick={() => void run(`/api/teams/${teamId}/settings`, { action: active ? 'archive' : 'reactivate' }, active ? 'Team archived. Its history is preserved.' : 'Team reactivated.', true)}>{active ? 'Archive Team' : 'Reactivate Team'}</button>}
-              </div>
-            )}
-          </section>
-        )}
-      </div>
-    </section>
-  )
+    </div>
+    </div>
+    <dialog ref={dialog} className="team-dialog" aria-labelledby="team-confirm-title" onCancel={event => { if (busy) event.preventDefault(); else setConfirmation(null) }} onClose={() => setConfirmation(null)}>
+      {confirmation && <><h3 id="team-confirm-title">{confirmation.title}</h3><p>{confirmation.explanation}</p>{error && <p className="team-error" role="alert">{error}</p>}<div className="team-actions"><button className="team-button" autoFocus disabled={busy} onClick={() => dialog.current?.close()}>Cancel</button><button className="team-button team-button--primary" disabled={busy} onClick={async () => { if (await confirmation.action()) dialog.current?.close() }}>{busy ? 'Saving…' : confirmation.label}</button></div></>}
+    </dialog>
+  </div>
 }

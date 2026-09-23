@@ -9,6 +9,7 @@
     "build:frontend": "vite build",
     "build": "tsc -b && npm run build:worker && npm run build:frontend",
     "preview": "vite preview",
+    "preview:teams": "npm run build && node scripts/teams-preview.mjs",
     "check": "npm test && npm run build",
     "migrate:preview": "wrangler d1 migrations apply oasis-db --remote --env=\"\"",
     "migrate:production": "wrangler d1 migrations apply oasis-db --remote --env production",

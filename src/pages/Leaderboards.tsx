@@ -113,7 +113,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
         maintainers:  '/api/leaderboard/maintainers',
         teams:        '/api/teams',
       }
-      const res = await fetch(endpoints[tab])
+      const res = await fetch(endpoints[tab], tab === 'teams' ? { cache: 'no-store' } : undefined)
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} — ${res.statusText || 'server error'}`)
       }
@@ -163,7 +163,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   }, [activeTab, fetchTab])
 
   return (
-    <div className="leaderboards workspace">
+    <div className={'leaderboards workspace' + (activeTab === 'teams' ? ' workspace--teams' : '')}>
       <div className="page-hero workspace-hero">
         <div className="container">
           <div className="workspace-hero__eyebrow">OASIS work area</div>
