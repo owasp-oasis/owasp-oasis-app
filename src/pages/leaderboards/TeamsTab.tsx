@@ -96,7 +96,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
         <fieldset disabled={busy}>
           <label>Team name<input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
           <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="What will your team work on?" /></label>
-          <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Anyone can request to join</option></select></label>
+          <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
           <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />
           <p className="team-help">Team totals are public. Members and their activity are visible only inside the team.</p>
           {error && <p className="team-error" role="alert">{error}</p>}
@@ -132,7 +132,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     {(view === 'mine' ? mineLoading : loading) ? <p className="team-empty" role="status">Loading teams…</p> : filtered.length === 0 ? <div className="team-empty team-surface"><h3>{query ? 'No matching teams' : view === 'mine' ? 'Your next review could be a team effort.' : 'No teams yet'}</h3><p>{query ? 'Try another name or clear your search.' : view === 'mine' ? 'Create a team or explore teams that welcome new members.' : 'Start the first team and invite a fellow reviewer.'}</p>{!query && user && <div className="team-actions"><button className="team-button team-button--primary" onClick={() => setParams({ view, create: '1' })}>Create team</button>{view === 'mine' && <Link className="team-button" to="?view=explore">Explore teams</Link>}</div>}</div> : <div className="team-directory-list team-surface">
       {filtered.map(team => <Link key={team.id} className="team-directory-row" to={'?view=' + view + '&team=' + team.id}>
         <span className="team-avatar" aria-hidden="true">{teamLogoMark(team.logo_key) ?? teamInitials(team.name)}</span>
-        <div className="team-directory-name"><strong>{team.name}</strong><p>{team.description || 'An OASIS community team'}</p><span className="team-meta">{view === 'mine' && 'role' in team ? String(team.role) + ' · ' : ''}{team.status !== 'active' ? team.status : team.membership_mode === 'request' ? 'Open to requests' : 'Invite only'}</span></div>
+        <div className="team-directory-name"><strong>{team.name}</strong><p>{team.description || 'An OASIS community team'}</p><span className="team-meta">{view === 'mine' && 'role' in team ? String(team.role) + ' · ' : ''}{team.status !== 'active' ? team.status : team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span></div>
         {view === 'explore' && 'accepted_outcome_reviews' in team && <div className="team-directory-stats"><span><strong>{team.accepted_outcome_reviews}</strong>Accepted outcomes</span><span><strong>{team.attributed_validations}</strong>Validations</span></div>}
         <span className="team-row-arrow" aria-hidden="true">→</span>
       </Link>)}

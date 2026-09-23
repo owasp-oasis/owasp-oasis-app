@@ -112,7 +112,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   return <div className="teams-ui">
     <button className="team-link team-back" onClick={onClose}>← Teams</button>
     <header className="teams-heading team-profile-heading">
-      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamLogoMark(detail.team.logo_key) ?? teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open to requests' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
+      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamLogoMark(detail.team.logo_key) ?? teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
       {detail.membership && active && <Link className="team-button" to={sectionUrl(canManage ? 'members' : 'repositories')}>{canManage ? 'Invite members' : 'Find a review'}</Link>}
     </header>
 
@@ -167,7 +167,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
         <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
           <label>Team name<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
           <label>Description<textarea rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
-          <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Anyone can request to join</option></select></label>
+          <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
           <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />
           <p className="team-help">Roster and individual activity are visible only to current members.</p>
           <button className="team-button team-button--primary" disabled={!name.trim()}>Save changes</button>

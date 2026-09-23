@@ -33,6 +33,8 @@ await db.prepare("INSERT INTO teams (id, name, description, membership_mode, own
   .bind(now, now).run()
 await db.prepare("INSERT INTO teams (id, name, description, membership_mode, owner_login, created_at, updated_at) VALUES (2, 'Web application defenders', 'A community working together on authentication and safer web applications.', 'request', 'demo-admin', ?, ?)")
   .bind(now, now).run()
+await db.prepare("INSERT INTO teams (id, name, description, membership_mode, owner_login, created_at, updated_at) VALUES (3, 'Open source maintainers', 'A welcoming place for OASIS members who want to review fixes together.', 'request', 'demo-admin', ?, ?)")
+  .bind(now, now).run()
 for (const [team, login, role] of [[1, 'demo-owner', 'owner'], [1, 'demo-admin', 'admin'], [1, 'demo-member', 'member'], [2, 'demo-admin', 'owner']]) {
   await db.prepare('INSERT INTO team_memberships (team_id, github_login, role, joined_at) VALUES (?, ?, ?, ?)').bind(team, login, role, now).run()
 }

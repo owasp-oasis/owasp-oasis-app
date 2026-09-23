@@ -67,7 +67,7 @@ only person who can transfer ownership.
 
 ### 4. Review join requests
 
-1. Switch to `newcomer` and open the request-enabled sample Team.
+1. Switch to `newcomer` and open the open-membership sample Team.
 2. Request to join.
 3. Switch to `owner` and open **Members**.
 4. Accept or decline the request.

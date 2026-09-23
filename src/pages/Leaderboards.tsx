@@ -188,6 +188,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
               <NavLink
                 key={tab.id}
                 role="tab"
+                preventScrollReset
                 aria-selected={activeTab === tab.id}
                 className={`lb-tab${activeTab === tab.id ? ' lb-tab--active' : ''}`}
                 to={{
