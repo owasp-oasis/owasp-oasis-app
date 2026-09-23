@@ -52,7 +52,6 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const [membershipMode, setMembershipMode] = useState<'invite_only' | 'request'>('invite_only')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [createdName, setCreatedName] = useState<string | null>(null)
   const [myTeams, setMyTeams] = useState<MyTeam[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [pendingJoinRequests, setPendingJoinRequests] = useState<PendingJoinRequest[]>([])
@@ -89,18 +88,19 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const createTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFormError(null)
-    setCreatedName(null)
     setSubmitting(true)
     try {
       const response = await csrfPost('/api/teams', { name, description, membership_mode: membershipMode })
       const result = await response.json() as { error?: string; team?: { id: number } }
-      if (!response.ok) throw new Error(result.error ?? 'Could not create the Team')
-      setCreatedName(name.trim())
+      if (!response.ok || !result.team?.id) throw new Error(result.error ?? 'Could not create the Team')
       setName('')
       setDescription('')
       setMembershipMode('invite_only')
       await loadMine()
       onCreated()
+      // Creation ends in the Team workspace, not an inline confirmation that
+      // leaves the owner to find their new Team again in the directory.
+      setSelectedTeamId(result.team.id)
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Could not create the Team')
     } finally {
@@ -207,7 +207,6 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
             </button>
           </form>
           {formError && <p className="teams-form-error" role="alert">{formError}</p>}
-          {createdName && <p className="teams-form-success" role="status">{createdName} is ready. You are its owner.</p>}
         </section>
       )}
 
