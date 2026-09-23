@@ -22,6 +22,7 @@ interface TeamDetail {
 interface Props { teamId: number; onClose: () => void; onMembershipChanged: () => void }
 type Section = 'overview' | 'members' | 'repositories' | 'settings'
 interface Confirmation { title: string; explanation: string; label: string; action: () => Promise<boolean> }
+interface TeamSettingsSnapshot { name: string; description: string; mode: MembershipMode; logoKey: TeamLogoKey; contributionThreshold: number; publicBadges: boolean }
 
 export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: Props) {
   const { user } = useAuth()
@@ -46,6 +47,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
   const [contributionThreshold, setContributionThreshold] = useState(5)
   const [publicBadges, setPublicBadges] = useState(false)
+  const [savedSettings, setSavedSettings] = useState<TeamSettingsSnapshot | null>(null)
   const [userBadgesPublic, setUserBadgesPublic] = useState(false)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
@@ -54,6 +56,14 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const canManage = detail?.membership === 'owner' || detail?.membership === 'admin'
   const isOwner = detail?.membership === 'owner'
   const active = detail?.team.status === 'active'
+  const settingsDirty = savedSettings !== null && (
+    savedSettings.name !== name ||
+    savedSettings.description !== description ||
+    savedSettings.mode !== mode ||
+    savedSettings.logoKey !== logoKey ||
+    savedSettings.contributionThreshold !== contributionThreshold ||
+    savedSettings.publicBadges !== publicBadges
+  )
   const section: Section = !detail?.membership ? 'overview' :
     requestedSection === 'members' || requestedSection === 'repositories' || (requestedSection === 'settings' && canManage) ? requestedSection : 'overview'
   const sections: { id: Section; label: string; icon: string }[] = [
@@ -71,7 +81,8 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const load = useCallback(async () => {
     const result = await teamGet<TeamDetail>('/api/teams/' + teamId)
     setDetail(result)
-    setName(result.team.name); setDescription(result.team.description); setMode(result.team.membership_mode); setLogoKey(result.team.logo_key ?? 'initials'); setContributionThreshold(result.badge_settings?.contribution_threshold ?? 5); setPublicBadges(result.badge_settings?.public_display === 1); setUserBadgesPublic(result.user_badges_public === true)
+    const nextSettings = { name: result.team.name, description: result.team.description, mode: result.team.membership_mode, logoKey: result.team.logo_key ?? 'initials', contributionThreshold: result.badge_settings?.contribution_threshold ?? 5, publicBadges: result.badge_settings?.public_display === 1 }
+    setName(nextSettings.name); setDescription(nextSettings.description); setMode(nextSettings.mode); setLogoKey(nextSettings.logoKey); setContributionThreshold(nextSettings.contributionThreshold); setPublicBadges(nextSettings.publicBadges); setSavedSettings(nextSettings); setUserBadgesPublic(result.user_badges_public === true)
   }, [teamId])
   useEffect(() => { void load().catch(caught => setError(errorMessage(caught))) }, [load])
   useEffect(() => { if (user) void teamGet<MyTeams>('/api/teams/mine').then(setMine).catch(caught => setError(errorMessage(caught))) }, [user])
@@ -179,7 +190,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
           <label>Public badge display<select value={publicBadges ? 'public' : 'members'} onChange={event => setPublicBadges(event.target.value === 'public')}><option value="members">Members only</option><option value="public">Allow opted-in members to display badges publicly</option></select><span className="team-help">Private Team membership is never public by default. Members must also opt in individually.</span></label>
           <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />
           <p className="team-help">Roster and individual activity are visible only to current members.</p>
-          <button className="team-button team-button--primary" disabled={!name.trim()}>Save changes</button>
+          <button className="team-button team-button--primary" disabled={!name.trim() || !settingsDirty}>Save changes</button>
         </fieldset></form>
       </section>
       {isOwner && <section className="team-surface"><div className="team-section-heading"><div><h3>Ownership & lifecycle</h3><p>Owner-only actions. Team history is always preserved.</p></div></div>
