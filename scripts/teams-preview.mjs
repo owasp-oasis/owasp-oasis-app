@@ -48,7 +48,22 @@ await db.prepare("INSERT INTO pull_requests (id, repo_id, repo_name, number, tit
 await db.prepare("INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at) VALUES ('demo-member', 100, 'sample-python-project', 42, 'accept', 1, ?)").bind(now).run()
 
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' }
-const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/mine$|leaderboard\/(meta|repos|prs)$|votes\/mine$)/
+const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/mine$|leaderboard\/(meta|repos|prs|contributors)$|contributors\/[^/]+$|votes\/mine$)/
+const mockContributor = {
+  login: 'demo-member', avatar_url: '/__demo/avatar.svg', prs_worked: 1,
+  total_interactions: 4, non_oasis_interactions: 0, reactions_received: 3,
+  reactions_given: 2, accepts: 1, modifies: 0, rejects: 0,
+  comment_score: 4, peer_score: 1.05, reaction_score: 0.5, trust_score: 10,
+  base_reputation: 15.55, modified_reputation: 18.66, rank_90d: 1,
+  rank_90d_oldest_activity: null, synced_at: now,
+}
+const mockPublicBadges = [{
+  team_id: 1, team_name: 'Python security reviewers', team_status: 'active',
+  badge_key: 'membership', qualifying_count: 0, threshold: null, awarded_at: now,
+}, {
+  team_id: 1, team_name: 'Python security reviewers', team_status: 'active',
+  badge_key: 'contributor_milestone', qualifying_count: 10, threshold: 5, awarded_at: now,
+}]
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://127.0.0.1:' + port)
@@ -64,6 +79,12 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname.startsWith('/api/')) {
       if (!allowedAPI.test(url.pathname)) { res.writeHead(403, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: 'This action is outside the local Teams preview.' })); return }
+      if (req.method === 'GET' && url.pathname === '/api/leaderboard/contributors') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify([mockContributor])); return
+      }
+      if (req.method === 'GET' && url.pathname === '/api/contributors/demo-member') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ contributor: mockContributor, allTimeRank: 1, contributions: [], public_badges: mockPublicBadges })); return
+      }
       const headers = new Headers()
       for (const [key, value] of Object.entries(req.headers)) if (typeof value === 'string' && !['host', 'content-length', 'connection'].includes(key)) headers.set(key, value)
       const cookies = (req.headers.cookie || '').split(';').filter(cookie => !cookie.trim().startsWith('__session=') && !cookie.trim().startsWith('__gh_token=')).join(';')
