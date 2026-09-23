@@ -76,7 +76,9 @@
 .team-logo-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .team-logo-option:focus-within { outline: 3px solid #3695d6; outline-offset: 2px; }
 .team-logo-option.is-selected { border-color: #0b6550; background: #edf7f1; color: #125b46; font-weight: 650; }
-.team-logo-swatch { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: #e4f1ea; color: #12624c; font-weight: 700; font-size: .83rem; }
+.team-logo-swatch { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #e4f1ea; color: #12624c; font-weight: 700; font-size: .83rem; }
+.team-logo-option.is-selected .team-logo-swatch { background: #0f766e; color: #fff; box-shadow: 0 0 0 3px rgba(15, 118, 110, .14); }
+.team-avatar svg, .team-logo-swatch svg { display: block; }
 .team-leaderboard { overflow: hidden; }
 .team-period-tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--team-border); border-radius: 7px; background: #f4f7f9; }
 .team-period-tabs button { border: 0; border-radius: 5px; padding: 7px 10px; background: transparent; color: var(--team-muted); font: inherit; font-size: .77rem; cursor: pointer; }

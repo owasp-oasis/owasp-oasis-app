@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { emptyMyTeams, errorMessage, teamBadgeThresholds, teamGet, teamInitials, teamLogoMark, teamPost, teamPut, type MembershipMode, type MyTeams, type Team, type TeamBadge, type TeamBadgeSettings, type TeamLogoKey, type TeamRole } from './teamApi'
+import { emptyMyTeams, errorMessage, teamBadgeThresholds, teamGet, teamInitials, teamPost, teamPut, type MembershipMode, type MyTeams, type Team, type TeamBadge, type TeamBadgeSettings, type TeamLogoKey, type TeamRole } from './teamApi'
 import TeamLogoPicker from './TeamLogoPicker'
+import TeamLogoIcon from './TeamLogoIcon'
 
 interface Member { github_login: string; role: TeamRole; joined_at: string }
 interface Repository { id: number; name: string; description?: string }
@@ -129,7 +130,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   return <div className="teams-ui">
     <button className="team-link team-back" onClick={onClose}>← Teams</button>
     <header className="teams-heading team-profile-heading">
-      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{teamLogoMark(detail.team.logo_key) ?? teamInitials(detail.team.name)}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
+      <div className="team-identity"><span className="team-avatar team-avatar--large" aria-hidden="true">{detail.team.logo_key === 'initials' ? teamInitials(detail.team.name) : <TeamLogoIcon logo={detail.team.logo_key} size={30} />}</span><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
       {detail.membership && active && <Link className="team-button" to={sectionUrl(canManage ? 'members' : 'repositories')}>{canManage ? 'Invite members' : 'Find a review'}</Link>}
     </header>
 
