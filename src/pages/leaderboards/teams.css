@@ -155,6 +155,7 @@
 .team-notice { border: 1px solid #e7d8ac; background: #fffaf0; color: #775717 !important; }
 .team-error { border: 1px solid #edc4c7; background: #fff3f4; color: #96303b !important; }
 .team-success { border: 1px solid #c9dfd2; background: #eff8f2; color: #256043 !important; }
+.team-status-slot { min-height: 22px; display: flex; align-items: center; }
 .team-secondary-options { color: var(--team-muted); font-size: .8rem; }
 .team-secondary-options summary { cursor: pointer; padding: 6px 0; }
 .team-secondary-options button { margin-top: 8px; }

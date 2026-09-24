@@ -159,12 +159,12 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
       <p className="team-help">Member workspace<br />Team totals are public.</p>
       <label className="team-mobile-menu">Team section<select value={section} onChange={event => navigate(sectionUrl(event.target.value as Section))}>{sections.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
     </aside>}
-    <div className="team-main">
+    <div className="team-main" aria-busy={busy}>
     {detail.membership && <h3 className="team-view-title">{sections.find(item => item.id === section)?.label}</h3>}
     {!active && <p className="team-notice">This team is {detail.team.status}. Its history is preserved.{detail.team.status === 'archived' && isOwner ? ' Reactivate it in Team administration to resume.' : ''}</p>}
     {error && <p className="team-error" role="alert">{error}</p>}
     {notice && <p className="team-success" role="status">{notice}</p>}
-    {busy && <p className="team-help" role="status">Saving…</p>}
+    <div className="team-status-slot" aria-live="polite">{busy && <span className="team-help" role="status">Saving…</span>}</div>
 
     {section === 'overview' && <>
       <dl className="team-metrics">
