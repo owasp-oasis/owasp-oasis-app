@@ -115,10 +115,22 @@ describe('Community Teams', () => {
     const team = (await detail.json() as { team: { logo_image_data: string; banner_image_data: string } }).team;
     expect(team.logo_image_data).toMatch(/^data:image\/png;base64,/);
     expect(team.banner_image_data).toMatch(/^data:image\/png;base64,/);
+    const lists = ['/api/teams', '/api/teams/mine', '/api/teams/leaderboard?period=all_time', '/api/teams/leaderboard?period=90d'];
+    for (const path of lists) {
+      const response = await SELF.fetch(new Request('http://localhost' + path, { headers: { Cookie: owner.sessionCookie } }));
+      expect(response.status).toBe(200);
+      const rows = (await response.json() as { teams: { id: number; logo_image_data: string | null; logo_key: string }[] }).teams;
+      expect(rows.find(row => row.id === teamId)).toMatchObject({ logo_image_data: team.logo_image_data, logo_key: 'initials' });
+    }
     const csrf = makeCsrf();
     const removeForm = new FormData(); removeForm.set('kind', 'logo'); removeForm.set('remove', 'true');
     const removed = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}/media`, { method: 'POST', headers: { 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}; ${owner.sessionCookie}; ${owner.tokenCookie}` }, body: removeForm }));
     expect(removed.status).toBe(200);
+    for (const path of lists) {
+      const response = await SELF.fetch(new Request('http://localhost' + path, { headers: { Cookie: owner.sessionCookie } }));
+      const rows = (await response.json() as { teams: { id: number; logo_image_data: string | null }[] }).teams;
+      expect(rows.find(row => row.id === teamId)?.logo_image_data).toBeNull();
+    }
   });
 
   it('requires an accepted invitation before a member can see private activity', async () => {

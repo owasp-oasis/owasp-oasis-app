@@ -14,8 +14,10 @@ outside OASIS. Outbound Worker requests are blocked. This is not a deployment.
   in Your teams. The selected team and section are retained in the URL.
 - The left menu separates Stats & activity, Members, Repository focus, and
   Team administration. On small screens, a labelled section selector replaces it.
-- Team creation and Team administration offer a curated logo picker. Teams
-  without a selected mark use generated initials.
+- Team creation offers a curated logo picker or an optional custom image,
+  previewed before creation. Team administration supports logo replacement/removal
+  and homepage banner uploads. Logos appear in the directory, both leaderboard
+  periods, and Team header, with built-in marks or initials as the fallback.
 - Current members see a Team badge collection. Owners/admins can set the
   contribution badge bar to 3, 5, 10, or 25 attributed validations; earned
   badges remain after threshold changes.
@@ -61,3 +63,18 @@ OAuth and real upstream pull requests require separate environment validation.
 - Narrow-screen CSS is implemented, but the in-app browser viewport override
   did not change the measured viewport, so phone-size rendering still needs
   manual validation.
+
+## Custom logo validation on 2026-09-24
+
+- `npm run check`: 306 tests passed; frontend and Worker builds passed.
+- Browser checks on a separate local preview at port 4176: selected a custom
+  PNG during creation, removed/reselected it, created the team, and confirmed
+  loaded images in the header, Your teams, Explore teams, and both leaderboard
+  periods. Removed the saved logo and confirmed initials returned in the header,
+  directory, and leaderboard without a page reload.
+- API tests cover logo fields in all four list responses and removal. Browser
+  API unit tests cover successful creation/upload, creation rejection, no-logo
+  creation, and upload rejection after successful creation without duplicate
+  creation. Upload-failure recovery was not manually simulated in the browser.
+- Port 4175 remains the earlier running Worker so its walkthrough data is
+  preserved. Use port 4176 for the updated API and frontend together.

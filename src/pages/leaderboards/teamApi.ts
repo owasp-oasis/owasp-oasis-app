@@ -90,6 +90,19 @@ export async function teamUpload<T = unknown>(path: string, file: File | null, k
 export function teamInitials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase()
 }
+
+// A failed optional upload must not turn a successful creation into a retry
+// of POST /teams. Return the new team so the user can recover in its settings.
+export async function createTeamWithLogo(input: Record<string, unknown>, logo: File | null): Promise<{ team: Team; logoError?: string }> {
+  const result = await teamPost<{ team: Team }>('/api/teams', input)
+  if (!result.team?.id) throw new Error('The Team was not returned. Refresh Your teams before trying again.')
+  if (!logo) return result
+  try {
+    return await teamUpload<{ team: Team }>('/api/teams/' + result.team.id + '/media', logo, 'logo')
+  } catch (caught) {
+    return { team: result.team, logoError: errorMessage(caught) }
+  }
+}
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 }

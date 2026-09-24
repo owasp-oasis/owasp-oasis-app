@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import TeamWorkspace from './TeamWorkspace'
-import { emptyMyTeams, errorMessage, teamGet, teamInitials, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey } from './teamApi'
-import TeamLogoIcon from './TeamLogoIcon'
+import { createTeamWithLogo, emptyMyTeams, errorMessage, teamGet, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey } from './teamApi'
+import TeamAvatar from './TeamAvatar'
+import TeamMediaUpload from './TeamMediaUpload'
 import TeamLogoPicker from './TeamLogoPicker'
 import './teams.css'
 
 interface Props { data: Team[]; loading: boolean; onCreated: () => void }
-interface LeaderboardRow { id: number; name: string; status: string; accepted_outcome_reviews: number; attributed_validations: number; active_contributors: number; validations_per_active_contributor: number }
+interface LeaderboardRow { id: number; name: string; logo_key: TeamLogoKey; logo_image_data?: string | null; status: string; accepted_outcome_reviews: number; attributed_validations: number; active_contributors: number; validations_per_active_contributor: number }
 
 export default function TeamsTab({ data, loading, onCreated }: Props) {
   const { user, loading: authLoading } = useAuth()
@@ -25,6 +26,8 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<MembershipMode>('invite_only')
   const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [creationWarning, setCreationWarning] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<'all_time' | '90d'>('all_time')
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
@@ -42,6 +45,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
 
   useEffect(() => { setMine(emptyMyTeams); setMineLoading(true); void loadMine() }, [loadMine])
   useEffect(() => { if (creating) nameInput.current?.focus() }, [creating])
+  useEffect(() => { if (!creating) setLogoFile(null) }, [creating])
   const openTeam = (id: number) => setParams({ view: 'mine', team: String(id) })
   const refreshed = () => { void loadMine(); onCreated() }
 
@@ -50,11 +54,12 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     if (busy) return
     setBusy(true); setError(null)
     try {
-      const result = await teamPost<{ team: Team }>('/api/teams', { name, description, membership_mode: mode, logo_key: logoKey })
-      if (!result.team?.id) throw new Error('The Team was not returned. Refresh Your teams before trying again.')
+      const result = await createTeamWithLogo({ name, description, membership_mode: mode, logo_key: logoKey }, logoFile)
       setQuery('')
-      openTeam(result.team.id)
+      setCreationWarning(result.logoError ? 'Your team was created, but its logo could not be uploaded: ' + result.logoError + ' Try uploading it again in Team visuals below.' : null)
+      setParams({ view: 'mine', team: String(result.team.id), section: result.logoError ? 'settings' : 'overview' })
       setName(''); setDescription(''); setMode('invite_only'); setLogoKey('initials')
+      setLogoFile(null)
       refreshed()
     } catch (caught) { setError(errorMessage(caught)) }
     finally { setBusy(false) }
@@ -69,7 +74,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
       .catch(caught => { if (!controller.signal.aborted) setLeaderboardError(errorMessage(caught)) })
       .finally(() => { if (!controller.signal.aborted) setLeaderboardLoading(false) })
     return () => controller.abort()
-  }, [view, leaderboardPeriod])
+  }, [view, leaderboardPeriod, data])
 
   async function accept(team: number, body: Record<string, unknown>) {
     if (busy) return
@@ -81,7 +86,10 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
 
   if (authLoading) return <p className="team-empty" role="status">Loading Teams…</p>
   if (Number.isSafeInteger(teamId) && teamId > 0) {
-    return <TeamWorkspace key={String(user?.login) + teamId} teamId={teamId} onClose={() => setParams({ view })} onMembershipChanged={refreshed} />
+    return <div className="team-content-stack">
+      {creationWarning && <div className="team-notice" role="alert">{creationWarning} <button className="team-link" onClick={() => setCreationWarning(null)}>Dismiss</button></div>}
+      <TeamWorkspace key={String(user?.login) + teamId} teamId={teamId} onClose={() => { setCreationWarning(null); setParams({ view }) }} onMembershipChanged={refreshed} />
+    </div>
   }
   const teams = view === 'mine' ? mine.teams : [...data].sort((a, b) => b.accepted_outcome_reviews - a.accepted_outcome_reviews || b.attributed_validations - a.attributed_validations || a.name.localeCompare(b.name))
   const filtered = teams.filter(team => (team.name + ' ' + (team.description ?? '')).toLowerCase().includes(query.toLowerCase()))
@@ -98,10 +106,11 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
           <label>Team name<input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
           <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="What will your team work on?" /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
-          <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />
+          <TeamMediaUpload kind="logo" deferred busy={busy} onUpload={async file => { setLogoFile(file) }} onRemove={async () => { setLogoFile(null) }} />
+          {!logoFile && <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />}
           <p className="team-help">Team totals are public. Members and their activity are visible only inside the team.</p>
           {error && <p className="team-error" role="alert">{error}</p>}
-          <div className="team-actions"><button className="team-button team-button--primary" disabled={!name.trim()}>{busy ? 'Creating…' : 'Create team'}</button><button className="team-button" type="button" onClick={() => { setError(null); setParams({ view }) }}>Cancel</button></div>
+          <div className="team-actions"><button className="team-button team-button--primary" disabled={!name.trim()}>{busy ? 'Creating…' : 'Create team'}</button><button className="team-button" type="button" onClick={() => { setError(null); setLogoFile(null); setParams({ view }) }}>Cancel</button></div>
         </fieldset>
       </form>
     </section>}
@@ -124,7 +133,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
         <button role="tab" aria-selected={leaderboardPeriod === 'all_time'} className={leaderboardPeriod === 'all_time' ? 'is-selected' : ''} onClick={() => setLeaderboardPeriod('all_time')}>All time</button>
         <button role="tab" aria-selected={leaderboardPeriod === '90d'} className={leaderboardPeriod === '90d' ? 'is-selected' : ''} onClick={() => setLeaderboardPeriod('90d')}>Last 90 days</button>
       </div></div>
-      {leaderboardError ? <p className="team-error">{leaderboardError} <button className="team-link" onClick={() => setLeaderboardPeriod(period => period)}>Retry</button></p> : leaderboardLoading ? <p className="team-empty" role="status">Loading leaderboard…</p> : <ol className="team-leaderboard-list">{leaderboard.map((team, index) => <li key={team.id} className="team-leaderboard-row"><span className="team-rank">{index + 1}</span><span className="team-avatar">{(data.find(item => item.id === team.id)?.logo_key ?? 'initials') === 'initials' ? teamInitials(team.name) : <TeamLogoIcon logo={data.find(item => item.id === team.id)?.logo_key ?? 'initials'} size={20} />}</span><div className="team-row-main"><Link to={'?view=explore&team=' + team.id}><strong>{team.name}</strong></Link><span className="team-meta">{team.status !== 'active' ? team.status : leaderboardPeriod === 'all_time' ? 'All-time achievement' : 'Recent activity'}</span></div><div className="team-directory-stats"><span><strong>{leaderboardPeriod === 'all_time' ? team.accepted_outcome_reviews : team.attributed_validations}</strong>{leaderboardPeriod === 'all_time' ? 'Accepted outcomes' : 'Validations'}</span>{leaderboardPeriod === '90d' && <span><strong>{team.validations_per_active_contributor.toFixed(1)}</strong>Per active contributor</span>}</div></li>)}</ol>}
+      {leaderboardError ? <p className="team-error">{leaderboardError} <button className="team-link" onClick={() => setLeaderboardPeriod(period => period)}>Retry</button></p> : leaderboardLoading ? <p className="team-empty" role="status">Loading leaderboard…</p> : <ol className="team-leaderboard-list">{leaderboard.map((team, index) => <li key={team.id} className="team-leaderboard-row"><span className="team-rank">{index + 1}</span><TeamAvatar team={team} /><div className="team-row-main"><Link to={'?view=explore&team=' + team.id}><strong>{team.name}</strong></Link><span className="team-meta">{team.status !== 'active' ? team.status : leaderboardPeriod === 'all_time' ? 'All-time achievement' : 'Recent activity'}</span></div><div className="team-directory-stats"><span><strong>{leaderboardPeriod === 'all_time' ? team.accepted_outcome_reviews : team.attributed_validations}</strong>{leaderboardPeriod === 'all_time' ? 'Accepted outcomes' : 'Validations'}</span>{leaderboardPeriod === '90d' && <span><strong>{team.validations_per_active_contributor.toFixed(1)}</strong>Per active contributor</span>}</div></li>)}</ol>}
     </section>}
     <div className="team-directory-tools">
       <label className="team-search"><span className="team-sr-only">Search teams</span><input type="search" placeholder={view === 'mine' ? 'Find one of your teams…' : 'Search teams…'} value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -132,7 +141,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     </div>
     {(view === 'mine' ? mineLoading : loading) ? <p className="team-empty" role="status">Loading teams…</p> : filtered.length === 0 ? <div className="team-empty team-surface"><h3>{query ? 'No matching teams' : view === 'mine' ? 'Your next review could be a team effort.' : 'No teams yet'}</h3><p>{query ? 'Try another name or clear your search.' : view === 'mine' ? 'Create a team or explore teams that welcome new members.' : 'Start the first team and invite a fellow reviewer.'}</p>{!query && user && <div className="team-actions"><button className="team-button team-button--primary" onClick={() => setParams({ view, create: '1' })}>Create team</button>{view === 'mine' && <Link className="team-button" to="?view=explore">Explore teams</Link>}</div>}</div> : <div className="team-directory-list team-surface">
       {filtered.map(team => <Link key={team.id} className="team-directory-row" to={'?view=' + view + '&team=' + team.id}>
-        <span className="team-avatar" aria-hidden="true">{team.logo_key === 'initials' ? teamInitials(team.name) : <TeamLogoIcon logo={team.logo_key} size={20} />}</span>
+        <TeamAvatar team={team} />
         <div className="team-directory-name"><strong>{team.name}</strong><p>{team.description || 'An OASIS community team'}</p><span className="team-meta">{view === 'mine' && 'role' in team ? String(team.role) + ' · ' : ''}{team.status !== 'active' ? team.status : team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span></div>
         {view === 'explore' && 'accepted_outcome_reviews' in team && <div className="team-directory-stats"><span><strong>{team.accepted_outcome_reviews}</strong>Accepted outcomes</span><span><strong>{team.attributed_validations}</strong>Validations</span></div>}
         <span className="team-row-arrow" aria-hidden="true">→</span>

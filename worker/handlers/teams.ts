@@ -112,7 +112,7 @@ export async function handleTeamLeaderboard(env: Env, request: Request, url: URL
   const period = url.searchParams.get('period') === '90d' ? '90d' : 'all_time';
   const windowClause = period === '90d' ? "AND uv.voted_at >= datetime('now', '-90 days')" : '';
   const rows = await env.DB.prepare(`
-    SELECT t.id, t.name, t.logo_key, t.status,
+    SELECT t.id, t.name, t.logo_key, t.logo_image_data, t.status,
       (SELECT COUNT(*) FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id
         WHERE uv.team_id = t.id AND pr.merged_upstream = 1 ${windowClause}) AS accepted_outcome_reviews,
       (SELECT COUNT(*) FROM user_votes uv WHERE uv.team_id = t.id ${period === '90d' ? "AND uv.voted_at >= datetime('now', '-90 days')" : ''}) AS attributed_validations,
@@ -134,7 +134,7 @@ export async function handleMyTeams(request: Request, env: Env): Promise<Respons
   if (!user) return jsonErr('Not authenticated — please sign in with GitHub', 401, request);
   const [memberships, invites, joinRequests, ownershipTransfers] = await Promise.all([
     env.DB.prepare(`
-      SELECT t.id, t.name, t.description, t.membership_mode, t.status, tm.role, tm.joined_at
+      SELECT t.id, t.name, t.description, t.logo_key, t.logo_image_data, t.membership_mode, t.status, tm.role, tm.joined_at
         FROM team_memberships tm JOIN teams t ON t.id = tm.team_id
        WHERE tm.github_login = ? AND tm.left_at IS NULL
        ORDER BY t.name COLLATE NOCASE

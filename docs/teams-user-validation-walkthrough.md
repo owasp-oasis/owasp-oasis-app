@@ -33,12 +33,21 @@ Use the yellow preview toolbar to switch personas:
 
 1. As `owner`, open **Your teams** and select **Create team**.
 2. Enter a memorable name and optional description.
-3. Choose a logo such as **Shield**.
+3. Choose a built-in logo such as **Shield**, or use **Choose image** to select a
+   custom PNG, JPEG, or WebP logo (up to 256 KB). The image previews before saving.
 4. Leave membership as **By invitation only** and create the Team.
 
 Expected: the new Team opens immediately, the selected mark appears beside
 its name, and the left-hand Team menu contains Stats & activity, Members,
 Repository focus, and Team administration.
+
+For a custom logo, also confirm it appears after refresh in **Your teams**,
+**Explore teams**, both leaderboard periods, and the Team header. Replace and
+remove it from **Team administration → Team visuals**; removal restores the
+built-in mark or initials everywhere. Removing a selection before creation
+must restore the built-in picker. Cancelling creation must discard that file.
+If the upload fails after creation, the team should still open in administration
+with a clear warning and an upload control; it must not create a duplicate team.
 
 ### 2. Explore the public directory
 
