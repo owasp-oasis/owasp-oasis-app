@@ -48,7 +48,7 @@ await db.prepare("INSERT INTO pull_requests (id, repo_id, repo_name, number, tit
 await db.prepare("INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at) VALUES ('demo-member', 100, 'sample-python-project', 42, 'accept', 1, ?)").bind(now).run()
 
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' }
-const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/mine$|leaderboard\/(meta|repos|prs|contributors)$|contributors\/[^/]+$|votes\/mine$)/
+const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/mine$|leaderboard\/(meta|repos|prs|contributors|maintainers)$|contributors\/[^/]+$|votes\/mine$)/
 const mockContributor = {
   login: 'demo-member', avatar_url: '/__demo/avatar.svg', prs_worked: 1,
   total_interactions: 4, non_oasis_interactions: 0, reactions_received: 3,
