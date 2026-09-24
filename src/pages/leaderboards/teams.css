@@ -1,8 +1,5 @@
 /* Teams is a working area: restrained surfaces, a stable sidebar, and one task per view. */
-.workspace--teams > .section { padding: 24px 0 64px; }
-.workspace--teams .container { max-width: 1240px; }
 .workspace--teams .lb-sync-chip { display: none; }
-.workspace--teams .lb-tabs { margin-bottom: 28px; }
 .teams-ui { --team-border: #dce4eb; --team-muted: #556579; display: grid; gap: 24px; color: var(--ink); }
 .teams-ui * { min-width: 0; }
 .teams-ui p { color: var(--team-muted); line-height: 1.55; }
@@ -172,8 +169,6 @@
   .team-period-tabs button { flex: 1; }
 }
 @media (max-width: 680px) {
-  .workspace--teams .container { padding-inline: 16px; }
-  .workspace--teams > .section { padding-top: 12px; }
   .teams-ui { gap: 20px; }
   .teams-heading { gap: 12px; flex-wrap: wrap; }
   .team-profile-heading { align-items: start; }
