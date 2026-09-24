@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type MouseEvent } from 'react'
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Decision } from '../components/VoteForm'
 import ProjectsTab from './leaderboards/ProjectsTab'
@@ -45,6 +45,22 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const savedWorkspaceScroll = 'oasis_workspace_scroll_y'
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(savedWorkspaceScroll)
+    if (saved === null) return
+    sessionStorage.removeItem(savedWorkspaceScroll)
+    const scrollY = Number(saved)
+    if (!Number.isFinite(scrollY)) return
+    const restore = window.setTimeout(() => window.scrollTo({ top: scrollY, behavior: 'auto' }), 50)
+    return () => window.clearTimeout(restore)
+  }, [activeTab])
+
+  const preserveWorkspaceScroll = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    sessionStorage.setItem(savedWorkspaceScroll, String(window.scrollY))
+  }
 
   // Parse URL params for initial filters from onboarding
   const initialFilters = useMemo(() => {
@@ -191,6 +207,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
                 preventScrollReset
                 aria-selected={activeTab === tab.id}
                 className={`lb-tab${activeTab === tab.id ? ' lb-tab--active' : ''}`}
+                onClick={preserveWorkspaceScroll}
                 to={{
                   pathname: tab.path,
                   search: searchParams.toString() ? `?${searchParams.toString()}` : '',
