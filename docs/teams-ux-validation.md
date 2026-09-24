@@ -78,3 +78,15 @@ OAuth and real upstream pull requests require separate environment validation.
   creation. Upload-failure recovery was not manually simulated in the browser.
 - Port 4175 remains the earlier running Worker so its walkthrough data is
   preserved. Use port 4176 for the updated API and frontend together.
+
+### Logo source and banner follow-up
+
+- Creation and administration now show a single logo source: Choose an icon or
+  Custom image. Only its relevant control is displayed. Creation also offers an
+  independent optional homepage banner.
+- `npm run check`: 309 tests passed with builds. Added coverage for banner-only
+  creation and partial upload failures in either direction.
+- Browser verified selecting Custom image hides the icon picker, creation with
+  both uploaded images renders the logo and banner, and switching an existing
+  custom logo to Shield through Save changes persists after reload while keeping
+  the banner. The updated creation form is open on port 4176 for user review.

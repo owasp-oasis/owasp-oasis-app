@@ -93,15 +93,19 @@ export function teamInitials(name: string): string {
 
 // A failed optional upload must not turn a successful creation into a retry
 // of POST /teams. Return the new team so the user can recover in its settings.
-export async function createTeamWithLogo(input: Record<string, unknown>, logo: File | null): Promise<{ team: Team; logoError?: string }> {
-  const result = await teamPost<{ team: Team }>('/api/teams', input)
+export async function createTeamWithMedia(input: Record<string, unknown>, logo: File | null, banner: File | null = null): Promise<{ team: Team; logoError?: string; bannerError?: string }> {
+  const result: { team: Team; logoError?: string; bannerError?: string } = await teamPost<{ team: Team }>('/api/teams', input)
   if (!result.team?.id) throw new Error('The Team was not returned. Refresh Your teams before trying again.')
-  if (!logo) return result
-  try {
-    return await teamUpload<{ team: Team }>('/api/teams/' + result.team.id + '/media', logo, 'logo')
-  } catch (caught) {
-    return { team: result.team, logoError: errorMessage(caught) }
+  for (const [kind, file] of [['logo', logo], ['banner', banner]] as const) {
+    if (!file) continue
+    try {
+      const uploaded = await teamUpload<{ team: Team }>('/api/teams/' + result.team.id + '/media', file, kind)
+      result.team = uploaded.team
+    } catch (caught) {
+      result[kind === 'logo' ? 'logoError' : 'bannerError'] = errorMessage(caught)
+    }
   }
+  return result
 }
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'

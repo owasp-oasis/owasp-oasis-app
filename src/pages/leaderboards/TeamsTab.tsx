@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import TeamWorkspace from './TeamWorkspace'
-import { createTeamWithLogo, emptyMyTeams, errorMessage, teamGet, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey } from './teamApi'
+import { createTeamWithMedia, emptyMyTeams, errorMessage, teamGet, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey } from './teamApi'
+import TeamLogoChoice, { type LogoSource } from './TeamLogoChoice'
 import TeamAvatar from './TeamAvatar'
 import TeamMediaUpload from './TeamMediaUpload'
 import TeamLogoPicker from './TeamLogoPicker'
@@ -27,6 +28,8 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const [mode, setMode] = useState<MembershipMode>('invite_only')
   const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoSource, setLogoSource] = useState<LogoSource>('builtin')
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [creationWarning, setCreationWarning] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<'all_time' | '90d'>('all_time')
@@ -45,7 +48,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
 
   useEffect(() => { setMine(emptyMyTeams); setMineLoading(true); void loadMine() }, [loadMine])
   useEffect(() => { if (creating) nameInput.current?.focus() }, [creating])
-  useEffect(() => { if (!creating) setLogoFile(null) }, [creating])
+  useEffect(() => { if (!creating) { setLogoFile(null); setBannerFile(null); setLogoSource('builtin') } }, [creating])
   const openTeam = (id: number) => setParams({ view: 'mine', team: String(id) })
   const refreshed = () => { void loadMine(); onCreated() }
 
@@ -54,10 +57,11 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     if (busy) return
     setBusy(true); setError(null)
     try {
-      const result = await createTeamWithLogo({ name, description, membership_mode: mode, logo_key: logoKey }, logoFile)
+      const result = await createTeamWithMedia({ name, description, membership_mode: mode, logo_key: logoSource === 'builtin' ? logoKey : 'initials' }, logoSource === 'custom' ? logoFile : null, bannerFile)
+      const mediaErrors = [result.logoError && 'Logo: ' + result.logoError, result.bannerError && 'Banner: ' + result.bannerError].filter(Boolean).join(' ')
       setQuery('')
-      setCreationWarning(result.logoError ? 'Your team was created, but its logo could not be uploaded: ' + result.logoError + ' Try uploading it again in Team visuals below.' : null)
-      setParams({ view: 'mine', team: String(result.team.id), section: result.logoError ? 'settings' : 'overview' })
+      setCreationWarning(mediaErrors ? 'Your team was created, but some images could not be uploaded. ' + mediaErrors + ' Try uploading them again in Team visuals below.' : null)
+      setParams({ view: 'mine', team: String(result.team.id), section: mediaErrors ? 'settings' : 'overview' })
       setName(''); setDescription(''); setMode('invite_only'); setLogoKey('initials')
       setLogoFile(null)
       refreshed()
@@ -106,11 +110,13 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
           <label>Team name<input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
           <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="What will your team work on?" /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
-          <TeamMediaUpload kind="logo" deferred busy={busy} onUpload={async file => { setLogoFile(file) }} onRemove={async () => { setLogoFile(null) }} />
-          {!logoFile && <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />}
+          <TeamLogoChoice value={logoSource} onChange={source => { setLogoSource(source); setLogoFile(null) }} disabled={busy} name="create-logo-source"
+            builtin={<TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />}
+            custom={<TeamMediaUpload kind="logo" deferred busy={busy} onUpload={async file => { setLogoFile(file) }} onRemove={async () => { setLogoFile(null) }} />} />
+          <TeamMediaUpload kind="banner" deferred busy={busy} onUpload={async file => { setBannerFile(file) }} onRemove={async () => { setBannerFile(null) }} />
           <p className="team-help">Team totals are public. Members and their activity are visible only inside the team.</p>
           {error && <p className="team-error" role="alert">{error}</p>}
-          <div className="team-actions"><button className="team-button team-button--primary" disabled={!name.trim()}>{busy ? 'Creating…' : 'Create team'}</button><button className="team-button" type="button" onClick={() => { setError(null); setLogoFile(null); setParams({ view }) }}>Cancel</button></div>
+          <div className="team-actions"><button className="team-button team-button--primary" disabled={!name.trim() || (logoSource === 'custom' && !logoFile)}>{busy ? 'Creating…' : 'Create team'}</button><button className="team-button" type="button" onClick={() => { setError(null); setParams({ view }) }}>Cancel</button></div>
         </fieldset>
       </form>
     </section>}

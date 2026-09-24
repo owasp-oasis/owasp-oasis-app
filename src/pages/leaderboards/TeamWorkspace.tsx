@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { emptyMyTeams, errorMessage, teamBadgeThresholds, teamGet, teamInitials, teamPost, teamPut, teamUpload, type MembershipMode, type MyTeams, type Team, type TeamBadge, type TeamBadgeSettings, type TeamLogoKey, type TeamRole } from './teamApi'
 import TeamLogoPicker from './TeamLogoPicker'
+import TeamLogoChoice, { type LogoSource } from './TeamLogoChoice'
 import TeamAvatar from './TeamAvatar'
 import TeamMediaUpload from './TeamMediaUpload'
 
@@ -48,6 +49,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const [mode, setMode] = useState<MembershipMode>('invite_only')
   const [logoKey, setLogoKey] = useState<TeamLogoKey>('initials')
   const [logoImage, setLogoImage] = useState<string | null>(null)
+  const [logoSource, setLogoSource] = useState<LogoSource>('builtin')
   const [bannerImage, setBannerImage] = useState<string | null>(null)
   const [contributionThreshold, setContributionThreshold] = useState(5)
   const [publicBadges, setPublicBadges] = useState(false)
@@ -65,6 +67,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
     savedSettings.description !== description ||
     savedSettings.mode !== mode ||
     savedSettings.logoKey !== logoKey ||
+    (logoSource === 'builtin' && logoImage !== null) ||
     savedSettings.contributionThreshold !== contributionThreshold ||
     savedSettings.publicBadges !== publicBadges
   )
@@ -85,6 +88,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const load = useCallback(async () => {
     const result = await teamGet<TeamDetail>('/api/teams/' + teamId)
     setDetail(result)
+    setLogoSource(result.team.logo_image_data ? 'custom' : 'builtin')
     const nextSettings = { name: result.team.name, description: result.team.description, mode: result.team.membership_mode, logoKey: result.team.logo_key ?? 'initials', contributionThreshold: result.badge_settings?.contribution_threshold ?? 5, publicBadges: result.badge_settings?.public_display === 1 }
     setName(nextSettings.name); setDescription(nextSettings.description); setMode(nextSettings.mode); setLogoKey(nextSettings.logoKey); setLogoImage(result.team.logo_image_data ?? null); setBannerImage(result.team.banner_image_data ?? null); setContributionThreshold(nextSettings.contributionThreshold); setPublicBadges(nextSettings.publicBadges); setSavedSettings(nextSettings); setUserBadgesPublic(result.user_badges_public === true)
   }, [teamId])
@@ -134,6 +138,15 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
       setError(errorMessage(caught))
       throw caught
     } finally { setBusy(false) }
+  }
+
+  const saveSettings = async () => {
+    if (busy) return
+    // Switching back to an icon takes effect on Save, just like icon changes.
+    if (logoSource === 'builtin' && logoImage) {
+      try { await uploadMedia('logo', null, true) } catch { return }
+    }
+    await run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey, contribution_threshold: contributionThreshold, public_badges: publicBadges }, 'Team settings saved.')
   }
 
   if (!detail) return <div className="teams-ui"><button className="team-link" onClick={onClose}>← Teams</button>{error ? <div className="team-error" role="alert">{error} <button className="team-link" onClick={() => { setError(null); void load().catch(caught => setError(errorMessage(caught))) }}>Retry</button></div> : <p className="team-empty" role="status">Loading team…</p>}</div>
@@ -202,14 +215,18 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
 
     {section === 'settings' && <div className="team-content-stack">
       <section className="team-surface"><div className="team-section-heading"><div><h3>Team details</h3><p>Name and description appear in the public directory.</p></div></div>
-        <form className="team-form" onSubmit={event => { event.preventDefault(); void run('settings', { action: 'update', name, description, membership_mode: mode, logo_key: logoKey, contribution_threshold: contributionThreshold, public_badges: publicBadges }, 'Team settings saved.') }}><fieldset disabled={busy || !active}>
+        <form className="team-form" onSubmit={event => { event.preventDefault(); void saveSettings() }}><fieldset disabled={busy || !active}>
           <label>Team name<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
           <label>Description<textarea rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
           <label>Contribution badge bar<select value={contributionThreshold} onChange={event => setContributionThreshold(Number(event.target.value))}>{teamBadgeThresholds.map(value => <option value={value} key={value}>{value} attributed validations</option>)}</select><span className="team-help">OASIS sets the available minimums. Earned badges are never revoked if this bar changes.</span></label>
           <label>Public badge display<select value={publicBadges ? 'public' : 'members'} onChange={event => setPublicBadges(event.target.value === 'public')}><option value="members">Members only</option><option value="public">Allow opted-in members to display badges publicly</option></select><span className="team-help">Private Team membership is never public by default. Members must also opt in individually.</span></label>
-          <TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />
-          <div className="team-media-settings"><div className="team-section-heading"><div><h4>Team visuals</h4><p>Upload a visual identity for the team directory and homepage.</p></div></div><TeamMediaUpload kind="logo" value={logoImage} disabled={!active} busy={busy} onUpload={file => uploadMedia('logo', file)} onRemove={() => uploadMedia('logo', null, true)} /><TeamMediaUpload kind="banner" value={bannerImage} disabled={!active} busy={busy} onUpload={file => uploadMedia('banner', file)} onRemove={() => uploadMedia('banner', null, true)} /></div>
+          <div className="team-media-settings"><div className="team-section-heading"><div><h4>Team visuals</h4></div></div>
+            <TeamLogoChoice value={logoSource} onChange={setLogoSource} disabled={busy || !active} name={'team-' + teamId + '-logo-source'}
+              builtin={<TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy || !active} name={'team-' + teamId + '-logo'} />}
+              custom={<TeamMediaUpload kind="logo" value={logoImage} disabled={!active} busy={busy} onUpload={file => uploadMedia('logo', file)} onRemove={() => uploadMedia('logo', null, true)} />} />
+            <TeamMediaUpload kind="banner" value={bannerImage} disabled={!active} busy={busy} onUpload={file => uploadMedia('banner', file)} onRemove={() => uploadMedia('banner', null, true)} />
+          </div>
           <p className="team-help">Roster and individual activity are visible only to current members.</p>
           <button className="team-button team-button--primary" disabled={!name.trim() || !settingsDirty}>Save changes</button>
         </fieldset></form>
