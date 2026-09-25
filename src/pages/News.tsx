@@ -37,19 +37,6 @@ const articles: Article[] = [
 
 const upcomingEvents: Event[] = [
   {
-    date: '2026-09-16',
-    day: '16',
-    month: 'SEP',
-    dateLabel: 'September 16, 2026',
-    venue: 'CYBR.SEC.CON. 2026',
-    kind: 'Speaking',
-    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
-    time: '3:30–4:15 PM',
-    location: 'Room 361 · General Session · Houston, TX',
-    details: 'Daryl “Radar” Riley presents the OASIS model at CYBR.SEC.CON. 2026.',
-    href: 'https://www.cybrseccon.com/attend',
-  },
-  {
     date: '2026-09-25',
     day: '25–26',
     month: 'SEP',
