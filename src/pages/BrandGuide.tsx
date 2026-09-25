@@ -125,6 +125,22 @@ export default function BrandGuide() {
               <p>
                 OASIS is an officially accepted OWASP project.
               </p>
+              <h3>Who must follow these guidelines</h3>
+              <p>
+                These brand guidelines apply to anyone who creates, publishes, distributes, or approves materials that use the OASIS name, logo, or other OASIS brand assets.              </p>
+              <div className="bg-do-dont">
+                <div className="bg-do">
+                  <p className="bg-do-label">The guidelines must be followed by:</p>
+                  <ul>
+                    <li>OASIS project leaders and other individuals responsible for managing, representing, or approving OASIS materials.</li>
+                    <li>OASIS contributors, including individuals creating documentation, presentations, websites, social-media content, marketing materials, educational materials, or other content on behalf of the project.</li>
+                    <li>Sponsors and supporting organizations using OASIS brand assets in connection with sponsorships, events, programs, products, services, or other activities.</li>
+                    <li>Partners and collaborators using the OASIS name or brand assets in connection with joint initiatives, communications, events, publications, or other activities.</li>
+                    <li>Vendors and service providers creating materials or communications that use OASIS brand assets on behalf of the project or an authorized OASIS partner.</li>
+                    <li>Conference, event, and community organizers using OASIS brand assets to identify or promote OASIS participation, activities, presentations, or events.</li>
+                  </ul>
+                </div>
+              </div>
               <h3>Three brand qualities</h3>
               <div className="bg-do-dont" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                 <div className="bg-do">
@@ -624,7 +640,7 @@ export default function BrandGuide() {
                     <li>Do not rotate or skew the logo</li>
                     <li>Do not add drop shadows or effects to the SVG</li>
                     <li>Do not use a raster (PNG) version where an SVG is available</li>
-                    <li>Combine the OASIS logo with the OWASP logo only in contexts that follow OWASP co-branding guidelines</li>
+                    <li><b>OWASP co-branding:</b>&nbsp;Whenever the OASIS logo appears together with the OWASP logo, users must comply with both the OASIS Brand Guide and applicable OWASP brand/co-branding requirements. Where the requirements differ, the applicable OWASP requirements govern use of the OWASP marks.</li>
                   </ul>
                 </div>
               </div>
