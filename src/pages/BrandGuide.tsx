@@ -628,6 +628,17 @@ export default function BrandGuide() {
                   </ul>
                 </div>
               </div>
+              <h3>Social media content — use the following logo versions where SVG files are not the preferred image format.</h3>
+              <div className="bg-do-dont">
+                <div className="bg-do" style={{ gridColumn: '1 / -1' }}>
+                  <p className="bg-do-label">Use for LinkedIn</p>
+                  <ul>
+                    <li>Use <code>/logo/oasis-logo.png</code>&nbsp;for infographics or diagrams.</li>
+                    <li>Use <code>/logo/oasis-wordmark-full.jpg</code>&nbsp;for LinkedIn article cover image.</li>
+                    <li>Use <code>/logo/oasis-wordmark.png</code>&nbsp;for embedded article images</li>
+                  </ul>
+                </div>
+              </div>
             </section>
 
             {/* 10. UI Patterns */}
