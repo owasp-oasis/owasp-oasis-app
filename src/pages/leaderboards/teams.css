@@ -140,8 +140,14 @@
 .team-metrics p { font-size: .72rem; }
 .team-inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 0 24px 24px; }
 .team-inline-form label { flex: 1; max-width: 400px; min-width: 160px; }
-.team-repo-form { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 14px; padding: 0 24px 24px; }
-.team-repo-form button { justify-self: start; }
+.team-repo-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 24px 24px; }
+.team-repo-results { list-style: none; margin: 0; padding: 0; border: 1px solid var(--team-border); border-radius: 8px; overflow: hidden; }
+.team-repo-results .team-row { padding: 14px 16px; }
+.team-repo-results .team-row:first-child { border-top: 0; }
+.team-repo-results .team-row:hover { background: #f4f8f6; }
+.team-repo-results .team-row-main { min-width: 0; }
+.team-repo-results .team-button { flex-shrink: 0; }
+.team-member-direct { display: grid; justify-items: start; gap: 10px; padding-top: 8px; }
 .team-member-actions { flex-shrink: 0; }
 .team-member-actions summary { color: var(--blue-dark); font-size: .8rem; cursor: pointer; padding: 7px; }
 .team-member-actions > div { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }

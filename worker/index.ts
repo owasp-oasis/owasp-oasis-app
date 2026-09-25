@@ -44,6 +44,7 @@ import {
   handleTeamJoinRequests,
   handleTeamLeaderboard,
   handleTeamMembers,
+  handleTeamMemberOptions,
   handleTeamRepositories,
   handleTeamRepositoryOptions,
   handleTeams,
@@ -142,11 +143,12 @@ export default {
        if (method === 'GET'  && url.pathname === '/api/teams/mine')        return await handleMyTeams(request, env);
        if (method === 'GET'  && url.pathname === '/api/teams/leaderboard') return await handleTeamLeaderboard(env, request, url);
        if (method === 'GET'  && url.pathname === '/api/teams/repository-options') return await handleTeamRepositoryOptions(env, request);
-       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|join-requests|repositories|admin|media))?$/);
+       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|member-options|join-requests|repositories|admin|media))?$/);
        if (teamMatch) {
          const teamId = Number(teamMatch[1]);
          const action = teamMatch[2];
          if (method === 'GET' && !action) return await handleTeamDetail(request, env, teamId);
+         if (method === 'GET' && action === 'member-options') return await handleTeamMemberOptions(request, env, teamId, url);
          if (method === 'POST' && action === 'settings') return await handleTeamSettings(request, env, teamId);
          if (method === 'POST' && action === 'members') return await handleTeamMembers(request, env, teamId);
          if (method === 'POST' && action === 'join-requests') return await handleTeamJoinRequests(request, env, teamId);

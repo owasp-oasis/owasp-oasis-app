@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { emptyMyTeams, errorMessage, teamBadgeThresholds, teamGet, teamInitials, teamPost, teamPut, teamUpload, type MembershipMode, type MyTeams, type Team, type TeamBadge, type TeamBadgeSettings, type TeamLogoKey, type TeamRole } from './teamApi'
@@ -6,6 +6,8 @@ import TeamLogoPicker from './TeamLogoPicker'
 import TeamLogoChoice, { type LogoSource } from './TeamLogoChoice'
 import TeamAvatar from './TeamAvatar'
 import TeamMediaUpload from './TeamMediaUpload'
+import TeamRepositorySearch from './TeamRepositorySearch'
+import TeamMemberSearch from './TeamMemberSearch'
 
 interface Member { github_login: string; role: TeamRole; joined_at: string }
 interface Repository { id: number; name: string; description?: string }
@@ -36,12 +38,10 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const [mine, setMine] = useState<MyTeams>(emptyMyTeams)
   const [repos, setRepos] = useState<Repository[]>([])
   const [repoError, setRepoError] = useState<string | null>(null)
+  const [reposLoading, setReposLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [invitee, setInvitee] = useState('')
-  const [repoId, setRepoId] = useState('')
-  const [repoQuery, setRepoQuery] = useState('')
   const [memberQuery, setMemberQuery] = useState('')
   const [transferTo, setTransferTo] = useState('')
   const [name, setName] = useState('')
@@ -98,8 +98,10 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   useEffect(() => { if (confirmation) dialog.current?.showModal() }, [confirmation])
   const loadRepos = useCallback(async () => {
     setRepoError(null)
+    setReposLoading(true)
     try { setRepos((await teamGet<{ repositories: Repository[] }>('/api/teams/repository-options')).repositories) }
     catch (caught) { setRepoError(errorMessage(caught)) }
+    finally { setReposLoading(false) }
   }, [])
   useEffect(() => { if (canManage && section === 'repositories') void loadRepos() }, [canManage, section, loadRepos])
 
@@ -115,14 +117,6 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
       return true
     } catch (caught) { setError(errorMessage(caught)); return false }
     finally { setBusy(false) }
-  }
-  const submitInvite = async (event: FormEvent) => {
-    event.preventDefault()
-    if (await run('members', { action: 'invite', github_login: invitee.trim() }, 'Invitation added. They can accept it from Your teams in OASIS.')) setInvitee('')
-  }
-  const submitRepo = async (event: FormEvent) => {
-    event.preventDefault()
-    if (await run('repositories', { action: 'add', repo_id: Number(repoId) }, 'Repository added to this team’s focus.')) setRepoId('')
   }
   const uploadMedia = async (kind: 'logo' | 'banner', file: File | null, remove = false) => {
     if (busy) return
@@ -156,7 +150,6 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
   const invites = detail.invites ?? []
   const pending = mine.join_requests.some(request => request.team_id === teamId)
   const offer = mine.invites.find(invite => invite.team_id === teamId)
-  const availableRepos = repos.filter(repo => !repositories.some(focus => focus.id === repo.id) && repo.name.toLowerCase().includes(repoQuery.toLowerCase()))
 
   return <div className="teams-ui">
     <button className="team-link team-back" onClick={onClose}>← Teams</button>
@@ -197,7 +190,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
     </>}
 
     {section === 'members' && <div className="team-content-stack">
-      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Invite a member</h3><p>They’ll find the invitation in Your teams when they sign in to OASIS.</p></div></div><form className="team-inline-form" onSubmit={submitInvite}><label>GitHub username<input value={invitee} onChange={event => setInvitee(event.target.value)} placeholder="e.g. octocat" required disabled={busy} /></label><button className="team-button team-button--primary" disabled={busy || !invitee.trim()}>Send invitation</button></form></section>}
+      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Invite a member</h3><p>Search for a member, then invite them from the results. They’ll accept in Your teams.</p></div></div><TeamMemberSearch teamId={teamId} excluded={[...members.map(member => member.github_login), ...invites.map(invite => invite.invitee_login)]} busy={busy} onInvite={login => run('members', { action: 'invite', github_login: login }, 'Invitation sent to @' + login + '. They can accept it from Your teams in OASIS.')} /></section>}
       {canManage && requests.length > 0 && <section className="team-surface"><div className="team-section-heading"><h3>Join requests <span className="team-badge">{requests.length}</span></h3></div><ul className="team-list">{requests.map(request => <li className="team-row" key={request.id}><span className="team-person-avatar" aria-hidden="true">{teamInitials(request.requester_login)}</span><strong className="team-row-main">{request.requester_login}</strong>{active && <div className="team-actions"><button disabled={busy} className="team-button team-button--primary" onClick={() => void run('join-requests', { action: 'resolve', request_id: request.id, status: 'accepted' }, request.requester_login + ' joined the team.')}>Accept</button><button disabled={busy} className="team-button" onClick={() => void run('join-requests', { action: 'resolve', request_id: request.id, status: 'declined' }, 'Request declined.')}>Decline</button></div>}</li>)}</ul></section>}
       <section className="team-surface"><div className="team-section-heading"><h3>Members <span className="team-badge">{members.length}</span></h3><label className="team-search"><span className="team-sr-only">Search members</span><input type="search" placeholder="Find a member…" value={memberQuery} onChange={event => setMemberQuery(event.target.value)} /></label></div>
         <ul className="team-list">{members.filter(member => member.github_login.toLowerCase().includes(memberQuery.toLowerCase())).map(member => <li className="team-row" key={member.github_login}><span className="team-person-avatar" aria-hidden="true">{teamInitials(member.github_login)}</span><div className="team-row-main"><strong>{member.github_login}{member.github_login === user?.login ? ' (you)' : ''}</strong><p>{member.role}</p></div>
@@ -209,7 +202,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
     </div>}
 
     {section === 'repositories' && <div className="team-content-stack">
-      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Choose your focus</h3><p>Keep the repositories your team cares about close at hand.</p></div></div>{repoError ? <p className="team-error">{repoError} <button className="team-link" onClick={() => void loadRepos()}>Retry</button></p> : <form className="team-repo-form" onSubmit={submitRepo}><label>Find a repository<input type="search" value={repoQuery} onChange={event => { setRepoQuery(event.target.value); setRepoId('') }} placeholder="Filter by name…" /></label><label>Repository<select required value={repoId} onChange={event => setRepoId(event.target.value)}><option value="">{availableRepos.length ? 'Choose a repository' : 'No matching repositories'}</option>{availableRepos.map(repo => <option value={repo.id} key={repo.id}>{repo.name}</option>)}</select></label><button className="team-button team-button--primary" disabled={busy || !repoId}>Add repository</button></form>}</section>}
+      {canManage && active && <section className="team-surface"><div className="team-section-heading"><div><h3>Choose your focus</h3><p>Search by name, then add a repository directly from the results.</p></div></div>{repoError ? <p className="team-error" role="alert">{repoError} <button className="team-link" onClick={() => void loadRepos()}>Retry</button></p> : <TeamRepositorySearch repositories={repos} focused={repositories} loading={reposLoading} busy={busy} onAdd={repo => run('repositories', { action: 'add', repo_id: repo.id }, repo.name + ' added to this team’s focus.')} />}</section>}
       <section className="team-surface"><div className="team-section-heading"><h3>Focused repositories <span className="team-badge">{repositories.length}</span></h3></div>{repositories.length === 0 ? <div className="team-empty"><h4>No repositories selected yet</h4><p>{canManage ? 'Choose a repository above to give your team a starting point.' : 'An owner or admin can add repositories for the team.'}</p></div> : <ul className="team-list">{repositories.map(repo => <li className="team-row" key={repo.id}><div className="team-row-main"><strong>{repo.name}</strong>{repo.description && <p>{repo.description}</p>}</div><div className="team-actions"><Link className="team-button" to={'/workspace/pull-requests?repo=' + repo.id}>Find reviews →</Link>{canManage && active && <button disabled={busy} className="team-link" aria-label={'Remove ' + repo.name + ' from focus'} onClick={() => void run('repositories', { action: 'remove', repo_id: repo.id }, 'Repository removed from team focus.')}>Remove</button>}</div></li>)}</ul>}</section>
     </div>}
 

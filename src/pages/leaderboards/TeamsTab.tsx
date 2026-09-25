@@ -108,7 +108,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
       <form className="team-form" onSubmit={createTeam}>
         <fieldset disabled={busy}>
           <label>Team name<input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
-          <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="What will your team work on?" /></label>
+          <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="Tell others about your team." /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
           <TeamLogoChoice value={logoSource} onChange={source => { setLogoSource(source); setLogoFile(null) }} disabled={busy} name="create-logo-source"
             builtin={<TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />}

@@ -107,6 +107,31 @@ export async function handleTeamRepositoryOptions(env: Env, request: Request): P
   return jsonOk({ repositories: rows.results ?? [] }, request, { cache: 'public, max-age=60' });
 }
 
+/** Invitation search exposes handles only, and only to current Team managers. */
+export async function handleTeamMemberOptions(request: Request, env: Env, teamId: number, url: URL): Promise<Response> {
+  const user = await getSession(request, env);
+  if (!user) return jsonErr('Not authenticated', 401, request);
+  if (!await requireManager(env, teamId, user.github_login)) return jsonErr('Only a Team owner or admin can invite members', 403, request);
+  const team = await getTeam(env, teamId);
+  if (team?.status !== 'active') return jsonErr('This Team is not active', 409, request);
+  const query = (url.searchParams.get('q') ?? '').trim().replace(/^@/, '').toLowerCase();
+  if (query.length < 2) return jsonOk({ members: [] }, request, { cache: 'private, no-store' });
+  if (query.length > 39 || !/^[a-z0-9-]+$/.test(query)) return jsonErr('Search by GitHub username', 400, request);
+  const rows = await env.DB.prepare(`
+    WITH candidates AS (
+      SELECT lower(github_login) AS login FROM user_preferences
+      UNION SELECT lower(github_login) FROM user_sessions
+      UNION SELECT lower(login) FROM contributors
+      UNION SELECT lower(github) FROM registrations WHERE github <> ''
+    )
+    SELECT login FROM candidates c WHERE instr(login, ?) > 0
+      AND NOT EXISTS (SELECT 1 FROM team_memberships m WHERE m.team_id = ? AND lower(m.github_login) = c.login AND m.left_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM team_invites i WHERE i.team_id = ? AND lower(i.invitee_login) = c.login AND i.status = 'pending')
+    ORDER BY login LIMIT 8
+  `).bind(query, teamId, teamId).all<{ login: string }>();
+  return jsonOk({ members: (rows.results ?? []).filter(row => vGitHub(row.login).ok) }, request, { cache: 'private, no-store' });
+}
+
 /** GET /api/teams/leaderboard?period=all_time|90d */
 export async function handleTeamLeaderboard(env: Env, request: Request, url: URL): Promise<Response> {
   const period = url.searchParams.get('period') === '90d' ? '90d' : 'all_time';

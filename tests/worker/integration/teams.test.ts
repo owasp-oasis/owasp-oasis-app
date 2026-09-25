@@ -21,6 +21,47 @@ describe('Community Teams', () => {
   beforeAll(async () => applySchema(env));
   afterEach(async () => cleanDB(env));
 
+  it('searches invitation candidates by handle without exposing private fields or existing members/invites', async () => {
+    const owner = await createTestSession(env, { github_login: 'search-owner' });
+    const create = await post('/api/teams', { name: 'Member search' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = (await create.json() as { team: { id: number } }).team.id;
+    for (const login of ['search-alice', 'search-bob']) await createTestSession(env, { github_login: login });
+    await createTestSession(env, { github_login: 'search-alice' }); // Multiple sessions must not duplicate people.
+    await post(`/api/teams/${teamId}/members`, { action: 'invite', github_login: 'search-bob' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const response = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}/member-options?q=%40SEARCH`, { headers: { Cookie: owner.sessionCookie } }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, members: [{ login: 'search-alice' }] });
+    expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('restricts member search to active Team managers', async () => {
+    const owner = await createTestSession(env, { github_login: 'owner' });
+    const member = await createTestSession(env, { github_login: 'member' });
+    const outsider = await createTestSession(env, { github_login: 'outsider' });
+    const create = await post('/api/teams', { name: 'Private search' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = (await create.json() as { team: { id: number } }).team.id;
+    await env.DB.prepare("INSERT INTO team_memberships (team_id, github_login, role, joined_at) VALUES (?, 'member', 'member', ?)").bind(teamId, new Date().toISOString()).run();
+    const url = `http://localhost/api/teams/${teamId}/member-options?q=me`;
+    expect((await SELF.fetch(new Request(url))).status).toBe(401);
+    for (const session of [member, outsider]) expect((await SELF.fetch(new Request(url, { headers: { Cookie: session.sessionCookie } }))).status).toBe(403);
+    await env.DB.prepare("UPDATE team_memberships SET role = 'admin' WHERE team_id = ? AND github_login = 'member'").bind(teamId).run();
+    expect((await SELF.fetch(new Request(url, { headers: { Cookie: member.sessionCookie } }))).status).toBe(200);
+    await env.DB.prepare("UPDATE teams SET status = 'archived' WHERE id = ?").bind(teamId).run();
+    expect((await SELF.fetch(new Request(url, { headers: { Cookie: owner.sessionCookie } }))).status).toBe(409);
+  });
+
+  it('bounds member search and treats wildcards as invalid input', async () => {
+    const owner = await createTestSession(env, { github_login: 'owner' });
+    const create = await post('/api/teams', { name: 'Bounded search' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = (await create.json() as { team: { id: number } }).team.id;
+    const search = (query: string) => SELF.fetch(new Request(`http://localhost/api/teams/${teamId}/member-options?q=${encodeURIComponent(query)}`, { headers: { Cookie: owner.sessionCookie } }));
+    expect(await (await search('')).json()).toEqual({ ok: true, members: [] });
+    expect(await (await search('a')).json()).toEqual({ ok: true, members: [] });
+    for (const query of ['%%', 'a_b', 'x'.repeat(40)]) expect((await search(query)).status).toBe(400);
+    for (let i = 0; i < 10; i++) await createTestSession(env, { github_login: 'candidate-' + i });
+    expect((await (await search('candidate')).json() as { members: unknown[] }).members).toHaveLength(8);
+  });
+
   it('creates a Team with its creator as owner and keeps member data private', async () => {
     const owner = await createTestSession(env, { github_login: 'owner' });
     const csrf = makeCsrf();

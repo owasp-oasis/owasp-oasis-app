@@ -69,7 +69,7 @@ activity.
 ### 3. Invite and manage members
 
 1. Switch back to `owner` and open the Team’s **Members** section.
-2. Invite a synthetic GitHub username.
+2. In **Find a member**, type at least two characters of a synthetic GitHub username. Matching handles appear directly below the input; choose **Invite** beside one. Existing members and pending invitees must not appear. An exact username can still be invited if it is not listed.
 3. Confirm the invitation appears under **Pending invitations**.
 4. Switch to the invited persona when available and accept from **Your teams**.
 5. As `owner`, open **Manage** for the new member and promote them to admin.
@@ -93,7 +93,7 @@ private workspace.
 ### 5. Choose repository focus
 
 1. As `owner` or `admin`, open **Repository focus**.
-2. Filter the repository list and add one repository.
+2. In **Find a repository**, type part of a name. Results update below the input without opening a dropdown. Choose **Add** beside a result; it should disappear from suggestions. Check that an unmatched name shows a helpful empty state, then clear the search.
 3. Confirm it appears under **Focused repositories**.
 4. Refresh the page and follow **Find reviews**.
 
