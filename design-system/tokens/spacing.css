@@ -1,0 +1,44 @@
+:root {
+  /* 4-based spacing, with the exact off-grid values the product uses */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 24px;
+  --space-11: 28px;
+  --space-12: 32px;
+  --space-14: 44px;
+  --space-16: 48px;
+  --space-17: 68px;
+  --space-20: 80px;
+
+  --radius-xs: 3px;    /* inline code, tiny bars */
+  --radius-sm: 4px;    /* kbd, code chips */
+  --radius-md: 6px;    /* inputs, small buttons */
+  --radius-btn: 7px;   /* nav items, menu rows */
+  --radius-lg: 8px;    /* cards, buttons (default) */
+  --radius-xl: 10px;   /* menus, toasts, stat panels */
+  --radius-2xl: 12px;  /* hero banner */
+  --radius-pill: 100px;
+  --radius-full: 50%;
+
+  --container: 1080px;          /* marketing content width */
+  --app-max: 1440px;            /* site nav inner max */
+  --nav-height: 64px;           /* Workspace-integrated site nav */
+  --nav-height-site: 72px;      /* marketing nav */
+  --sidebar-width: 220px;
+  --control-h: 38px;            /* compact buttons, account pill */
+  --control-h-lg: 42px;         /* .btn default */
+  --control-h-xl: 48px;         /* form inputs on marketing */
+  --hit-min: 44px;              /* touch target minimum */
+
+  --bp-sm: 680px;
+  --bp-md: 768px;
+  --bp-lg: 1040px;
+  --bp-xl: 1280px;
+}

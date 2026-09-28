@@ -1,0 +1,81 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Navigation" subtitle="SiteNav, AccountMenu, WorkspaceSidebar, SiteFooter" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><style>body{padding:16px;background:#fff}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script></head><body><div id="root"></div>
+<script type="text/babel">
+
+function Avatar({ login, size = 28, src }) {
+  const [err, setErr] = React.useState(false);
+  const init = login.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase();
+  const url = src || `https://github.com/${login}.png?size=${size * 2}`;
+  return (
+    <span style={{ position: 'relative', width: size, height: size, borderRadius: '50%', background: 'var(--blue-dark)', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: Math.round(size * .36), fontWeight: 700, overflow: 'hidden', flex: 'none', border: '2px solid var(--blue-soft)' }}>
+      {init}{!err && <img src={url} alt="" onError={() => setErr(true)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+    </span>
+  );
+}
+
+
+const LINKS = ['Home', 'About', 'Overview', 'Workspace', 'Support', 'Sponsors', 'News & Events'];
+function SiteNav({ active = 'Workspace', user, onAccount }) {
+  return (
+    <header style={{ position: 'sticky', top: 0, zIndex: 100, height: 64, background: 'var(--nav-bg)', backdropFilter: 'var(--blur-nav)', borderBottom: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 32, height: '100%', padding: '0 24px', maxWidth: 1440, margin: '0 auto' }}>
+        <img src="../../assets/logo/oasis-wordmark.svg" alt="OASIS" style={{ height: 36 }}/>
+        <nav style={{ display: 'flex', gap: 4, flex: 1, minWidth: 0 }}>
+          {LINKS.map(l => <a key={l} href="#" style={{ padding: '6px 14px', borderRadius: 6, fontSize: 15, fontWeight: l === active ? 600 : 500, color: l === active ? 'var(--blue-dark)' : 'var(--gray-600)', background: l === active ? 'var(--blue-soft)' : 'transparent', whiteSpace: 'nowrap', textDecoration: 'none' }}>{l}</a>)}
+        </nav>
+        {user ? <button onClick={onAccount} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 38, padding: '4px 9px 4px 5px', borderRadius: 999, border: '1px solid var(--line)', background: 'rgba(255,255,255,.72)', boxShadow: 'var(--shadow-pill)', color: 'var(--blue-dark)', fontSize: 14, fontWeight: 600 }}><Avatar login={user.login}/>@{user.login}</button>
+          : <div style={{ display: 'flex', gap: 12 }}><a href="#" style={{ fontSize: 14, fontWeight: 600, color: 'var(--blue-dark)', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '5px 12px' }}>Sign in</a><a href="#" style={{ padding: '8px 20px', borderRadius: 8, background: 'var(--blue)', color: '#fff', fontSize: 14, fontWeight: 700 }}>Join Team OASIS</a></div>}
+      </div>
+    </header>
+  );
+}
+
+const row = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 10px', border: 0, borderRadius: 7, background: 'transparent', color: 'var(--ink-soft)', fontSize: 14, fontWeight: 600, textAlign: 'left' };
+function AccountMenu({ login, role = 'Validator', rank, reputation, onPreferences, onSyncStatus, onSignOut }) {
+  return (
+    <div role="menu" style={{ width: 232, padding: 6, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-menu)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 10px 10px', borderBottom: '1px solid var(--gray-200)', marginBottom: 4 }}>
+        <b style={{ fontSize: 14 }}>{login}</b><span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>{[role, rank && 'Rank ' + rank, reputation && reputation + ' rep'].filter(Boolean).join(' · ')}</span></div>
+      <button role="menuitem" style={row} onClick={onPreferences}>Preferences</button>
+      <button role="menuitem" style={row} onClick={onSyncStatus}>Sync status</button>
+      <button role="menuitem" style={{ ...row, marginTop: 4, borderTop: '1px solid var(--gray-200)', borderRadius: '0 0 7px 7px' }} onClick={onSignOut}>Sign out</button>
+    </div>
+  );
+}
+
+const ITEMS = [['queue', 'My queue'], ['fixes', 'Candidate fixes'], ['projects', 'Projects'], ['validators', 'Validators'], ['maintainers', 'Maintainers']];
+function WorkspaceSidebar({ active, counts = {}, onNavigate }) {
+  return (
+    <aside style={{ width: 220, padding: '20px 14px', background: '#fff', borderRight: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ padding: '0 10px 8px', fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>Workspace</span>
+      {ITEMS.map(([id, l]) => { const on = id === active; return (
+        <button key={id} onClick={() => onNavigate && onNavigate(id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: 0, borderRadius: 7, background: on ? 'var(--blue-soft)' : 'transparent', color: on ? 'var(--blue-dark)' : 'var(--ink-soft)', fontSize: 14, fontWeight: 600, textAlign: 'left' }}>
+          {l}{counts[id] != null && <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 11, padding: '1px 7px', borderRadius: 100, background: on ? '#fff' : 'var(--gray-100)', color: 'var(--gray-600)' }}>{counts[id]}</span>}
+        </button> ); })}
+    </aside>
+  );
+}
+
+const L = ['Home', 'About', 'Overview', 'Workspace', 'Sponsors', 'News & Events', 'Brand Guide'];
+function SiteFooter({ version = 'v2026.07.005' }) {
+  const a = { color: 'var(--gray-400)', fontSize: 14.4, textDecoration: 'none' };
+  return (
+    <footer style={{ background: 'var(--gray-800)', color: 'var(--gray-400)' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '48px 24px', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 48 }}>
+        <div><span style={{ display: 'inline-block', background: '#fff', borderRadius: 8, padding: '8px 14px', marginBottom: 16 }}><img src="../../assets/logo/oasis-wordmark.svg" alt="OASIS" style={{ height: 28 }}/></span>
+          <p style={{ fontSize: 14, lineHeight: 1.8 }}>Open source powers the world.<br/>Vibe hacking exploits it.<br/>Team OASIS fixes it.</p></div>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{L.map(l => <a key={l} href="#" style={a}>{l}</a>)}</nav>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{['GitHub', 'OWASP', 'Slack'].map(l => <a key={l} href="#" style={a}>{l}</a>)}</div>
+      </div>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,.08)', padding: '16px 0' }}><div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 24px', display: 'flex', justifyContent: 'space-between', fontSize: 13, opacity: .7 }}>
+        <span>OASIS | Official OWASP project © 2026</span><span>Vendor-neutral. Community-driven. Open source.</span><span>{version}</span></div></div>
+    </footer>
+  );
+}
+
+function Demo(){return <div style={{display:'flex',flexDirection:'column',gap:0,border:'1px solid var(--line)',borderRadius:8,overflow:'hidden',transform:'translateZ(0)'}}><SiteNav user={{login:'alex-r'}}/><div style={{display:'flex',background:'var(--paper)',height:250}}><WorkspaceSidebar active="fixes" counts={{queue:8,fixes:13}}/><div style={{flex:1,display:'flex',justifyContent:'flex-end',padding:12}}><AccountMenu login="alex-r" rank="#7" reputation="48.6"/></div></div></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>
