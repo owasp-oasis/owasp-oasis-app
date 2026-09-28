@@ -13,10 +13,11 @@ import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
+import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
 import { trackReviewEngagement } from '../../analytics'
 
-/* ── Shared PR type (from leaderboard API) ───────────────────── */
+/* ── Shared PR type (from workspace API) ────────────────────── */
 export interface PanelPR {
   id: number
   repo_name: string
@@ -54,7 +55,7 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary'
+type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
 
 interface Props {
   pr: PanelPR | null
@@ -225,9 +226,10 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     { id: 'body',     label: 'Body' },
     { id: 'changes',  label: 'Diffs' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
+    { id: 'workflow', label: 'Workflow' },
   ]
 
-  // SummaryTab needs details augmented with consensus counts from the leaderboard PR
+  // SummaryTab needs details augmented with consensus counts from the workspace PR
   const summaryDetails = details ? {
     ...details,
     consensus_accept: activePR.consensus_accept,
@@ -353,6 +355,9 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               loading={detailsLoading}
               error={detailsError}
             />
+          )}
+          {activeTab === 'workflow' && (
+            <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
           )}
         </div>
 

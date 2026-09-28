@@ -2,14 +2,16 @@
  * ContributorPanel — slide-out detail panel for a single OASIS contributor.
  *
  * Triggered from ContributorsTab when a row is clicked.
- * Fetches from GET /api/contributors/:login and renders three tabs:
+ * Fetches from GET /api/contributors/:login and renders four tabs:
  *   Score       — full score breakdown (comment, peer, reaction, trust, bonuses → modified rep)
  *   Contributions — all-time vs 90-day side-by-side list of OASIS comments
  *   Formula     — static explanation of the reputation formula
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import ContributorAvatar from '../ContributorAvatar';
 import './ContributorPanel.css';
+import './ContributorPanelRefresh.css';
 
 /* ─── TYPES ───────────────────────────────────────────────────── */
 interface ContributorDetail {
@@ -54,13 +56,38 @@ interface Contribution {
   influencer_bonus: number;
 }
 
+interface ResponseBadgeCriterion {
+  label: string;
+  current: number;
+  target: number;
+  unit: 'count' | 'percent';
+  met: boolean;
+}
+
+interface ResponseBadge {
+  id: 'first_responder' | 'fast_responder' | 'coverage_contributor';
+  name: string;
+  kind: 'achievement' | 'activity';
+  state: 'active' | 'locked';
+  description: string;
+  evidence: string;
+  criteria: ResponseBadgeCriterion[];
+}
+
+interface ResponseBadgeSummary {
+  badges: ResponseBadge[];
+  calculatedAt: string;
+  requestClockMeaning: string;
+}
+
 interface PanelData {
   contributor: ContributorDetail;
   allTimeRank: number;
   contributions: Contribution[];
+  responseBadges: ResponseBadgeSummary;
 }
 
-type ActiveTab = 'score' | 'contributions' | 'formula';
+type ActiveTab = 'score' | 'badges' | 'contributions' | 'formula';
 
 /* ─── HELPERS ─────────────────────────────────────────────────── */
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -87,108 +114,199 @@ function DecisionBadge({ decision }: { decision: string | null }) {
   return <span className={cls}>{decision}</span>;
 }
 
-function ScoreRow({ label, value, note, highlight }: {
-  label: string; value: number | string; note?: string; highlight?: boolean
-}) {
-  return (
-    <tr className={highlight ? 'cp-score-row--highlight' : ''}>
-      <td className="cp-score-label">{label}</td>
-      <td className="cp-score-value">{typeof value === 'number' ? fmt(value) : value}</td>
-      {note && <td className="cp-score-note">{note}</td>}
-    </tr>
-  );
-}
-
 /* ─── SUB-COMPONENTS ──────────────────────────────────────────── */
-function ScoreTab({ contributor, allTimeRank }: { contributor: ContributorDetail; allTimeRank: number }) {
+function ScoreTab({ contributor, allTimeRank, onShowFormula }: {
+  contributor: ContributorDetail;
+  allTimeRank: number;
+  onShowFormula: () => void;
+}) {
   const totalBonus = contributor.modified_reputation > 0 && contributor.base_reputation > 0
     ? (contributor.modified_reputation / contributor.base_reputation - 1)
     : 0;
+  const multiplier = 1 + totalBonus;
+  const bonusPercent = Math.round(totalBonus * 100);
+  const bonusLabel = `${bonusPercent >= 0 ? '+' : ''}${bonusPercent}%`;
 
   return (
-    <div className="cp-tab-content">
-      <table className="cp-score-table">
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th>Score</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <ScoreRow
-            label="OASIS Comments"
-            value={contributor.comment_score}
-            note={`${contributor.total_interactions} comment${contributor.total_interactions !== 1 ? 's' : ''} posted`}
-          />
-          <ScoreRow
-            label="Peer Agreement"
-            value={contributor.peer_score}
-            note={`${contributor.reactions_received} reaction${contributor.reactions_received !== 1 ? 's' : ''} received`}
-          />
-          <ScoreRow
-            label="Reactions Given"
-            value={contributor.reaction_score}
-            note={`${contributor.reactions_given} given (capped at 5 × 0.25)`}
-          />
-          <ScoreRow
-            label="Trust Score"
-            value={contributor.trust_score}
-            note={contributor.trust_score > 0 ? `${contributor.accepts} accept vote${contributor.accepts !== 1 ? 's' : ''} on upstream-merged PRs` : '—'}
-          />
-          <tr className="cp-score-subtotal">
-            <td colSpan={3}>
-              <span className="cp-score-subtotal-label">Base Reputation</span>
-              <span className="cp-score-subtotal-value">{fmt(contributor.base_reputation)}</span>
-            </td>
-          </tr>
-          <ScoreRow
-            label="Bonus Factors"
-            value={`× ${fmt(1 + totalBonus, 4)}`}
-            note="early-mover + early-bird + influencer"
-          />
-          <tr className="cp-score-total">
-            <td className="cp-score-total-label">Modified Reputation</td>
-            <td className="cp-score-total-value" colSpan={2}>{fmt(contributor.modified_reputation)}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="cp-tab-content cp-score-dashboard">
+      <section className="cp-score-hero" aria-label="Reputation summary">
+        <div className="cp-score-hero-main">
+          <span className="cp-score-eyebrow">Modified reputation</span>
+          <strong className="cp-score-hero-value">{fmt(contributor.modified_reputation)}</strong>
+          <span className="cp-score-hero-caption">Complete OASIS contribution score</span>
+        </div>
+        <div className="cp-score-ranks">
+          <span><small>All time</small><strong>#{allTimeRank}</strong></span>
+          {contributor.rank_90d != null && (
+            <span><small>Last 90 days</small><strong>#{contributor.rank_90d}</strong></span>
+          )}
+        </div>
+        <div
+          className="cp-score-equation"
+          aria-label={`${fmt(contributor.base_reputation)} base reputation times ${multiplier.toFixed(2)} bonus multiplier equals ${fmt(contributor.modified_reputation)}`}
+        >
+          <span><small>Base score</small><strong>{fmt(contributor.base_reputation)}</strong></span>
+          <b aria-hidden="true">×</b>
+          <span className="cp-score-bonus-factor">
+            <small>Bonus multiplier</small>
+            <strong>{multiplier.toFixed(2)}× <em>{bonusLabel}</em></strong>
+          </span>
+          <b aria-hidden="true">=</b>
+          <span><small>Reputation</small><strong>{fmt(contributor.modified_reputation)}</strong></span>
+        </div>
+      </section>
 
-      <div className="cp-rank-summary">
-        <div className="cp-rank-item">
-          <span className="cp-rank-label">All-Time Rank</span>
-          <span className="cp-rank-value">#{allTimeRank}</span>
-        </div>
-        {contributor.rank_90d != null && (
-          <div className="cp-rank-item">
-            <span className="cp-rank-label">90-Day Rank</span>
-            <span className="cp-rank-value">#{contributor.rank_90d}</span>
+      <details className="cp-bonus-explainer">
+        <summary>
+          <span className="cp-bonus-help" aria-hidden="true">?</span>
+          <span>
+            <strong>How does the bonus multiplier work?</strong>
+            <small>The base score receives an earned {bonusLabel} adjustment.</small>
+          </span>
+          <span className="cp-bonus-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div className="cp-bonus-explainer-body">
+          <p>
+            Everyone starts at <strong>1.00×</strong>. OASIS adds the existing timing and
+            influence bonuses, then multiplies the base score once. This contributor&apos;s
+            multiplier is <strong>{multiplier.toFixed(2)}×</strong>, approximately a{' '}
+            <strong>{bonusLabel} adjustment</strong> before final rounding.
+          </p>
+          <div className="cp-bonus-reasons">
+            <span><b>Early mover</b><small>Among the first useful comments on a mature PR</small></span>
+            <span><b>Early bird</b><small>Commented within the first 24 or 96 hours</small></span>
+            <span><b>Influence</b><small>Community reactions to the contribution</small></span>
           </div>
-        )}
-        <div className="cp-rank-item">
-          <span className="cp-rank-label">PRs Worked</span>
-          <span className="cp-rank-value">{contributor.prs_worked}</span>
+          <button type="button" onClick={onShowFormula}>See the exact formula →</button>
         </div>
-        <div className="cp-rank-item">
-          <span className="cp-rank-label">Accepts</span>
-          <span className="cp-rank-value">{contributor.accepts}</span>
+      </details>
+
+      <section className="cp-score-section" aria-labelledby="score-composition-heading">
+        <div className="cp-section-heading">
+          <div>
+            <span className="cp-section-kicker">How it adds up</span>
+            <h3 id="score-composition-heading">Score composition</h3>
+          </div>
+          <span className="cp-section-total">{fmt(contributor.base_reputation)} base</span>
         </div>
-        <div className="cp-rank-item">
-          <span className="cp-rank-label">Modifies</span>
-          <span className="cp-rank-value">{contributor.modifies}</span>
+        <div className="cp-score-components">
+          <article className="cp-score-component cp-score-component--comments">
+            <span className="cp-score-component-icon" aria-hidden="true">◆</span>
+            <div><span>OASIS comments</span><small>{contributor.total_interactions} posted</small></div>
+            <strong>{fmt(contributor.comment_score)}</strong>
+          </article>
+          <article className="cp-score-component cp-score-component--peer">
+            <span className="cp-score-component-icon" aria-hidden="true">◎</span>
+            <div><span>Peer agreement</span><small>{contributor.reactions_received} reactions received</small></div>
+            <strong>{fmt(contributor.peer_score)}</strong>
+          </article>
+          <article className="cp-score-component cp-score-component--reactions">
+            <span className="cp-score-component-icon" aria-hidden="true">↗</span>
+            <div><span>Reactions given</span><small>{contributor.reactions_given} given · capped at 5</small></div>
+            <strong>{fmt(contributor.reaction_score)}</strong>
+          </article>
+          <article className="cp-score-component cp-score-component--trust">
+            <span className="cp-score-component-icon" aria-hidden="true">✓</span>
+            <div><span>Trust score</span><small>{contributor.trust_score > 0 ? `${contributor.accepts} verified accept votes` : 'No qualifying merges yet'}</small></div>
+            <strong>{fmt(contributor.trust_score)}</strong>
+          </article>
         </div>
-        <div className="cp-rank-item">
-          <span className="cp-rank-label">Rejects</span>
-          <span className="cp-rank-value">{contributor.rejects}</span>
+      </section>
+
+      <section className="cp-score-section" aria-labelledby="activity-heading">
+        <div className="cp-section-heading">
+          <div>
+            <span className="cp-section-kicker">Contribution mix</span>
+            <h3 id="activity-heading">Activity snapshot</h3>
+          </div>
+          <span className="cp-section-total">{contributor.prs_worked} PR{contributor.prs_worked !== 1 ? 's' : ''}</span>
         </div>
-      </div>
+        <div className="cp-activity-strip">
+          <div><span className="cp-activity-dot cp-activity-dot--accept" /><strong>{contributor.accepts}</strong><small>Accepts</small></div>
+          <div><span className="cp-activity-dot cp-activity-dot--modify" /><strong>{contributor.modifies}</strong><small>Modifies</small></div>
+          <div><span className="cp-activity-dot cp-activity-dot--reject" /><strong>{contributor.rejects}</strong><small>Rejects</small></div>
+        </div>
+      </section>
 
       {contributor.rank_90d_oldest_activity && (
-        <p className="cp-staleness-note">
-          90-day rank next recalculated after{' '}
+        <p className="cp-staleness-note"><span aria-hidden="true">↻</span>{' '}
+          90-day rank updates after{' '}
           <strong>{fmtDate(contributor.rank_90d_oldest_activity)}</strong> drops out of the window.
         </p>
       )}
+    </div>
+  );
+}
+
+const RESPONSE_BADGE_ICONS: Record<ResponseBadge['id'], string> = {
+  first_responder: '⚡',
+  fast_responder: '⏱',
+  coverage_contributor: '🛟',
+};
+
+function criterionValue(criterion: ResponseBadgeCriterion): string {
+  const suffix = criterion.unit === 'percent' ? '%' : '';
+  return `${criterion.current}${suffix} / ${criterion.target}${suffix}`;
+}
+
+function BadgesTab({ summary }: { summary: ResponseBadgeSummary }) {
+  return (
+    <div className="cp-tab-content cp-response-badges">
+      <div className="cp-response-intro">
+        <strong>Response recognition</strong>
+        <span>Rewards timely coverage without changing reputation, ranking, vote weight, or permissions.</span>
+      </div>
+
+      <div className="cp-response-badge-list">
+        {summary.badges.map(badge => (
+          <article
+            key={badge.id}
+            className={`cp-response-badge-card cp-response-badge-card--${badge.state}`}
+          >
+            <div className="cp-response-badge-icon" aria-hidden="true">{RESPONSE_BADGE_ICONS[badge.id]}</div>
+            <div className="cp-response-badge-body">
+              <div className="cp-response-badge-heading">
+                <h3>{badge.name}</h3>
+                <span className={`cp-response-badge-state cp-response-badge-state--${badge.state}`}>
+                  {badge.state === 'active' ? 'Earned' : 'Not yet earned'}
+                </span>
+              </div>
+              <p>{badge.description}</p>
+              <strong className="cp-response-badge-evidence">{badge.evidence}</strong>
+              {(badge.kind === 'activity' || badge.state !== 'active') && (
+                <div className="cp-response-criteria">
+                  {badge.criteria.map(criterion => {
+                    const progress = criterion.target > 0
+                      ? Math.min(100, Math.round((criterion.current / criterion.target) * 100))
+                      : 0;
+                    return (
+                      <div key={criterion.label} className="cp-response-criterion">
+                        <span><small>{criterion.label}</small><b>{criterionValue(criterion)}</b></span>
+                        <div
+                          className={`cp-response-progress${criterion.met ? ' cp-response-progress--met' : ''}`}
+                          role="progressbar"
+                          aria-label={criterion.label}
+                          aria-valuemin={0}
+                          aria-valuemax={criterion.target}
+                          aria-valuenow={Math.min(criterion.current, criterion.target)}
+                        >
+                          <span style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="cp-response-note">
+        <strong>When does the clock start?</strong>
+        <span>{summary.requestClockMeaning}</span>
+        <span>Only recognized OASIS votes count. PR authors and historical requests are excluded.</span>
+      </div>
     </div>
   );
 }
@@ -430,7 +548,6 @@ export default function ContributorPanel({ login, onClose }: Props) {
   if (!login) return null;
 
   const contributor = data?.contributor;
-  const avatarUrl = contributor?.avatar_url ?? `https://github.com/${login}.png?size=64`;
 
   return (
     <>
@@ -438,7 +555,7 @@ export default function ContributorPanel({ login, onClose }: Props) {
       <aside className={`cp-panel${open ? ' cp-panel--open' : ''}`} aria-label="Contributor detail">
         {/* Header */}
         <div className="cp-header">
-          <img src={avatarUrl} alt={`${login} avatar`} className="cp-avatar" width={32} height={32} />
+          <ContributorAvatar login={login} src={contributor?.avatar_url} className="cp-avatar" size={34} />
           <span className="cp-login">{login}</span>
           {data && (
             <>
@@ -462,7 +579,7 @@ export default function ContributorPanel({ login, onClose }: Props) {
 
         {/* Tab bar */}
         <div className="cp-tab-bar" role="tablist">
-          {(['score', 'contributions', 'formula'] as ActiveTab[]).map(tab => (
+          {(['score', 'badges', 'contributions', 'formula'] as ActiveTab[]).map(tab => (
             <button
               key={tab}
               role="tab"
@@ -480,7 +597,14 @@ export default function ContributorPanel({ login, onClose }: Props) {
         {error   && <div className="cp-error">{error}</div>}
         {!loading && !error && data && contributor && (
           <>
-            {activeTab === 'score'         && <ScoreTab contributor={contributor} allTimeRank={data.allTimeRank} />}
+            {activeTab === 'score'         && (
+              <ScoreTab
+                contributor={contributor}
+                allTimeRank={data.allTimeRank}
+                onShowFormula={() => setActiveTab('formula')}
+              />
+            )}
+            {activeTab === 'badges'        && <BadgesTab summary={data.responseBadges} />}
             {activeTab === 'contributions' && <ContributionsTab contributions={data.contributions} />}
             {activeTab === 'formula'       && <FormulaTab />}
           </>

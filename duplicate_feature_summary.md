@@ -15,7 +15,7 @@ Implemented a complete **duplicate vote classification system** for OASIS valida
 - Duplicate votes earn **full reputation** (comment_score, bonuses, peer reactions)
 - **Most-cited parent wins** when duplicate consensus reached
 - **Auto-close triggers** when consensus + merged parent detected
-- Duplicates **show with badge** in leaderboard (not hidden)
+- Duplicates **show with badge** in workspace (not hidden)
 - Contributors' `prs_worked` still **includes duplicates**
 
 ## Files Modified (10 total)
@@ -67,7 +67,7 @@ Implemented a complete **duplicate vote classification system** for OASIS valida
    - Count duplicate votes in consensus weighting (+1 reactions)
    - Call `rebuildDuplicates()` before `rebuildContributors()` in both cron and manual sync paths
 
-7. **leaderboard.ts**
+7. **workspace.ts**
    - `handleRepos()`: Include `duplicate_count` field and `total_duplicate` consensus sum
    - `handlePRs()`: Include `consensus_duplicate`, `duplicate_of`, `closed_as_duplicate`
    - `handleContributors()`: Include `duplicates` count
@@ -118,7 +118,7 @@ Implemented a complete **duplicate vote classification system** for OASIS valida
 
 ## Implementation Notes
 
-- **No frontend changes required** — leaderboard already returns PR data
+- **No frontend changes required** — workspace API already returns PR data
 - **Full backward compatibility** — all new fields optional/defaulted
 - **Safe migrations** — ALTER TABLE statements provided for existing D1 instances
 - **Transaction safety** — vote consensus checking and chain resolution atomic where possible

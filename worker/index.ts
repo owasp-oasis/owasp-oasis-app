@@ -19,7 +19,6 @@ import {
 import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
 import { runTrackedHubSpot } from './scheduledJobs.js';
-import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
   setCanonicalScheduleEnabled,
@@ -37,7 +36,7 @@ import {
   handleContributorDetail,
   handleMaintainers,
   handleTools,
-} from './handlers/leaderboard.js';
+} from './handlers/workspace.js';
 import { handleRegister } from './handlers/register.js';
 import { handleApply } from './handlers/apply.js';
 import { handleFeedback } from './handlers/feedback.js';
@@ -45,6 +44,7 @@ import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handlePRWorkflow, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
@@ -259,7 +259,7 @@ export default {
          return jsonOk({ enabled: true, legacy_retired: true }, request);
        }
 
-       /* ── Leaderboard API ───────────────────────────────────────── */
+       /* ── Workspace API ─────────────────────────────────────────── */
        /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
@@ -275,20 +275,20 @@ export default {
          }
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
+       if (method === 'GET' && url.pathname === '/api/workspace/meta')
          return await handleMeta(env, request);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
+       if (method === 'GET' && url.pathname === '/api/workspace/repos')
          return await handleRepos(env, request, url);
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
-       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/(\d+)$/);
+       const repoDetailMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)$/);
        if (method === 'GET' && repoDetailMatch) {
          return await handleRepoDetail(env, request, Number(repoDetailMatch[1]));
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
+       if (method === 'GET' && url.pathname === '/api/workspace/prs')
          return await handlePRs(env, request, url);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
+       if (method === 'GET' && url.pathname === '/api/workspace/contributors')
          return await handleContributors(env, request, url);
 
        /* ── Contributor detail (for ContributorPanel slide-out) ───── */
@@ -298,13 +298,27 @@ export default {
          return await handleContributorDetail(env, request, login);
        }
 
-      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
+       /* ── Maintainer disposition and upstream submission ─────────── */
+       const workflowMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/workflow$/);
+       if (method === 'GET' && workflowMatch) {
+         return await handlePRWorkflow(request, env, Number(workflowMatch[1]));
+       }
+       const maintainerDecisionMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/maintainer-decision$/);
+       if (method === 'POST' && maintainerDecisionMatch) {
+         return await handleMaintainerDecision(request, env, Number(maintainerDecisionMatch[1]));
+       }
+       const submitUpstreamMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/submit-upstream$/);
+       if (method === 'POST' && submitUpstreamMatch) {
+         return await handleSubmitUpstream(request, env, Number(submitUpstreamMatch[1]));
+       }
+
+      if (method === 'GET' && url.pathname === '/api/workspace/maintainers')
         return await handleMaintainers(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')
+      if (method === 'GET' && url.pathname === '/api/workspace/tools')
         return await handleTools(env, request, url);
 
       /* ── Retired public sync trigger ───────────────────────────── */
-      if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
+      if (method === 'GET' && url.pathname === '/workspace-refresh') {
         return jsonErr('This public sync trigger is retired. Use the authenticated canonical sync endpoint.', 410, request);
       }
 
@@ -333,14 +347,6 @@ export default {
       console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));
       return;
     }
-    if (event.cron === '30 2 * * *' && env.ENVIRONMENT === 'preview') {
-      const cutoff = await env.DB.prepare(
-        "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
-      ).first<{ value: string }>();
-      const reference = `preview-${new Date(event.scheduledTime).toISOString()}`;
-      await startShadowSync(env, reference, cutoff?.value ?? new Date(event.scheduledTime).toISOString());
-      return;
-    }
     if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
@@ -352,7 +358,6 @@ export default {
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
-export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
 export { OrphanCleanupWorkflow };
 export { HubSpotSyncWorkflow };

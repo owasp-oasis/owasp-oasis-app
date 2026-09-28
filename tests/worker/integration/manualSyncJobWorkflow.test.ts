@@ -49,7 +49,6 @@ describe('bounded manual synchronization jobs', () => {
       jobRunId,
       pipelineRunId,
       jobKey: 'vote_projection',
-      pipeline: 'canonical',
       chunk: 0,
       auditActor,
     };
@@ -102,7 +101,7 @@ describe('bounded manual synchronization jobs', () => {
       jobKey: 'comment_reactions',
       pipelineRunId,
       trigger: 'manual',
-      mode: 'legacy',
+      mode: 'live',
       status: 'queued',
     });
     const created: Array<{ params: ManualSyncJobParams }> = [];
@@ -120,7 +119,6 @@ describe('bounded manual synchronization jobs', () => {
       jobRunId,
       pipelineRunId,
       jobKey: 'comment_reactions',
-      pipeline: 'legacy',
       auditActor,
     })).resolves.toBe('manual-reaction-workflow');
 
@@ -139,7 +137,6 @@ describe('bounded manual synchronization jobs', () => {
       jobRunId,
       pipelineRunId,
       jobKey: 'comment_reactions',
-      pipeline: 'legacy',
       chunk: 0,
     }));
   });

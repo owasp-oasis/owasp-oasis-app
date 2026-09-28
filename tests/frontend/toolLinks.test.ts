@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getToolUrl } from '../../src/pages/leaderboards/toolLinks.js'
+import { getToolUrl } from '../../src/pages/workspace/toolLinks.js'
 
 describe('Workspace tool links', () => {
   it.each([
