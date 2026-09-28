@@ -56,6 +56,14 @@ const quotes: Quote[] = [
     photoUrl: null,
     linkedinUrl: 'https://www.linkedin.com/in/mandana-madison/',
   },
+  {
+    name: 'Zoe Braiterman',
+    title: 'Application and Product Security Architect',
+    company: '',
+    quote: 'I am proud to be a part of this initiative to help fellow open source maintainers navigate complexities introduced by AI slop.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/zoebraiterman/',
+  },
 ]
 
 const ShieldSVG = () => (
