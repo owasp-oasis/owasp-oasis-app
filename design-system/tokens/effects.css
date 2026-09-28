@@ -1,0 +1,25 @@
+:root {
+  --shadow: 0 18px 50px rgba(11, 79, 138, .14);        /* cards on paper, modals */
+  --shadow-strong: 0 18px 50px rgba(11, 79, 138, .24); /* toast */
+  --shadow-menu: 0 14px 36px rgba(11, 79, 138, .18);   /* dropdown menus */
+  --shadow-drawer: 0 8px 24px rgba(11, 79, 138, .12);  /* mobile nav sheet */
+  --shadow-btn-blue: 0 8px 22px rgba(15, 111, 207, .22);
+  --shadow-btn-blue-hover: 0 12px 28px rgba(15, 111, 207, .28);
+  --shadow-pill: 0 2px 8px rgba(11, 79, 138, .06);
+  --shadow-pill-open: 0 5px 16px rgba(11, 79, 138, .13);
+  --shadow-inset-selected: 0 1px 2px rgba(7, 17, 31, .25);
+  --ring-success: 0 0 0 4px rgba(76, 217, 100, .18);
+
+  --blur-nav: blur(16px);
+  --nav-bg: rgba(247, 251, 255, .95);
+
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --dur-fast: .15s;   /* color changes */
+  --dur: .18s;        /* buttons: transform, shadow, bg */
+  --dur-slow: .26s;   /* toast enter */
+
+  --z-sticky: 20;
+  --z-toast: 60;
+  --z-nav: 100;
+  --z-menu: 110;
+}

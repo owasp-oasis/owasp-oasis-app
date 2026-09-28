@@ -1,0 +1,59 @@
+<!-- @dsCard group="Components" viewport="700x330" name="Data display" subtitle="StatBlock, ConsensusBar, DiffView, DonorLogo" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><style>body{padding:16px;background:#fff}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script></head><body><div id="root"></div>
+<script type="text/babel">
+
+function StatBlock({ items, tone = 'light', direction = 'row' }) {
+  const dark = tone === 'dark';
+  if (direction === 'stack') return (
+    <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 16px', borderRadius: 10, background: dark ? 'rgba(11,79,138,.55)' : 'var(--white)', border: dark ? 0 : '1px solid var(--line)', minWidth: 200 }}>
+      {items.map((it, i) => <div key={it.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20, padding: '6px 0', borderBottom: i < items.length - 1 ? '1px solid ' + (dark ? 'rgba(255,255,255,.18)' : 'var(--gray-200)') : 0 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: dark ? 'var(--blue-soft)' : 'var(--muted)' }}>{it.label}</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: dark ? '#fff' : 'var(--ink)' }}>{it.value}</span></div>)}
+    </div>);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, minmax(0,1fr))`, gap: 1, background: 'var(--line)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+      {items.map(it => <div key={it.label} style={{ background: 'rgba(255,255,255,.78)', padding: 18 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)' }}>{it.value}</div>
+        <div style={{ marginTop: 4, fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>{it.label}</div></div>)}
+    </div>);
+}
+
+function ConsensusBar({ accept, modify, reject, duplicate = 0, showLegend = true }) {
+  const t = Math.max(1, accept + modify + reject + duplicate);
+  const seg = [['accept', accept, 'Accept'], ['modify', modify, 'Modify'], ['reject', reject, 'Reject'], ['duplicate', duplicate, 'Duplicate']];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', height: 8, borderRadius: 100, overflow: 'hidden', background: 'var(--gray-200)' }}>
+        {seg.map(([k, n]) => n > 0 && <span key={k} style={{ width: (n / t * 100) + '%', background: `var(--dec-${k})` }}/>)}
+      </div>
+      {showLegend && <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-soft)' }}>
+        {seg.filter(s => s[1] > 0).map(([k, n, l]) => <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: `var(--dec-${k})` }}/>{l} <b style={{ fontFamily: 'var(--mono)' }}>{n}</b></span>)}
+      </div>}
+    </div>
+  );
+}
+
+const G = { '+': ['var(--dec-accept-bg)', 'var(--dec-accept-fg)'], '-': ['var(--dec-reject-bg)', 'var(--dec-reject-fg)'], ' ': ['transparent', 'var(--ink-soft)'] };
+const row = (t, s, n, k) => <div key={k} style={{ display: 'flex', background: G[t][0], color: G[t][1] }}><span style={{ width: 40, flex: 'none', textAlign: 'right', paddingRight: 8, color: 'var(--gray-400)' }}>{n}</span><span style={{ width: 16, flex: 'none' }}>{t.trim()}</span><span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minWidth: 0 }}>{s}</span></div>;
+function DiffView({ file, lines, mode = 'split' }) {
+  const box = { fontFamily: 'var(--mono)', fontSize: 12.5, lineHeight: 1.7 };
+  let body;
+  if (mode === 'unified') body = <div style={box}>{lines.map(([t, s], i) => row(t, s, i + 1, i))}</div>;
+  else { const L = lines.filter(l => l[0] !== '+'), R = lines.filter(l => l[0] !== '-');
+    body = <div style={{ ...box, display: 'grid', gridTemplateColumns: '1fr 1fr' }}><div style={{ borderRight: '1px solid var(--line)' }}>{L.map(([t, s], i) => row(t, s, i + 1, i))}</div><div>{R.map(([t, s], i) => row(t, s, i + 1, i))}</div></div>; }
+  return <div style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden', background: '#fff' }}><div style={{ padding: '8px 12px', background: 'var(--gray-100)', borderBottom: '1px solid var(--line)', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{file}</div>{body}</div>;
+}
+
+function DonorLogo({ name, src, plate = '#fff', height = 20 }) {
+  return <span title={'Tooling donated by ' + name} style={{ display: 'inline-flex', alignItems: 'center', height: height + 12, padding: '6px 10px', background: plate, border: '1px solid var(--line)', borderRadius: 6 }}><img src={src} alt={name} style={{ height, width: 'auto', maxWidth: 120 }}/></span>;
+}
+
+function Demo(){return <div style={{display:'flex',flexDirection:'column',gap:14}}>
+<div style={{display:'grid',gridTemplateColumns:'1fr 220px',gap:14,alignItems:'start'}}><StatBlock items={[{label:'Open fixes',value:12},{label:'Trusted',value:4},{label:'Merged',value:9}]}/><div style={{padding:12,borderRadius:10,background:'var(--gradient-hero)'}}><StatBlock tone="dark" direction="stack" items={[{label:'Your votes',value:3},{label:'Reputation',value:'48.6'},{label:'90-day rank',value:'#7'}]}/></div></div>
+<div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:14,alignItems:'center'}}><ConsensusBar accept={6} modify={1} reject={1} duplicate={0}/><DonorLogo name="AppSecAI" src="https://www.appsecai.io/hubfs/Logo.%20Blue.%20Horizontal.svg"/></div>
+<DiffView file="compiler/scripts/enable-feature-flag.js" lines={[['-','const basePath = path.join(FIXTURES_PATH, testName);'],['+','const basePath = path.resolve(path.join(FIXTURES_PATH, testName));'],['+','if (!basePath.startsWith(FIXTURES_PATH + path.sep)) return null;']]}/></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>
