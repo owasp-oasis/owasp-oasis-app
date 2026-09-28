@@ -39,6 +39,7 @@ tests/worker/
 ├── unit/                        # Pure function tests (no D1/KV)
 │   ├── validation.test.ts       # Input validation (~60 tests)
 │   ├── github.test.ts           # GitHub parsers (~80 tests)
+│   ├── responseBadges.test.ts   # Response-recognition thresholds and evidence
 │   └── security.test.ts         # CSRF, encryption, headers (~50 tests)
 └── integration/                 # Full handler tests (real workerd + in-memory D1/KV)
     ├── helpers.ts               # applySchema, cleanDB, createTestSession, test data factories
@@ -47,7 +48,8 @@ tests/worker/
     ├── auth.test.ts             # OAuth flow (with GitHub API mocks)
     ├── preferences.test.ts      # GET/PUT /api/preferences/mine (tests PUT method fix)
     ├── vote.test.ts             # POST /api/vote
-    ├── leaderboard.test.ts      # GET /api/leaderboard/* endpoints
+    ├── workspace.test.ts        # GET /api/workspace/* endpoints
+    ├── responseBadges.test.ts   # Availability clocks, exclusions, and profile badges
     └── prPanel.test.ts          # GET /api/pr-panel/:id/* endpoints
 ```
 
@@ -141,15 +143,22 @@ Full handler tests with real workerd + in-memory D1/KV:
 - D1 updates (user_votes, pull_requests consensus, pr_participants)
 - Rate limiting (5 votes/60s per user)
 
-**`leaderboard.test.ts`**
-- GET /api/leaderboard/meta → sync status
-- GET /api/leaderboard/repos → repo list, filtering, sorting
-- GET /api/leaderboard/repos/:id → repo detail with PRs & contributors, addressed by immutable GitHub repository ID
-- GET /api/leaderboard/prs → PR list
-- GET /api/leaderboard/contributors → contributor list with scores
+**`workspace.test.ts`**
+- GET /api/workspace/meta → sync status
+- GET /api/workspace/repos → repo list, filtering, sorting
+- GET /api/workspace/repos/:id → repo detail with PRs & contributors, addressed by immutable GitHub repository ID
+- GET /api/workspace/prs → PR list
+- GET /api/workspace/contributors → contributor list with scores
 - GET /api/contributors/:login → contributor detail with bonus computation
-- GET /api/leaderboard/maintainers → maintainer stats
-- GET /api/leaderboard/tools → tool cards
+- GET /api/workspace/maintainers → maintainer stats
+- GET /api/workspace/tools → tool cards
+
+**`responseBadges.test.ts`**
+- New open PR availability starts an eligible response clock
+- Historical PRs remain observation-only
+- First, fast, and unattended coverage thresholds
+- Deterministic ties and author/cancellation/time exclusions
+- Existing reputation fields remain unchanged
 
 **`prPanel.test.ts`** (with GitHub API mocking)
 - GET /api/pr-panel/:id/details → parse PR metadata (CWE, severity, etc.)

@@ -1,0 +1,78 @@
+name: Bug report
+description: Report reproducible incorrect behavior in the OASIS application or services.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve OASIS. Do not include secrets, tokens, personal data, or security exploit details. Use the security-contact form for a suspected vulnerability in OASIS.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and pull requests for this problem.
+          required: true
+        - label: This is not a security vulnerability or an unpatched upstream-project vulnerability.
+          required: true
+        - label: I removed secrets, tokens, personal data, and other sensitive information.
+          required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where did the problem occur?
+      options:
+        - Production (www.owasp-oasis.org)
+        - Preview (preview.owasp-oasis.org)
+        - Local development
+        - GitHub or repository workflow
+        - Other or unknown
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Affected page, route, job, or component
+      placeholder: /workspace/status, cloudflare_analytics job, or worker/handlers/...
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the incorrect behavior and its effect on the user or system.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Give the smallest repeatable sequence, including prerequisites.
+      placeholder: |
+        1. Sign in as ...
+        2. Open ...
+        3. Select ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add version, browser, timestamps, screenshots, or logs after removing sensitive information.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What observable result would demonstrate that the defect is resolved?
+    validations:
+      required: true

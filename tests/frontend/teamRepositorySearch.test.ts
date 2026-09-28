@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchingTeamRepositories } from '../../src/pages/leaderboards/repositoryMatches'
+import { matchingTeamRepositories } from '../../src/pages/workspace/repositoryMatches'
 
 const repositories = [
   { id: 1, name: 'sample-python-project' },

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contribution guide
+    url: https://github.com/owasp-oasis/owasp-oasis-app/blob/main/CONTRIBUTING.md
+    about: Read the contribution workflow and choose the correct reporting path.
+  - name: Security policy
+    url: https://github.com/owasp-oasis/owasp-oasis-app/security/policy
+    about: Learn how to request a private channel without publicly disclosing a vulnerability.
+  - name: OASIS Workspace
+    url: https://www.owasp-oasis.org/workspace/pull-requests
+    about: Review and vote on vulnerability-fix pull requests tracked by OASIS.

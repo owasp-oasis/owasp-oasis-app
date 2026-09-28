@@ -4,7 +4,7 @@
 
 /* ─── PATTERNS & LIMITS ──────────────────────────────────────── */
 const EMAIL_RE = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-const GH_RE    = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
+const GH_RE    = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/;
 const MAX      = { email: 254, name: 100, github: 39, org: 120, why: 1000 };
 const MAX_BODY_BYTES = 8_192;
 
@@ -19,7 +19,7 @@ export function sanitize(val: unknown): string {
 
 /* ─── VALIDATORS ─────────────────────────────────────────────── */
 type OK<T>  = { ok: true;  val: T };
-type Err    = { ok: false; error: string };
+type Err    = { ok: false; error: string; status?: number };
 type Result<T> = OK<T> | Err;
 
 export function vEmail(val: unknown): Result<string> {
@@ -45,9 +45,79 @@ export function vGitHub(val: unknown): Result<string> {
   const v = sanitize(val).replace(/^@/, '');
   if (!v) return { ok: true, val: '' };
   if (v.length > MAX.github) return { ok: false, error: 'GitHub username is too long (max 39 chars)' };
-  if (v.startsWith('-') || v.endsWith('-')) return { ok: false, error: 'GitHub username cannot start or end with a hyphen' };
+  if (v.startsWith('-')) return { ok: false, error: 'GitHub username cannot start with a hyphen' };
   if (!GH_RE.test(v)) return { ok: false, error: 'Invalid GitHub username format' };
   return { ok: true, val: v };
+}
+
+/** Validates syntax, then confirms that a non-empty public GitHub account exists. */
+export async function vGitHubAccount(val: unknown, token: string): Promise<Result<string>> {
+  const syntax = vGitHub(val);
+  if (!syntax.ok || !syntax.val) return syntax;
+
+  let response: Response;
+  try {
+    response = await fetch(`https://api.github.com/users/${encodeURIComponent(syntax.val)}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'oasis-worker-registration/1.0',
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    console.error(JSON.stringify({ event: 'github_account_verification_failed', reason: 'request_error' }));
+    return {
+      ok: false,
+      error: 'Could not verify GitHub account right now — please try again.',
+      status: 503,
+    };
+  }
+
+  if (response.status === 404) {
+    return { ok: false, error: 'GitHub account not found', status: 400 };
+  }
+  if (!response.ok) {
+    console.error(JSON.stringify({
+      event: 'github_account_verification_failed',
+      reason: 'github_response',
+      status: response.status,
+    }));
+    return {
+      ok: false,
+      error: 'Could not verify GitHub account right now — please try again.',
+      status: 503,
+    };
+  }
+
+  let account: unknown;
+  try {
+    account = await response.json();
+  } catch {
+    console.error(JSON.stringify({ event: 'github_account_verification_failed', reason: 'invalid_response' }));
+    return {
+      ok: false,
+      error: 'Could not verify GitHub account right now — please try again.',
+      status: 503,
+    };
+  }
+
+  if (
+    typeof account !== 'object'
+    || account === null
+    || !('login' in account)
+    || typeof account.login !== 'string'
+  ) {
+    console.error(JSON.stringify({ event: 'github_account_verification_failed', reason: 'invalid_response' }));
+    return {
+      ok: false,
+      error: 'Could not verify GitHub account right now — please try again.',
+      status: 503,
+    };
+  }
+
+  return syntax;
 }
 
 export function vText(val: unknown, max: number, fieldName = 'Field'): Result<string> {

@@ -13,6 +13,9 @@
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
   setSyncState, rebuildContributors, rebuildDuplicates, syncVotesFromComments,
+  closeOneResolvedDuplicate,
+  clearPRReviewProjection,
+  reconcileCurrentParticipants,
   upsertRepo, upsertPR, upsertParticipants, upsertComments, upsertReactions,
   updateRepoPRCount, getExistingMergedUpstream,
 } from './db.js';
@@ -24,15 +27,17 @@ import {
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
 import type { CommentData, ReactionData } from './types.js';
+import { reconcileRepositoryPullRequests } from './cleanup.js';
 
 /* ─── CHUNKED SYNC CONFIG ────────────────────────────────────── */
-// Each /leaderboard-refresh call processes up to CHUNK_SIZE PRs.
+// Each bounded invocation processes one PR so GitHub collection remains well
+// below the Workers Free external-subrequest ceiling.
 // Cursor is stored in sync_state as "repoIndex:prStart".
-const CHUNK_SIZE = 10;
+const CHUNK_SIZE = 1;
 
 /* ─── SHARED PR PROCESSOR ────────────────────────────────────── */
-// Contains the inner loop logic shared between runSync and runSyncOneRepo.
-// skipReactions = true on manual sync (50-subrequest limit); false on cron (1000 limit).
+// Contains the inner-loop logic used by the request-bounded Workspace Workflow.
+// Reactions are queued separately so this operation only collects one PR.
 async function processPR(
   pr: GitHubPR,
   repoId: number,
@@ -41,7 +46,7 @@ async function processPR(
   db: D1Database,
   token: string,
   syncStart: string,
-  opts: { skipReactions: boolean },
+  opts: { skipReactions: boolean; reactionJobRunId?: string; pipelineRunId?: string },
 ): Promise<PRResult> {
   const participantMap = new Map<string, ParticipantData>();
   const ensure = (login: string): ParticipantData => {
@@ -74,7 +79,7 @@ async function processPR(
     // ── Validator-bot special path ────────────────────────────────
     // Validator bots (e.g. dryrun-security[bot]) post real OASIS-template comments
     // with accept/modify/reject decisions. We write their pr_comments rows (and fetch
-    // reactions) so the validate-tools leaderboard can count them, but we skip
+    // reactions) so the validate-tools workspace tab can count them, but we skip
     // pr_participants and contributors tracking — they are not human contributors.
     if (login && isValidatorBot(login)) {
       const decision = parseDecision(comment.body);
@@ -231,11 +236,39 @@ async function processPR(
     mergedUpstream, detectionTool, syncStart,
   );
 
-  await upsertParticipants(db, pr.id, repoName, pr.number, participantMap);
+  // GitHub is authoritative for the per-PR review projection. Remove rows that
+  // disappeared upstream before inserting the freshly collected snapshot. The
+  // vote projection is reconciled after every repository has completed so an
+  // existing UI-cast vote can retain its original timestamp when its GitHub
+  // comment still exists.
+  await clearPRReviewProjection(db, pr.id);
+
+  const currentParticipants = new Map(
+    [...participantMap].filter(([, participant]) => (
+      participant.interactions > 0 || participant.non_oasis_interactions > 0
+    )),
+  );
+  await upsertParticipants(db, pr.id, repoName, pr.number, currentParticipants);
 
   // Write granular comment/reaction rows (used by rebuildContributors for bonus computation)
   if (commentRows.length > 0) {
     await upsertComments(db, commentRows);
+    if (opts.pipelineRunId && opts.reactionJobRunId) {
+      const queuedAt = new Date().toISOString();
+      await db.batch(commentRows.map(comment => db.prepare(`
+        INSERT OR IGNORE INTO sync_work_items (
+          id, pipeline_run_id, job_run_id, job_key, entity_type, entity_id,
+          payload_json, status, created_at, updated_at
+        ) VALUES (?, ?, ?, 'comment_reactions', 'comment', ?, '{}', 'pending', ?, ?)
+      `).bind(
+        `${opts.pipelineRunId}:reaction:${comment.id}`,
+        opts.pipelineRunId,
+        opts.reactionJobRunId,
+        String(comment.id),
+        queuedAt,
+        queuedAt,
+      )));
+    }
   }
   if (reactionRows.length > 0) {
     await upsertReactions(db, reactionRows);
@@ -244,68 +277,22 @@ async function processPR(
   return { comments: comments.length };
 }
 
-/* ─── FULL SYNC (cron — 1000 subrequest limit) ───────────────── */
-export async function runSync(env: Env, opts: { skipReactions?: boolean } = {}): Promise<SyncResult> {
-  const { skipReactions = false } = opts;
-  const token = env.GITHUB_TOKEN;
-  const db    = env.DB;
-  const stats: SyncStats = { repos: 0, prs: 0, comments: 0 };
-
-  try {
-    const syncStart = new Date().toISOString();
-    const allRepos  = await ghFetchAll<GitHubRepo>(`/orgs/${ORG}/repos?type=public`, token);
-    const repos     = allRepos.filter(r => r.fork && !META_REPOS.has(r.name));
-
-    for (const repo of repos) {
-      const detail      = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
-      const upstreamUrl = detail.parent?.html_url ?? null;
-
-      // Get the previous sync timestamp for this repo (or epoch if new)
-      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE id = ?')
-        .bind(repo.id).first<{ synced_at: string | null }>();
-      const repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
-
-      await upsertRepo(db, repo, upstreamUrl, syncStart);
-      stats.repos++;
-
-      const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
-      const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-      const prs       = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
-
-      for (const pr of prs) {
-        stats.prs++;
-        const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, { skipReactions });
-        stats.comments += result.comments;
-      }
-
-      await updateRepoPRCount(db, repo.id, syncStart);
-    }
-
-     // Sync user votes from pr_comments before resolving duplicates
-     // (so duplicate chain resolution has complete vote data)
-     await syncVotesFromComments(db);
-     
-     // Resolve duplicate PR chains and auto-close PRs when consensus + merged parent
-     await rebuildDuplicates(db, token);
-     
-     // Rebuild contributor reputation scores
-     await rebuildContributors(db, syncStart);
-    
-    await setSyncState(db, 'last_synced_at', syncStart);
-    await setSyncState(db, 'sync_running', '0');
-    return { ok: true, message: `Sync complete at ${syncStart}`, stats };
-  } catch (err) {
-    await setSyncState(db, 'sync_running', '0');
-    return { ok: false, message: (err as Error)?.message ?? String(err), stats };
-  }
-}
-
-/* ─── CHUNKED MANUAL SYNC (10 PRs per call — 50 subrequest limit) */
+/* ─── CHUNKED WORKSPACE SYNC (one PR per invocation) ──────────── */
 // Cursor stored in sync_state as "repoIndex:prStart", e.g. "0:10".
 // Each call processes up to CHUNK_SIZE PRs from the current repo, then advances.
 // When all PRs in a repo are done, moves to next repo.
 // When all repos done, runs rebuildContributors and marks sync complete.
-export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
+export async function runSyncOneRepo(
+  env: Env,
+  opts: {
+    skipReactions?: boolean;
+    reactionJobRunId?: string;
+    pipelineRunId?: string;
+    deferFinalization?: boolean;
+    cursorKey?: string;
+  } = {},
+): Promise<SyncResult> {
+  const { skipReactions = true } = opts;
   const token = env.GITHUB_TOKEN;
   const db    = env.DB;
   const stats: SyncStats = { repos: 0, prs: 0, comments: 0 };
@@ -322,7 +309,8 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     }
 
     // Parse cursor "repoIndex:prStart"
-    const cursorRow = await db.prepare("SELECT value FROM sync_state WHERE key = 'sync_cursor'")
+    const cursorKey = opts.cursorKey ?? 'sync_cursor';
+    const cursorRow = await db.prepare('SELECT value FROM sync_state WHERE key = ?').bind(cursorKey)
       .first<{ value: string }>();
     let repoIdx = 0, prStart = 0;
     if (cursorRow?.value) {
@@ -333,6 +321,10 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
      // All repos processed — rebuild contributors and finish
      if (repoIdx >= repos.length) {
+       if (opts.deferFinalization) {
+         await db.prepare('DELETE FROM sync_state WHERE key = ?').bind(cursorKey).run();
+         return { ok: true, message: 'Repository and pull request collection complete', stats, done: true };
+       }
        // Sync user votes from pr_comments before resolving duplicates
        // (so duplicate chain resolution has complete vote data)
        await syncVotesFromComments(db);
@@ -345,7 +337,7 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
        
        await setSyncState(db, 'last_synced_at', syncStart);
        await setSyncState(db, 'sync_running', '0');
-       await db.prepare("DELETE FROM sync_state WHERE key = 'sync_cursor'").run();
+       await db.prepare('DELETE FROM sync_state WHERE key = ?').bind(cursorKey).run();
        return { ok: true, message: `Sync complete at ${syncStart}`, stats, done: true };
      }
 
@@ -374,7 +366,8 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
     // Fetch all PRs for this repo (1-2 subrequests, paginated)
     const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
     const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
-    const allPRs    = [...openPRs, ...closedPRs].filter(pr => pr.updated_at >= repoSince);
+    const repositoryPRs = [...openPRs, ...closedPRs];
+    const allPRs = repositoryPRs.filter(pr => pr.updated_at >= repoSince);
 
     // Slice this chunk
     const chunk   = allPRs.slice(prStart, prStart + CHUNK_SIZE);
@@ -383,21 +376,35 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
     for (const pr of chunk) {
       stats.prs++;
-      // Reactions always skipped on manual chunked sync — cron handles them
-      const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, { skipReactions: true });
+      const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, {
+        skipReactions,
+        reactionJobRunId: opts.reactionJobRunId,
+        pipelineRunId: opts.pipelineRunId,
+      });
       stats.comments += result.comments;
     }
 
     // After last chunk for this repo: update open_prs count
     if (!hasMore) {
-      const finalSyncedAt = allPRs[0]?.updated_at ?? syncStart;
+      const inventoryCleanup = await reconcileRepositoryPullRequests(
+        db,
+        repo.id,
+        repositoryPRs.map(pr => pr.id),
+      );
+      console.log(JSON.stringify({
+        event: 'repository_pull_request_inventory_reconciled',
+        repository_id: repo.id,
+        checked: inventoryCleanup.checked,
+        flagged: inventoryCleanup.flagged,
+      }));
+      const finalSyncedAt = repositoryPRs[0]?.updated_at ?? syncStart;
       await updateRepoPRCount(db, repo.id, syncStart, finalSyncedAt);
     }
 
     // Advance cursor
     const nextRepoIdx  = hasMore ? repoIdx : repoIdx + 1;
     const nextPrStart  = hasMore ? prEnd : 0;
-    await setSyncState(db, 'sync_cursor', `${nextRepoIdx}:${nextPrStart}`);
+    await setSyncState(db, cursorKey, `${nextRepoIdx}:${nextPrStart}`);
 
     const reposLeft = repos.length - nextRepoIdx;
     const prsLeft   = hasMore ? allPRs.length - prEnd : 0;
@@ -409,7 +416,168 @@ export async function runSyncOneRepo(env: Env): Promise<SyncResult> {
 
     return { ok: true, message: msg, stats, done: false, cursor: `${nextRepoIdx}:${nextPrStart}`, total_repos: repos.length };
   } catch (err) {
-    await setSyncState(db, 'sync_running', '0');
+    if (!opts.cursorKey) await setSyncState(db, 'sync_running', '0');
     return { ok: false, message: (err as Error)?.message ?? String(err), stats };
   }
+}
+
+/** Seeds a stable reaction-refresh queue from the comments currently stored in D1. */
+export async function seedCommentReactionWorkItems(
+  db: D1Database,
+  jobRunId: string,
+  pipelineRunId: string = jobRunId,
+): Promise<number> {
+  const timestamp = new Date().toISOString();
+  await db.prepare(`
+    INSERT OR IGNORE INTO sync_work_items (
+      id, pipeline_run_id, job_run_id, job_key, entity_type, entity_id,
+      payload_json, status, created_at, updated_at
+    )
+    SELECT ? || ':reaction:' || CAST(pc.id AS TEXT), ?, ?, 'comment_reactions',
+           'comment', CAST(pc.id AS TEXT), '{}', 'pending', ?, ?
+      FROM pr_comments pc
+      JOIN pull_requests pr ON pr.id = pc.pr_id
+      JOIN repos r ON r.id = pr.repo_id
+     WHERE pr.deleted = 0 AND r.active = 1
+  `).bind(jobRunId, pipelineRunId, jobRunId, timestamp, timestamp).run();
+  const row = await db.prepare(`
+    SELECT COUNT(*) AS count FROM sync_work_items
+     WHERE job_run_id = ? AND job_key = 'comment_reactions'
+  `).bind(jobRunId).first<{ count: number }>();
+  return Number(row?.count ?? 0);
+}
+
+/** Processes exactly one queued comment-reaction work item. */
+export async function runSyncOneCommentReaction(
+  env: Env,
+  pipelineRunId: string,
+): Promise<{ done: boolean; reactions: number }> {
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE sync_work_items
+       SET status = 'pending', leased_at = NULL, lease_expires_at = NULL, updated_at = ?
+     WHERE pipeline_run_id = ? AND job_key = 'comment_reactions'
+       AND status = 'leased' AND lease_expires_at <= ?
+  `).bind(now, pipelineRunId, now).run();
+  const item = await env.DB.prepare(`
+    SELECT wi.id, wi.entity_id, pc.repo_name, pc.login
+      FROM sync_work_items wi
+      JOIN pr_comments pc ON CAST(pc.id AS TEXT) = wi.entity_id
+     WHERE wi.pipeline_run_id = ?
+       AND wi.job_key = 'comment_reactions'
+       AND wi.status = 'pending'
+     ORDER BY CAST(wi.entity_id AS INTEGER)
+     LIMIT 1
+  `).bind(pipelineRunId).first<{
+    id: string;
+    entity_id: string;
+    repo_name: string;
+    login: string;
+  }>();
+  if (!item) return { done: true, reactions: 0 };
+
+  const claimedAt = new Date().toISOString();
+  const claim = await env.DB.prepare(`
+    UPDATE sync_work_items
+       SET status = 'leased', attempts = attempts + 1, leased_at = ?,
+           lease_expires_at = ?, updated_at = ?
+     WHERE id = ? AND status = 'pending'
+  `).bind(
+    claimedAt,
+    new Date(Date.now() + 15 * 60_000).toISOString(),
+    claimedAt,
+    item.id,
+  ).run();
+  if ((claim.meta.changes ?? 0) !== 1) return { done: false, reactions: 0 };
+
+  try {
+    const commentId = Number(item.entity_id);
+    const reactions = await ghFetchAll<GitHubReaction>(
+      `/repos/${ORG}/${item.repo_name}/issues/comments/${commentId}/reactions`,
+      env.GITHUB_TOKEN,
+    );
+    const rows: ReactionData[] = [];
+    for (const reaction of reactions) {
+      const reactor = reaction.user?.login;
+      if (!reactor || reactor === item.login || isAutomatedAccount(reactor)) continue;
+      rows.push({
+        commentId,
+        reactor,
+        content: reaction.content,
+        isPositive: reactionPolarity(reaction.content) === 'positive',
+      });
+    }
+    await env.DB.prepare('DELETE FROM comment_reactions WHERE comment_id = ?').bind(commentId).run();
+    if (rows.length > 0) await upsertReactions(env.DB, rows);
+    await env.DB.prepare(`
+      UPDATE sync_work_items
+         SET status = 'succeeded', leased_at = NULL, lease_expires_at = NULL,
+             last_error_code = NULL, last_error_summary = NULL, updated_at = ?
+       WHERE id = ?
+    `).bind(new Date().toISOString(), item.id).run();
+    return { done: false, reactions: rows.length };
+  } catch (error) {
+    await env.DB.prepare(`
+      UPDATE sync_work_items
+         SET status = 'pending', leased_at = NULL, lease_expires_at = NULL,
+             last_error_code = 'reaction_sync_failed', last_error_summary = ?, updated_at = ?
+       WHERE id = ?
+    `).bind(
+      error instanceof Error ? error.message.slice(0, 500) : 'Reaction sync failed',
+      new Date().toISOString(),
+      item.id,
+    ).run();
+    throw error;
+  }
+}
+
+/** Rebuilds reaction-derived denormalized counts after the reaction queue drains. */
+export async function rebuildReactionDerivedCounts(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare(`
+      UPDATE pr_participants
+         SET reactions_received = (
+           SELECT COUNT(*)
+             FROM pr_comments pc
+             JOIN comment_reactions cr ON cr.comment_id = pc.id
+            WHERE pc.pr_id = pr_participants.pr_id
+              AND pc.login = pr_participants.login
+         )
+    `),
+    db.prepare(`
+      UPDATE pull_requests
+         SET consensus_accept = (
+               SELECT COUNT(*) + COALESCE(SUM((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id AND cr.content = '+1')), 0)
+                 FROM pr_comments pc WHERE pc.pr_id = pull_requests.id AND pc.decision = 'accept'
+             ),
+             consensus_modify = (
+               SELECT COUNT(*) + COALESCE(SUM((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id AND cr.content = '+1')), 0)
+                 FROM pr_comments pc WHERE pc.pr_id = pull_requests.id AND pc.decision = 'modify'
+             ),
+             consensus_reject = (
+               SELECT COUNT(*) + COALESCE(SUM((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id AND cr.content = '+1')), 0)
+                 FROM pr_comments pc WHERE pc.pr_id = pull_requests.id AND pc.decision = 'reject'
+             )
+    `),
+  ]);
+}
+
+/** Prepares database projections and resolved duplicate relationships without GitHub writes. */
+export async function prepareCanonicalProjections(env: Env): Promise<void> {
+  await reconcileCurrentParticipants(env.DB);
+  await rebuildReactionDerivedCounts(env.DB);
+  await syncVotesFromComments(env.DB);
+  await rebuildDuplicates(env.DB, env.GITHUB_TOKEN, { skipGitHubMutations: true });
+}
+
+export async function closeCanonicalDuplicate(env: Env): Promise<{ done: boolean; closed: number }> {
+  return closeOneResolvedDuplicate(env.DB, env.GITHUB_TOKEN);
+}
+
+/** Finalizes database-only contributor projections after bounded GitHub writes drain. */
+export async function finalizeCanonicalSync(env: Env): Promise<void> {
+  const completedAt = new Date().toISOString();
+  await rebuildContributors(env.DB, completedAt);
+  await setSyncState(env.DB, 'last_synced_at', completedAt);
+  await setSyncState(env.DB, 'sync_running', '0');
 }

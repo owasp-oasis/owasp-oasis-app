@@ -10,10 +10,11 @@ OASIS uses **semantic versioning with calendar reset**: `YYYY.MM.RRR`
 
 ### Rules
 
-1. **Every `git push` to `main` requires a stated version.** Include it in the commit message:
-   ```
-   git commit -m "feat: add validator onboarding survey (v2026.07.005)"
-   ```
+1. **Maintainers assign versions when preparing a release.** Ordinary
+   contribution and merge commits do not require a version in their subject.
+   Contributors should not update release tags, the displayed application
+   version, onboarding version, or this release history unless release work is
+   explicitly included in the issue or requested by a maintainer.
 
 2. **Counter resets to `001` at the start of each new month.** If the last commit of June was `2026.06.047`, the first commit of July is `2026.07.001`.
 

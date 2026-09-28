@@ -26,6 +26,7 @@ import {
 import { getSession } from './auth.js';
 import { ORG } from '../github.js';
 import { syncTeamBadges } from '../teamBadges.js';
+import { recordSubmittedVote } from '../analytics.js';
 
 /* ─── POST /api/vote ─────────────────────────────────────────── */
 export async function handleVote(request: Request, env: Env): Promise<Response> {
@@ -364,14 +365,33 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   }
 
   // Insert user_votes record
+  let voteRecorded = false;
   try {
     await env.DB.prepare(
       `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now).run();
+    await env.DB.prepare(`
+      UPDATE validation_requests
+      SET status = 'responded', updated_at = ?
+      WHERE pr_id = ? AND status = 'open'
+    `).bind(now, pr.id).run();
+    voteRecorded = true;
     if (teamId) await syncTeamBadges(env, teamId, session.github_login);
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
+  }
+
+  if (voteRecorded) {
+    try {
+      await recordSubmittedVote(env.DB, pr.repo_id, now);
+    } catch (err) {
+      // Analytics must not change the authoritative vote outcome.
+      console.error(JSON.stringify({
+        event: 'engagement_vote_metric_failed',
+        error: (err as Error)?.message ?? 'unknown_error',
+      }));
+    }
   }
 
   return jsonOk({ comment_id: commentId, decision: decisionKey, parent_pr_id: resolvedParentId, team_id: teamId }, request);

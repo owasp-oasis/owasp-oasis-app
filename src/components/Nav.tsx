@@ -5,12 +5,13 @@ import './Nav.css'
 
 const links = [
   { to: '/', label: 'Home', exact: true },
+  { to: '/dashboard', label: 'Dashboard', exact: false },
   { to: '/about', label: 'About', exact: false },
   { to: '/overview', label: 'Overview', exact: false },
   { to: '/workspace', label: 'Workspace', exact: false },
   { to: '/support', label: 'Support', exact: false },
   { to: '/sponsors', label: 'Sponsors', exact: false },
-  { to: '/news', label: 'News', exact: false },
+  { to: '/news', label: 'News & Events', exact: false },
 ]
 
 interface NavProps {
@@ -117,6 +118,33 @@ export default function Nav({ onOpenOnboarding }: NavProps) {
 
               {accountOpen && (
                 <div id="nav-account-menu" className="nav-account-menu" role="menu">
+                  {user.role === 'admin' && (
+                    <>
+                      <NavLink
+                        to="/admin"
+                        className="nav-account-action nav-account-action--admin"
+                        role="menuitem"
+                        onClick={closeMenu}
+                      >
+                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path d="M8 1.5 13 3.4v3.8c0 3.3-2 5.8-5 7.3-3-1.5-5-4-5-7.3V3.4L8 1.5Z" />
+                          <path d="M6 8h4M8 6v4" />
+                        </svg>
+                        User access
+                      </NavLink>
+                      <NavLink
+                        to="/admin/analytics"
+                        className="nav-account-action nav-account-action--admin"
+                        role="menuitem"
+                        onClick={closeMenu}
+                      >
+                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path d="M2 13.5V8.8h2.5v4.7H2Zm4.7 0V5.2h2.6v8.3H6.7Zm4.8 0V2h2.5v11.5h-2.5Z" />
+                        </svg>
+                        Analytics
+                      </NavLink>
+                    </>
+                  )}
                   <button
                     type="button"
                     className="nav-account-action"

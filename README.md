@@ -8,6 +8,19 @@ Two live environments:
 
 ---
 
+## Contributing
+
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for issue selection, branch and
+promotion workflow, implementation expectations, testing, commit messages, pull
+requests, and guidance for AI-assisted contributions. Suspected vulnerabilities
+in OASIS itself must follow [`SECURITY.md`](SECURITY.md) and must not be
+disclosed in a public issue.
+
+All community participation is governed by the
+[OWASP Code of Conduct](https://owasp.org/www-policy/operational/code-of-conduct).
+
+---
+
 ## Branch strategy
 
 ```
@@ -17,21 +30,60 @@ preview   ← staging     — auto-deploys to preview.owasp-oasis.org on push
 
 Deployment is handled by **Cloudflare Git integration**. GitHub Actions validates pushes and pull requests but has no Cloudflare credentials and never deploys.
 
-### Recommended workflow
+### Required development workflow
 
-```
-preview  ←── feature/your-feature   (open PR, merge to preview to test)
-   └──→ main                        (merge preview to main to go live)
+All new work starts from the latest `main` on a short-lived, purpose-named branch. Use `feat/new-feature-name` for a feature; use the equivalent `fix/`, `chore/`, or `docs/` prefix when that more accurately describes the change.
+
+```bash
+git switch main
+git pull --ff-only
+git switch -c feat/new-feature-name
 ```
 
-1. Branch off `preview` for your work
-2. Open a PR into `preview` — get a review
-3. Merge → auto-deploys to `preview.owasp-oasis.org` for testing
-4. When ready for production, open a PR from `preview` into `main`
+Keep commits atomic and independently reversible. Commit messages must explain the reason for the change, resulting behavior, verification performed, and rollback scope. Before requesting review, run the complete local check unless the PR documents why a check cannot run:
+
+```bash
+npm run check
+```
+
+Choose one promotion path based on the validation the change requires:
+
+#### Local validation is sufficient
+
+```text
+main → feat/new-feature-name → pull request → main
+```
+
+1. Develop and test on `feat/new-feature-name`.
+2. Push the feature branch and open a PR from `feat/new-feature-name` into `main`.
+3. Merge only after local checks, required GitHub checks, and review pass.
+4. The merge to `main` triggers the production deployment through Cloudflare Git integration.
+
+#### Remote preview validation is required
+
+```text
+main → feat/new-feature-name → pull request → preview → pull request → main
+```
+
+1. Develop and test locally on `feat/new-feature-name`.
+2. Open a PR from `feat/new-feature-name` into `preview`.
+3. Merge after review; Cloudflare deploys the resulting `preview` branch to `preview.owasp-oasis.org`.
+4. Complete remote testing against the preview deployment. Apply fixes on the feature branch and merge them through follow-up `feat/new-feature-name` → `preview` PRs; ensure the final preview build passes.
+5. Open a PR from `preview` into `main`, documenting the remote evidence and rollback plan.
+6. Merge the `preview` → `main` PR only after remote validation and required checks pass.
+7. Reconcile `preview` back to the resulting `main` tip after promotion so both long-lived branches start the next feature from the same commit.
+
+Do not develop directly on `preview`, push directly to either long-lived branch, or mix unrelated features into a preview promotion. If `main` changes while preview validation is underway, bring the updated `main` into the feature/preview candidate through a reviewed PR and repeat the affected remote checks before promotion.
 
 ---
 
 ## Local development
+
+Authorization and role-protected feature development are documented in
+[`AUTHORIZATION.md`](AUTHORIZATION.md). New interactive administrative APIs
+must use the GitHub session, server-resolved role, mutation CSRF validation,
+and privileged-action audit pattern described there; `ADMIN_SECRET` is not a
+browser authorization mechanism.
 
 ### First-time setup
 
@@ -85,11 +137,12 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   security.ts              ← Security headers, CORS, CSRF, rate limiting, response helpers
   validation.ts            ← Input validators (email, GitHub handle, role) and body parser
   db.ts                    ← D1 database helpers (upsert, getSyncState, rebuildContributors)
+  responseBadges.ts        ← Independent response-recognition rules and calculations
   github.ts                ← GitHub API client, comment/PR body parsers, bot detection
   sync.ts                  ← GitHub sync engine (cron full sync + chunked manual sync)
   hubspot.ts               ← Durable registration and application contact sync
   handlers/
-    leaderboard.ts         ← /api/leaderboard/* endpoint handlers
+    workspace.ts           ← /api/workspace/* endpoint handlers
     register.ts            ← POST /api/register
     apply.ts               ← POST /api/apply
     feedback.ts            ← POST /api/feedback — creates GitHub issue from preview banner form
@@ -102,12 +155,12 @@ src/                       ← React SPA (frontend)
     AuthContext.tsx         ← React context — GitHub auth state (user, loading, logout, refetch)
   pages/
     Home.tsx               ← Landing page
-    Leaderboards.tsx       ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
+    Workspace.tsx          ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
     About.tsx              ← Team and project background
     Overview.tsx           ← How OASIS works
     Support.tsx            ← How to help: share, recruit, validate, sponsor
     Sponsors.tsx           ← Sponsors page
-    leaderboards/          ← One file per leaderboard tab
+    workspace/             ← One file per workspace tab
       PRsTab.tsx           ← PR table with My Vote column, Needs My Vote filter
       ContributorsTab.tsx
       MaintainersTab.tsx
@@ -164,10 +217,11 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `security.ts` | Content Security Policy, security response headers, CORS preflight, CSRF token generation and validation, rate limiting (KV-backed), `jsonOk`/`jsonErr` response helpers |
 | `validation.ts` | Sanitizes and validates all user input: email (RFC 5322 + blocklist), GitHub username, name, role, request body size and JSON parsing |
 | `db.ts` | All D1 read/write operations: upsert repos, PRs, participants, contributors; sync state key/value store; `rebuildContributors` aggregation |
+| `responseBadges.ts` | Calculates First Responder, Fast Responder, and Coverage Contributor independently of reputation and vote weight |
 | `github.ts` | GitHub REST API client (`ghFetch`, `ghFetchAll` with pagination); parses OASIS decision comments (`accept`/`modify`/`reject`); detects SAST tool from PR body; filters automated/bot accounts |
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
 | `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
-| `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
+| `handlers/workspace.ts` | Six read-only API endpoints: `/api/workspace/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
 | `handlers/register.ts` | `POST /api/register` — validates and atomically queues registration contact data for HubSpot |
 | `handlers/apply.ts` | `POST /api/apply` — stores role applications and queues contact fields for HubSpot while keeping narrative text in D1 |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
@@ -198,9 +252,9 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `Footer` | Site-wide footer |
 | `PreviewBanner` | Dismissible banner shown on the preview environment indicating the site is in staging; includes a link to submit feedback |
 | `RegisterForm` | Validator/sponsor registration form — posts to `POST /api/register` |
-| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
+| `SortableTable` / `ColHeader` | Generic sortable data table used by all workspace tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
 | `QuotesCarousel` | Auto-advancing animated carousel for testimonial/quote content on the Home page |
-| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
+| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the workspace; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
 | `VoteForm` | Form inside the PR Panel for submitting an accept/modify/reject vote; builds the OASIS validation comment template and posts to `POST /api/vote` |
 | `VoteModal` | Modal wrapper that prompts unauthenticated users to sign in with GitHub before voting |
 
@@ -249,11 +303,11 @@ The OAuth callback URL registered in the GitHub app must be `https://preview.owa
 
 ## Voting system
 
-Validators can submit their OASIS validation decision directly from the leaderboard PR panel.
+Validators can submit their OASIS validation decision directly from the workspace PR panel.
 
 ### How it works
 
-1. User clicks a PR row in the leaderboards → PR Panel slides open
+1. User clicks a PR row in the workspace → PR Panel slides open
 2. User clicks the "Vote" tab (sign-in modal shown if not authenticated)
 3. User selects **Accept**, **Modify**, or **Reject** and fills in the structured form
 4. `POST /api/vote` validates CSRF, session, rate limit, and body; then:
@@ -308,7 +362,8 @@ The **Pull Requests** table in the Workspace is the primary work queue for valid
 | Column | Notes |
 |---|---|
 | Pull Request | Combined column: muted repo-name link (top) + PR number and full title below. Title truncated by CSS ellipsis — no JS slice. |
-| Status | OASIS status badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). Header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Community status | OASIS validator outcome badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). The header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Workflow | Separate maintainer/upstream lifecycle badge (`Maintainer Review`, `Changes Requested`, `Maintainer Accepted`, `Submitted Upstream`, `Upstream Changes Requested`, `Merged Upstream`, or `Closed Without Merge`). |
 | My Vote | Shown only when logged in. Displays the user's vote with coloured badge. Row gets a coloured left-border inset shadow: green = Accept, amber = Modify, red = Reject. Also shows `pr-row-agree` (green tint) or `pr-row-disagree` (amber tint) bg overlay when the user's vote matches/diverges from the crowd plurality. |
 | Consensus | Compact stacked bar (Accept/Modify/Reject proportions) + total vote count. Tooltip shows breakdown including OASIS vs non-OASIS comment counts. |
 | Participants | Total unique participants. |
@@ -395,7 +450,7 @@ wrangler d1 execute oasis-db --remote \
 # Apply schema to a fresh database
 wrangler d1 execute oasis-db --remote --file=schema.sql
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 ```
@@ -411,7 +466,7 @@ The account ID is in the Cloudflare dashboard under **Account Home → Overview*
 
 ## Secrets
 
-Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured.
+Secrets are set per-worker and are not shared between preview and production. HubSpot synchronization is enabled only where `HUBSPOT_TOKEN` is configured. The daily analytics archive is enabled only in production when both Cloudflare analytics secrets are configured.
 
 ```bash
 # Set secrets on the preview worker
@@ -434,6 +489,15 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used to exchange OAuth codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token. Requires only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Cloudflare API token used only by the production daily archive. Scope it to the OASIS zone with Analytics Read permission. |
+
+The non-secret `CLOUDFLARE_ZONE_ID` is committed under `[env.production.vars]` in `wrangler.toml` so Git-based deployments preserve it. Set only the production Analytics API token interactively:
+
+```bash
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
+```
+
+The adaptive collector runs daily at 03:45 UTC, archives at most five closed days per run, and seeds a seven-day queue that fits that dataset's short retention. A separate admin-triggered historical job first discovers the zone's `httpRequests1dGroups` capability and retention, then archives at most five eligible older days per run. It never guesses a retention window, and each date records its source dataset and available metric families. Once archived in D1, daily aggregates remain available for the application's longer retention period. Administrators can inspect or retry both jobs from `/workspace/status` and inspect their aggregates at `/admin/analytics`. Preview collection is disabled because preview shares the production D1 database.
 
 `HUBSPOT_PROPERTY_MAP` is a non-secret JSON environment variable that maps OASIS fields to existing HubSpot custom-property internal names. Supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`; omitted fields are not sent. For example: `{"github":"oasis_github","role":"oasis_role","source":"oasis_source"}`.
 
@@ -461,7 +525,7 @@ npm run build && npm run deploy
 ## Commit convention
 
 ```
-feat: add leaderboard tools tab
+feat: add workspace tools tab
 fix: CSRF cookie not sent on mobile Safari
 chore: update wrangler to 4.x
 docs: update README for TypeScript refactor

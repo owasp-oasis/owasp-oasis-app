@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 interface AuthUser {
   login: string
   avatar_url: string | null
+  role: 'admin' | 'moderator' | 'member' | 'guest'
 }
 
 interface UserPreferences {

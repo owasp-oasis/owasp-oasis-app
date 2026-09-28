@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type MouseEvent } from 'react'
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Decision } from '../components/VoteForm'
-import ProjectsTab from './leaderboards/ProjectsTab'
-import PRsTab from './leaderboards/PRsTab'
-import ContributorsTab from './leaderboards/ContributorsTab'
-import MaintainersTab from './leaderboards/MaintainersTab'
-import ToolsTab from './leaderboards/ToolsTab'
-import TeamsTab from './leaderboards/TeamsTab'
-import './Leaderboards.css'
+import ProjectsTab from './workspace/ProjectsTab'
+import PRsTab from './workspace/PRsTab'
+import ContributorsTab from './workspace/ContributorsTab'
+import MaintainersTab from './workspace/MaintainersTab'
+import ToolsTab from './workspace/ToolsTab'
+import './Workspace.css'
+import TeamsTab from './workspace/TeamsTab'
 
 export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers' | 'teams'
 
@@ -22,6 +22,7 @@ const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
 interface Meta {
   last_synced_at: string | null
   sync_running: boolean
+  status?: 'healthy' | 'running' | 'degraded' | 'stale' | 'unknown'
 }
 
 function timeAgo(iso: string | null): string {
@@ -35,11 +36,11 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-interface LeaderboardsProps {
+interface WorkspaceProps {
   activeTab: WorkspaceTab
 }
 
-export default function Leaderboards({ activeTab }: LeaderboardsProps) {
+export default function Workspace({ activeTab }: WorkspaceProps) {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
@@ -84,9 +85,16 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   const [myVotes]           = useState<Map<number, Decision>>(new Map())
 
   useEffect(() => {
-    fetch('/api/leaderboard/meta')
+    fetch('/api/sync/status')
       .then(r => r.json())
-      .then(d => setMeta(d as Meta))
+      .then(d => {
+        const status = d as { overall?: { last_success_at?: string | null; sync_running?: boolean; status?: Meta['status'] } }
+        setMeta({
+          last_synced_at: status.overall?.last_success_at ?? null,
+          sync_running: status.overall?.sync_running ?? false,
+          status: status.overall?.status,
+        })
+      })
       .catch(() => {})
   }, [])
 
@@ -100,9 +108,9 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
         const docked = !entry.isIntersecting
         setTabsSticky(docked)
         if (docked) {
-          document.body.classList.add('lb-tabs-docked')
+          document.body.classList.add('ws-tabs-docked')
         } else {
-          document.body.classList.remove('lb-tabs-docked')
+          document.body.classList.remove('ws-tabs-docked')
         }
       },
       { threshold: 0, rootMargin: '0px' }
@@ -111,7 +119,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
 
     return () => {
       observer.disconnect()
-      document.body.classList.remove('lb-tabs-docked')
+      document.body.classList.remove('ws-tabs-docked')
     }
   }, [])
 
@@ -122,11 +130,11 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
     setTabErrors(prev => { const n = {...prev}; delete n[tab]; return n })
     try {
       const endpoints: Record<WorkspaceTab, string> = {
-        projects:     '/api/leaderboard/repos',
-        prs:          '/api/leaderboard/prs',
-        contributors: '/api/leaderboard/contributors',
-        tools:        '/api/leaderboard/tools',
-        maintainers:  '/api/leaderboard/maintainers',
+        projects:     '/api/workspace/repos',
+        prs:          '/api/workspace/prs',
+        contributors: '/api/workspace/contributors',
+        tools:        '/api/workspace/tools',
+        maintainers:  '/api/workspace/maintainers',
         teams:        '/api/teams',
       }
       const res = await fetch(endpoints[tab], tab === 'teams' ? { cache: 'no-store' } : undefined)
@@ -179,7 +187,7 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
   }, [activeTab, fetchTab])
 
   return (
-    <div className={'leaderboards workspace' + (activeTab === 'teams' ? ' workspace--teams' : '')}>
+    <div className={'workspace' + (activeTab === 'teams' ? ' workspace--teams' : '')}>
       <div className="page-hero workspace-hero">
         <div className="container">
           <div className="workspace-hero__eyebrow">OASIS work area</div>
@@ -217,9 +225,20 @@ export default function Leaderboards({ activeTab }: LeaderboardsProps) {
               </NavLink>
             ))}
             {/* Sync status chip — right side of tab bar */}
-            <span className="lb-sync-chip" title={meta.last_synced_at ?? undefined}>
-              {meta.sync_running ? '⟳ syncing…' : `↻ ${timeAgo(meta.last_synced_at)}`}
-            </span>
+            <NavLink
+              className={`lb-sync-chip lb-sync-chip--${meta.status ?? 'unknown'}`}
+              title={`${meta.status ?? 'unknown'} — last complete Workspace sync: ${meta.last_synced_at ?? 'not available'}`}
+              to="/workspace/status"
+              aria-label={`View synchronization status. Workspace is ${meta.status ?? 'unknown'}.`}
+            >
+              {meta.sync_running
+                ? '⟳ syncing…'
+                : meta.status === 'degraded'
+                  ? '⚠ degraded'
+                  : meta.status === 'stale'
+                    ? `⚠ stale · ${timeAgo(meta.last_synced_at)}`
+                    : `↻ ${timeAgo(meta.last_synced_at)}`}
+            </NavLink>
           </div>
 
           {/* Tab panels */}

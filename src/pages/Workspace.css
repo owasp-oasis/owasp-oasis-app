@@ -96,9 +96,15 @@
   border-radius: 100px;
   padding: 3px 10px;
   white-space: nowrap;
-  cursor: default;
+  cursor: pointer;
   font-family: var(--mono);
+  text-decoration: none;
 }
+
+.lb-sync-chip:hover { color: var(--blue-dark); border-color: var(--blue); text-decoration: none; }
+.lb-sync-chip--healthy { color: #06703a; background: #ecfdf5; border-color: #bbf7d0; }
+.lb-sync-chip--running { color: var(--blue-dark); background: #eff6ff; border-color: #bfdbfe; }
+.lb-sync-chip--degraded, .lb-sync-chip--stale { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
 
 .lb-panel {
   min-height: 300px;

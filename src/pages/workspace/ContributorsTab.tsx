@@ -3,6 +3,7 @@ import SortableTable from '../../components/SortableTable'
 import type { Column } from '../../components/SortableTable'
 import ColHeader from '../../components/ColHeader'
 import ContributorPanel from '../../components/ContributorPanel/ContributorPanel'
+import ContributorAvatar from '../../components/ContributorAvatar'
 
 interface Contributor {
   login: string
@@ -35,12 +36,11 @@ const columns: Column<Contributor>[] = [
     label: 'Contributor',
     render: (v, row) => (
       <div className="contributor-cell">
-        <img
-          src={String(row.avatar_url ?? `https://github.com/${v}.png?size=32`)}
-          alt=""
+        <ContributorAvatar
+          login={String(v)}
+          src={row.avatar_url}
           className="contributor-avatar"
-          width={28}
-          height={28}
+          size={28}
         />
         <span className="contributor-login">{String(v)}</span>
       </div>

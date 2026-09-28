@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTeamWithMedia, teamGet, teamPost, teamInitials, teamLogoMark } from '../../../src/pages/leaderboards/teamApi'
+import { createTeamWithMedia, teamGet, teamPost, teamInitials, teamLogoMark } from '../../../src/pages/workspace/teamApi'
 
 afterEach(() => vi.unstubAllGlobals())
 

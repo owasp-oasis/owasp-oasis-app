@@ -17,6 +17,16 @@ Both workers share a single D1 database (`oasis-db`) and a single KV namespace (
 
 Deployment is triggered automatically by **Cloudflare Git integration**. GitHub Actions runs validation only and has no Cloudflare deployment credentials.
 
+### Branch-driven promotion
+
+`main` is the development base and production branch. New work must start on a short-lived branch such as `feat/new-feature-name` and pass `npm run check` locally before review.
+
+- When local validation is sufficient, open `feat/new-feature-name` → `main`.
+- When a live Cloudflare environment is required, open `feat/new-feature-name` → `preview`, validate the deployed preview, then open `preview` → `main`.
+- After production promotion, reconcile `preview` to the resulting `main` tip.
+
+All transitions into `preview` or `main` use pull requests. Do not push directly to either deployment branch or combine unrelated changes in one preview promotion. The complete contributor workflow, including handling changes to `main` during preview validation, is documented in [README.md](./README.md#required-development-workflow).
+
 ---
 
 ## Prerequisites
@@ -146,6 +156,7 @@ wrangler secret put HUBSPOT_TOKEN --name owasp-oasis-app-preview
 wrangler secret put GITHUB_TOKEN --name owasp-oasis
 wrangler secret put ADMIN_SECRET  --name owasp-oasis
 wrangler secret put HUBSPOT_TOKEN --name owasp-oasis
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN --env production
 
 # List secrets on a worker
 wrangler secret list --name owasp-oasis-app-preview
@@ -160,6 +171,11 @@ wrangler secret list --name owasp-oasis-app-preview
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID — used for validator sign-in (vote, react). |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret — used by the callback handler to exchange authorization codes for access tokens. |
 | `HUBSPOT_TOKEN` | HubSpot private-app token used to create and update contacts. Grant only `crm.objects.contacts.read` and `crm.objects.contacts.write`. |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | Production-only API token for the daily GraphQL analytics archive. Scope it to the OASIS zone with Analytics Read permission. |
+
+The non-secret `CLOUDFLARE_ZONE_ID` is versioned in `[env.production.vars]` in `wrangler.toml`. This prevents a Wrangler deployment from deleting a value that was added only through the dashboard.
+
+After setting the analytics token and deploying migrations through `0011_historical_analytics_backfill.sql`, sign in as an administrator and open `/admin/analytics`. Use **Collect recent days** to verify the scheduled adaptive collector. Use **Discover & backfill older data** to ask Cloudflare for the zone's daily-rollup capability and retention before any older dates are queued. Each invocation processes at most five dates. The status page tracks `cloudflare_analytics` and `cloudflare_analytics_backfill` separately and lets an administrator retry either job independently.
 
 Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 
@@ -185,11 +201,11 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="SELECT COUNT(*) as total FROM registrations"
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 
-# Check contributor leaderboard
+# Check contributors
 wrangler d1 execute oasis-db --remote \
   --command="SELECT login, prs_worked, total_interactions, reputation FROM contributors ORDER BY reputation DESC"
 
@@ -223,20 +239,43 @@ node export-db.js
 | `contributors` | Aggregated per-user validation stats (prs_worked, accepts, modifies, rejects, reactions_received) |
 | `pr_participants` | Per-PR per-user interaction records |
 | `sync_state` | Key/value store for sync cursor, last sync times, running flag |
-| `user_sessions` | Active GitHub OAuth sessions (30-day TTL; HttpOnly cookie maps to `session_id`) |
+| `user_sessions` | Active GitHub OAuth sessions (7-day TTL; HttpOnly cookie maps to `session_id`) |
+| `user_roles` | Temporary GitHub-ID-backed application role assignments |
+| `privileged_action_audit` | Append-only outcome log for role-protected server actions |
 | `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
+| `validation_requests` | Availability clock and lifecycle used only for response recognition; historical backfill rows are not badge eligible |
+| `analytics_daily_routes` | Daily normalized route, page-view, navigation-duration, and response-class aggregates; no visitor identifiers |
+| `analytics_daily_cloudflare` | Daily estimated Cloudflare request, visit, response, bandwidth, and cache aggregates |
+| `analytics_collection_days` | Idempotent daily archive checkpoint and retry state |
+| `analytics_daily_engagement` | Daily project-level review and vote aggregates; no user identifier |
+| `analytics_event_receipts` | Anonymous random idempotency keys retained for two days |
 
 ---
 
 ## GitHub sync
 
-The leaderboard is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
+The workspace is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
 
-### Scheduled syncs (automatic)
+### Bounded Workflow rollout
 
-GitHub schedule: `0 */4 * * *` — every 4 hours.
+The production GitHub sync is implemented as a chain of bounded Workflow instances under the Workers Free 50-subrequest ceiling, which Cloudflare applies automatically. Do not add a Wrangler `[limits]` block while this Worker uses the Free plan: custom runtime limits are supported only by the paid Standard usage model and will make deployment fail. Repository/PR collection handles one PR per instance, reaction collection handles one validation comment per instance, and duplicate closing handles one PR (two GitHub writes) per instance. A D1 lease prevents overlapping canonical pipelines. The Workflow pauses before its tracked daily step allowance is exhausted and resumes after the UTC reset.
 
-The cron sync runs `runSync()` which uses the Worker's 1000 subrequest limit. It fetches all repos, PRs, comments, and reactions (including `+1` reactions on OASIS-template comments, which contribute to reputation scores).
+Production runs the canonical Workflow every four hours (`0 */4 * * *`). Before deploying a migration, record a D1 Time Travel bookmark:
+
+```bash
+npx wrangler d1 time-travel info oasis-db --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --json
+npx wrangler d1 migrations apply oasis-db --remote --env production
+```
+
+After deployment, start one production canary and inspect `/workspace/status` until the canonical pipeline succeeds:
+
+```bash
+curl --fail-with-body -sS -X POST \
+  -H "X-Admin-Secret: ${OASIS_ADMIN_SECRET}" \
+  https://www.owasp-oasis.org/api/admin/sync/canonical/run
+```
+
+Use the saved Time Travel bookmark only when canonical writes themselves must be reverted; restoring D1 also rolls back unrelated database writes after that bookmark and therefore requires explicit review.
 
 Production also processes the HubSpot queue at `15 * * * *`. Form submissions are written to D1 together with their outbox job, so a temporary HubSpot failure cannot lose the contact. Failed jobs return to `pending` with capped exponential backoff; stale processing claims are recovered automatically. Logs contain batch counts and safe error codes, never contact payloads or API response bodies.
 
@@ -246,16 +285,38 @@ Before enabling HubSpot, create any custom contact properties referenced by `HUB
 
 Wrangler enables persisted Worker logs and invocation logs at full head sampling. Distributed traces remain disabled. Runtime code emits structured operational events and must not include registration records, application narratives, OAuth values, authorization headers, or external API response bodies.
 
-### Manual sync trigger
+### Temporary application roles and manual retries
 
-```bash
-# Trigger one chunk (10 PRs) — call repeatedly until done: true
-curl https://preview.owasp-oasis.org/leaderboard-refresh
+Migration `0009_user_roles.sql` introduces the deliberately small `admin`, `moderator`, `member`, and `guest` role model. Unauthenticated requests are guests, authenticated GitHub users default to members, and an explicit D1 assignment can promote or restrict an account. Assignments use GitHub's immutable numeric user ID as their authority; the login is retained only as an operator-readable snapshot and as a compatibility lookup for sessions created before this migration. `humor4fun` (GitHub user ID `7505051`) is seeded as the first administrator.
+
+This is a transitional authorization layer, not a general identity-management system. Role changes are performed directly in D1, must identify the assigning administrator, and take effect on the next request. Never infer elevated access from a browser-supplied role, a GitHub login alone, or the presence of `ADMIN_SECRET`.
+
+The status page exposes retry controls only to an authenticated administrator. `POST /api/admin/sync/jobs/:jobKey/retry` independently resolves the server session, checks the stored role, and validates the CSRF double-submit token. It does not accept `X-Admin-Secret` as a substitute. Accepted and completed attempts are written to `privileged_action_audit`.
+
+Only independently executable jobs currently support manual execution: repository inventory, orphan cleanup, and HubSpot contacts. An administrator can retry a failed job, rerun a completed job, or start a job with no recorded history. The server refuses the request while an instance of the same job is queued or running. Canonical stages that depend on pipeline state intentionally remain unavailable until they have a safe stage-resumption contract.
+
+Orphan cleanup is a single logical status-page run backed by a durable snapshot in `sync_work_items`. The `oasis-orphan-cleanup` Workflow processes at most 40 GitHub PR checks per instance, records a completion event for every slice, and dispatches the next deterministic instance until the snapshot is exhausted. This deliberately stays below the Workers Free 50-external-subrequest ceiling while preserving ten requests of operational headroom. A `401` or `403` stops the run immediately and leaves all unattempted items deferred for inspection; individual transport or non-authentication HTTP failures are recorded against their PR and the remaining snapshot continues.
+
+Both the retained four-hour legacy schedule and the administrator retry endpoint dispatch this bounded Workflow. The legacy parent remains running with `cleanup_pending: true` until the final slice finishes, then inherits the cleanup outcome. The canonical pipeline continues using its complete per-repository inventories and does not duplicate PR-by-PR cleanup calls. Deployment requires the production-only `ORPHAN_CLEANUP_WORKFLOW` binding in `wrangler.toml`; preview remains read-only and does not receive that binding. No new D1 migration is required because the implementation reuses the sync observability tables from migration `0007`.
+
+To assign or change a role, first obtain the immutable GitHub user ID from GitHub, then execute a parameterized equivalent of this upsert against the target environment:
+
+```sql
+INSERT INTO user_roles (
+  github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(github_user_id) DO UPDATE SET
+  github_login = excluded.github_login,
+  role = excluded.role,
+  assigned_by_github_user_id = excluded.assigned_by_github_user_id,
+  updated_at = excluded.updated_at;
 ```
 
-The manual endpoint runs `runSyncOneRepo()`, a cursor-based chunked sync designed to stay within the Worker's 50 subrequest limit in the fetch context. Each call processes up to 10 PRs and returns a progress message and cursor. Call it repeatedly until the response contains `"done": true`.
+Allowed values are `admin`, `moderator`, `member`, and `guest`. Use an explicit `guest` assignment to keep an account signed in while denying member-level permissions. Do not add a public role-management endpoint to this temporary system.
 
-Manual sync skips reactions (cron handles those). Reputation scores based on reactions will be updated at the next scheduled cron run.
+### Retired sync entry points
+
+`GET /workspace-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
 
 ### Sync state
 
@@ -268,9 +329,9 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="UPDATE sync_state SET value = '0' WHERE key = 'sync_running'"
 
-# Reset cursor to re-sync from the beginning
-wrangler d1 execute oasis-db --remote \
-  --command="DELETE FROM sync_state WHERE key = 'sync_cursor'"
+# Inspect the canonical lease and phase
+wrangler d1 execute oasis-db --remote --env production \
+  --command="SELECT * FROM sync_pipeline_locks; SELECT key, value FROM sync_state WHERE key LIKE 'canonical_%'"
 ```
 
 ---
@@ -281,13 +342,13 @@ wrangler d1 execute oasis-db --remote \
 |---|---|
 | HTTPS redirect | HTTP → HTTPS enforced at Worker level |
 | Apex redirect | `owasp-oasis.com` → `www.owasp-oasis.com` |
-| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including leaderboard API |
+| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including workspace API |
 | CSRF protection | Double-submit cookie pattern with constant-time comparison (`GET /api/csrf` issues token) |
 | Rate limiting | 5 POST requests per IP per 60 seconds via KV; IP is SHA-256 hashed before use as key |
 | Input validation | Email (RFC 5322 + disposable domain blocklist), GitHub username format, max field lengths, HTML tag stripping, control character removal |
 | Body size limit | 8 KB maximum request body; enforced via `Content-Length` header and actual read |
 | SQL injection | Impossible — all queries use D1 parameterised bindings |
-| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all leaderboard tracking |
+| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all workspace tracking |
 | OASIS/non-OASIS comment separation | Only comments matching the OASIS validation template affect reputation and consensus; plain comments are tracked separately and do not influence scores |
 | IP privacy | SHA-256 hashed before storage — raw IPs never persisted |
 | Error messages | Generic client-facing errors — no stack traces or internal details exposed |

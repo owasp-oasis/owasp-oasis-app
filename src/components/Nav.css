@@ -8,8 +8,8 @@
   height: var(--nav-height);
 }
 
-/* When leaderboard tabs are docked, un-stick the nav so it scrolls away */
-body.lb-tabs-docked .nav {
+/* When workspace tabs are docked, un-stick the nav so it scrolls away */
+body.ws-tabs-docked .nav {
   position: relative;
   top: 0;
 }
@@ -47,6 +47,7 @@ body.lb-tabs-docked .nav {
   font-size: 0.95rem;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
   transition: color 0.15s, background 0.15s;
   text-decoration: none;
 }
@@ -164,7 +165,16 @@ body.lb-tabs-docked .nav {
   font-size: 0.88rem;
   font-weight: 600;
   text-align: left;
+  text-decoration: none;
   transition: color 0.15s, background 0.15s;
+}
+
+.nav-account-action--admin {
+  color: var(--blue-dark);
+  border-bottom: 1px solid var(--gray-200);
+  border-radius: 7px 7px 0 0;
+  margin-bottom: 4px;
+  padding-bottom: 10px;
 }
 
 .nav-account-action:hover,

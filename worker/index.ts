@@ -16,9 +16,17 @@ import {
   jsonOk,
   jsonErr,
 } from './security.js';
-import { runSync, runSyncOneRepo } from './sync.js';
-import { reconcileRemovedRepositories, runCleanup } from './cleanup.js';
-import { HUBSPOT_SYNC_CRON, processHubSpotQueue } from './hubspot.js';
+import { reconcileRemovedRepositories } from './cleanup.js';
+import { HUBSPOT_SYNC_CRON } from './hubspot.js';
+import { runTrackedHubSpot } from './scheduledJobs.js';
+import {
+  CanonicalSyncWorkflow,
+  setCanonicalScheduleEnabled,
+  startCanonicalSync,
+} from './canonicalSync.js';
+import { OrphanCleanupWorkflow } from './orphanCleanupWorkflow.js';
+import { HubSpotSyncWorkflow } from './hubSpotSyncWorkflow.js';
+import { ManualSyncJobWorkflow } from './manualSyncJobWorkflow.js';
 import {
   handleMeta,
   handleRepos,
@@ -28,7 +36,7 @@ import {
   handleContributorDetail,
   handleMaintainers,
   handleTools,
-} from './handlers/leaderboard.js';
+} from './handlers/workspace.js';
 import { handleRegister } from './handlers/register.js';
 import { handleApply } from './handlers/apply.js';
 import { handleFeedback } from './handlers/feedback.js';
@@ -51,6 +59,21 @@ import {
   handleTeamSettings,
   handleTeamMedia,
 } from './handlers/teams.js';
+import { handlePRWorkflow, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
+import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
+import { handleRetrySyncJob } from './handlers/syncRetry.js';
+import { handleCancelSyncRun } from './handlers/syncCancel.js';
+import { handleAdminUserRole, handleAdminUsers } from './handlers/adminUsers.js';
+import {
+  handleAdminAnalytics,
+  handleAdminAnalyticsBackfill,
+  handleAdminAnalyticsCollect,
+  handleAnalyticsEngagement,
+  handleAnalyticsPageView,
+} from './handlers/analytics.js';
+import { runAnalyticsCollector } from './analytics.js';
+
+const ANALYTICS_CRON = '45 3 * * *';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -170,6 +193,49 @@ export default {
         return jsonErr('Method not allowed for this PR panel action', 405, request);
       }
 
+      /* ── Public, sanitized synchronization status ───────────────── */
+      if (method === 'GET' && url.pathname === '/api/sync/status') {
+        return await handleSyncStatus(request, env);
+      }
+      const syncRunMatch = url.pathname.match(/^\/api\/sync\/status\/runs\/([^/]+)$/);
+      if (method === 'GET' && syncRunMatch) {
+        return await handleSyncRunDetail(request, env, syncRunMatch[1]);
+      }
+      const syncRetryMatch = url.pathname.match(/^\/api\/admin\/sync\/jobs\/([a-z0-9_]+)\/retry$/);
+      if (method === 'POST' && syncRetryMatch) {
+        return await handleRetrySyncJob(request, env, ctx, syncRetryMatch[1]);
+      }
+      const syncCancelMatch = url.pathname.match(/^\/api\/admin\/sync\/runs\/([^/]+)\/cancel$/);
+      if (method === 'POST' && syncCancelMatch) {
+        return await handleCancelSyncRun(request, env, syncCancelMatch[1]);
+      }
+
+      /* ── Session-authorized user access administration ─────────── */
+      if (method === 'GET' && url.pathname === '/api/admin/users') {
+        return await handleAdminUsers(request, env);
+      }
+      const adminUserRoleMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)\/role$/);
+      if (method === 'POST' && adminUserRoleMatch) {
+        return await handleAdminUserRole(request, env, Number.parseInt(adminUserRoleMatch[1], 10));
+      }
+
+      /* ── Privacy-safe analytics ────────────────────────────────── */
+      if (method === 'POST' && url.pathname === '/api/analytics/pageview') {
+        return await handleAnalyticsPageView(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/analytics/engagement') {
+        return await handleAnalyticsEngagement(request, env);
+      }
+      if (method === 'GET' && url.pathname === '/api/admin/analytics') {
+        return await handleAdminAnalytics(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/admin/analytics/collect') {
+        return await handleAdminAnalyticsCollect(request, env);
+      }
+      if (method === 'POST' && url.pathname === '/api/admin/analytics/backfill') {
+        return await handleAdminAnalyticsBackfill(request, env);
+      }
+
       /* ── GET /api/admin/registrations ──────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/admin/registrations') {
         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
@@ -184,50 +250,58 @@ export default {
         }
       }
 
-       /* ── GET /api/admin/full-sync ───────────────────────────────
-        * Triggers a full cron-style sync (reactions enabled, all PRs).
-        * Unlike /leaderboard-refresh which uses the chunked manual sync
-        * (skipReactions=true), this calls runSync() directly — the same
-        * path the scheduled cron uses — so all comment_reactions rows
-        * are fetched and written.
-        *
-        * Use this after resetting last_synced_at to epoch to force a
-        * complete re-ingestion of all PR comment and reaction data.
-        *
-        * Protected by X-Admin-Secret header (same as /api/admin/registrations).
-        * ──────────────────────────────────────────────────────────── */
+       /* ── Retired monolithic sync endpoint ─────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/full-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
-         if (!env.DB) return jsonErr('DB not available', 503, request);
-         await env.DB.prepare(
-           "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-         ).run();
-         const result = await runSync(env);
-         return secHeaders(Response.json(result), request);
+         return jsonErr('The monolithic sync is retired. Use POST /api/admin/sync/canonical/run.', 410, request);
        }
 
        /* ── GET /api/admin/run-cleanup ───────────────────────────────
-        * Triggers both cleanup passes manually (without waiting for cron).
-        * First reconciles removed repositories from the complete public
-        * organization listing, then checks remaining PRs individually.
+        * Reconciles repositories from a complete public organization listing.
+        * Pull requests are reconciled from each repository's complete catalog
+        * by the bounded canonical Workflow.
         *
         * Protected by X-Admin-Secret header (same as other admin endpoints).
         * ──────────────────────────────────────────────────────────── */
        if (method === 'GET' && url.pathname === '/api/admin/run-cleanup') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         if (env.ENVIRONMENT !== 'production') return jsonErr('Canonical cleanup is production-only.', 409, request);
          if (!env.DB) return jsonErr('DB not available', 503, request);
          const repositories = await reconcileRemovedRepositories(env);
-         const pullRequests = await runCleanup(env);
-         return secHeaders(Response.json({ repositories, pull_requests: pullRequests }), request);
+         return secHeaders(Response.json({ repositories, pull_requests: { deferred_to_canonical_sync: true } }), request);
        }
 
-       /* ── Leaderboard API ───────────────────────────────────────── */
+       /* ── Bounded canonical sync controls ─────────────────────── */
+       if (method === 'POST' && url.pathname === '/api/admin/sync/canonical/run') {
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         const result = await startCanonicalSync(env, 'manual');
+         return secHeaders(Response.json(result, { status: result.started ? 202 : 409 }), request);
+       }
+
+       if (method === 'POST' && url.pathname === '/api/admin/sync/canonical/schedule') {
+         if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+         if (env.ENVIRONMENT !== 'production') return jsonErr('Canonical scheduling is production-only.', 409, request);
+         let body: { enabled?: unknown };
+         try {
+           body = await request.json<{ enabled?: unknown }>();
+         } catch {
+           return jsonErr('Request body must be valid JSON.', 400, request);
+         }
+         if (typeof body.enabled !== 'boolean') return jsonErr('enabled must be a boolean', 400, request);
+         if (!body.enabled) {
+           return jsonErr('Canonical scheduling is permanently enabled; the legacy sync is retired.', 409, request);
+         }
+         await setCanonicalScheduleEnabled(env.DB, true);
+         return jsonOk({ enabled: true, legacy_retired: true }, request);
+       }
+
+       /* ── Workspace API ─────────────────────────────────────────── */
        /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
          try {
-           const result = await processHubSpotQueue(env, { limit: 25 });
-           return jsonOk(result, request);
+           const result = await runTrackedHubSpot(env, 'manual');
+           return secHeaders(Response.json(result, { status: result.started ? 202 : 409 }), request);
          } catch {
            console.error(JSON.stringify({
              event: 'hubspot_sync_manual_failed',
@@ -237,20 +311,20 @@ export default {
          }
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
+       if (method === 'GET' && url.pathname === '/api/workspace/meta')
          return await handleMeta(env, request);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
+       if (method === 'GET' && url.pathname === '/api/workspace/repos')
          return await handleRepos(env, request, url);
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
-       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/(\d+)$/);
+       const repoDetailMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)$/);
        if (method === 'GET' && repoDetailMatch) {
          return await handleRepoDetail(env, request, Number(repoDetailMatch[1]));
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
+       if (method === 'GET' && url.pathname === '/api/workspace/prs')
          return await handlePRs(env, request, url);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
+       if (method === 'GET' && url.pathname === '/api/workspace/contributors')
          return await handleContributors(env, request, url);
 
        /* ── Contributor detail (for ContributorPanel slide-out) ───── */
@@ -260,22 +334,28 @@ export default {
          return await handleContributorDetail(env, request, login);
        }
 
-      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
+       /* ── Maintainer disposition and upstream submission ─────────── */
+       const workflowMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/workflow$/);
+       if (method === 'GET' && workflowMatch) {
+         return await handlePRWorkflow(request, env, Number(workflowMatch[1]));
+       }
+       const maintainerDecisionMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/maintainer-decision$/);
+       if (method === 'POST' && maintainerDecisionMatch) {
+         return await handleMaintainerDecision(request, env, Number(maintainerDecisionMatch[1]));
+       }
+       const submitUpstreamMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/submit-upstream$/);
+       if (method === 'POST' && submitUpstreamMatch) {
+         return await handleSubmitUpstream(request, env, Number(submitUpstreamMatch[1]));
+       }
+
+      if (method === 'GET' && url.pathname === '/api/workspace/maintainers')
         return await handleMaintainers(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')
+      if (method === 'GET' && url.pathname === '/api/workspace/tools')
         return await handleTools(env, request, url);
 
-      /* ── Manual sync trigger — chunked one repo per call ───────── */
-      if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
-        if (!env.DB) return jsonErr('DB not available', 503, request);
-        await env.DB.prepare(
-          "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-        ).run();
-        await env.DB.prepare(
-          "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_manual_sync', ?)",
-        ).bind(new Date().toISOString()).run();
-        const result = await runSyncOneRepo(env);
-        return secHeaders(Response.json(result), request);
+      /* ── Retired public sync trigger ───────────────────────────── */
+      if (method === 'GET' && url.pathname === '/workspace-refresh') {
+        return jsonErr('This public sync trigger is retired. Use the authenticated canonical sync endpoint.', 410, request);
       }
 
       /* ── React SPA fallback via ASSETS ─────────────────────────── */
@@ -293,36 +373,28 @@ export default {
 
   /* ── Scheduled jobs ─────────────────────────────────────────── */
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    if (event.cron === HUBSPOT_SYNC_CRON) {
-      await processHubSpotQueue(env, { limit: 25 });
+    if (event.cron === ANALYTICS_CRON && env.ENVIRONMENT === 'production') {
+      const result = await runAnalyticsCollector(env, 'scheduled');
+      console.log(JSON.stringify({ event: 'cloudflare_analytics_collection_complete', ...result }));
       return;
     }
-    if (event.cron !== '0 */4 * * *') {
+    if (event.cron === HUBSPOT_SYNC_CRON) {
+      const dispatch = await runTrackedHubSpot(env, 'scheduled');
+      console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));
+      return;
+    }
+    if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
     }
-
-    // Reconcile removed repositories before the full sync consumes its GitHub
-    // request/runtime budget. A failed full sync must not block this cleanup.
-    console.log('Starting removed repository reconciliation...');
-    const repositoryCleanup = await reconcileRemovedRepositories(env);
-    console.log('Repository reconciliation result:', JSON.stringify(repositoryCleanup));
-
-    console.log('Starting scheduled GitHub sync...');
-    if (env.DB) {
-      await env.DB.prepare(
-        "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('sync_running', '1')",
-      ).run();
-    }
-    const result = await runSync(env);
-    console.log('Sync result:', JSON.stringify(result));
-
-    // Run cleanup after sync completes
-    console.log('Starting cleanup task...');
-    const cleanupResult = await runCleanup(env);
-    console.log('Cleanup result:', JSON.stringify(cleanupResult));
+    const dispatch = await startCanonicalSync(env, 'scheduled');
+    console.log(JSON.stringify({ event: 'canonical_sync_dispatched', ...dispatch }));
   },
 };
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
+export { CanonicalSyncWorkflow };
+export { OrphanCleanupWorkflow };
+export { HubSpotSyncWorkflow };
+export { ManualSyncJobWorkflow };

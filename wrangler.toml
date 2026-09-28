@@ -3,6 +3,9 @@ main               = "dist-worker/index.js"
 compatibility_date = "2026-08-24"
 workers_dev        = false
 
+# Workers Free applies its CPU and subrequest ceilings automatically. Do not add
+# a [limits] block here: custom runtime limits require the paid Standard model.
+
 # Persist privacy-safe Worker logs and invocation metadata. Traces remain disabled.
 [observability]
 enabled            = false
@@ -49,10 +52,6 @@ preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 ENVIRONMENT          = "preview"
 OAUTH_CALLBACK_URL   = "https://preview.owasp-oasis.org/api/auth/callback"
 
-# ── Cron triggers ──
-[triggers]
-crons = ["0 */4 * * *"]
-
 # ── Production environment ──
 [env.production]
 name = "owasp-oasis"
@@ -88,6 +87,32 @@ id      = "4668dfe626b144de82ceec91df80c7ce"
 [env.production.vars]
 ENVIRONMENT        = "production"
 OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
+# Zone IDs identify public Cloudflare zones; unlike the Analytics API token,
+# this value is not a credential. Keep it in versioned config so Wrangler
+# deployments do not remove a dashboard-only binding.
+CLOUDFLARE_ZONE_ID = "3f30ef2d154b36358a11b0db4744b5fb"
 
 [env.production.triggers]
-crons = ["0 */4 * * *", "15 * * * *"]
+crons = ["0 */4 * * *", "15 * * * *", "45 3 * * *"]
+
+# The production canonical writer is disabled in D1 until an administrator
+# accepts a manual canary and enables its schedule.
+[[env.production.workflows]]
+name       = "oasis-canonical-sync"
+binding    = "CANONICAL_SYNC_WORKFLOW"
+class_name = "CanonicalSyncWorkflow"
+
+[[env.production.workflows]]
+name       = "oasis-orphan-cleanup"
+binding    = "ORPHAN_CLEANUP_WORKFLOW"
+class_name = "OrphanCleanupWorkflow"
+
+[[env.production.workflows]]
+name       = "oasis-hubspot-sync"
+binding    = "HUBSPOT_SYNC_WORKFLOW"
+class_name = "HubSpotSyncWorkflow"
+
+[[env.production.workflows]]
+name       = "oasis-manual-sync-jobs"
+binding    = "MANUAL_SYNC_JOB_WORKFLOW"
+class_name = "ManualSyncJobWorkflow"

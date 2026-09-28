@@ -13,9 +13,11 @@ import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
+import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
+import { trackReviewEngagement } from '../../analytics'
 
-/* ── Shared PR type (from leaderboard API) ───────────────────── */
+/* ── Shared PR type (from workspace API) ────────────────────── */
 export interface PanelPR {
   id: number
   repo_name: string
@@ -53,7 +55,7 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary'
+type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
 
 interface Props {
   pr: PanelPR | null
@@ -156,6 +158,34 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
 
   useEffect(() => { fetchDetails() }, [fetchDetails])
 
+  // Record aggregate active-review time without sending a login or stable user
+  // identifier. Hidden or idle tabs do not accrue active seconds.
+  useEffect(() => {
+    if (!pr || !user) return
+    const prId = pr.id
+    let lastActivity = Date.now()
+    let lastTick = Date.now()
+    const noteActivity = () => { lastActivity = Date.now() }
+    const activityEvents: Array<keyof DocumentEventMap> = [
+      'keydown', 'pointerdown', 'touchstart', 'wheel',
+    ]
+    activityEvents.forEach(type => document.addEventListener(type, noteActivity, { passive: true }))
+    trackReviewEngagement(prId, 'review_opened')
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      const intervalSeconds = Math.min(30, Math.max(1, Math.round((now - lastTick) / 1000)))
+      if (document.visibilityState === 'visible' && now - lastActivity <= 45_000) {
+        trackReviewEngagement(prId, 'review_heartbeat', intervalSeconds)
+      }
+      lastTick = now
+    }, 30_000)
+    return () => {
+      window.clearInterval(timer)
+      activityEvents.forEach(type => document.removeEventListener(type, noteActivity))
+      trackReviewEngagement(prId, 'review_closed')
+    }
+  }, [pr, user])
+
   // Close on Escape
   useEffect(() => {
     if (!pr) return
@@ -196,9 +226,10 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     { id: 'body',     label: 'Body' },
     { id: 'changes',  label: 'Diffs' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
+    { id: 'workflow', label: 'Workflow' },
   ]
 
-  // SummaryTab needs details augmented with consensus counts from the leaderboard PR
+  // SummaryTab needs details augmented with consensus counts from the workspace PR
   const summaryDetails = details ? {
     ...details,
     consensus_accept: activePR.consensus_accept,
@@ -324,6 +355,9 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               loading={detailsLoading}
               error={detailsError}
             />
+          )}
+          {activeTab === 'workflow' && (
+            <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
           )}
         </div>
 

@@ -27,10 +27,14 @@ const SESSION_TTL_DAYS = 7;
 /* ─── SHARED: look up a valid session ────────────────────────── */
 export interface SessionUser {
   session_id: string;
+  github_user_id: number | null;
   github_login: string;
   avatar_url: string | null;
+  role: UserRole;
   github_token: string;
 }
+
+export type UserRole = 'admin' | 'moderator' | 'member' | 'guest';
 
 export async function getSession(_request: Request, env: Env, sessionId?: string): Promise<SessionUser | null> {
   const sid = sessionId ?? getCookieValue(_request, SESSION_COOKIE);
@@ -38,9 +42,15 @@ export async function getSession(_request: Request, env: Env, sessionId?: string
   const now = new Date().toISOString();
 
   // Fetch session metadata from D1 (no token stored there)
-  const row = await env.DB.prepare(
-    'SELECT session_id, github_login, avatar_url FROM user_sessions WHERE session_id = ? AND expires_at > ?',
-  ).bind(sid, now).first<Omit<SessionUser, 'github_token'>>();
+  const row = await env.DB.prepare(`
+    SELECT s.session_id, s.github_user_id, s.github_login, s.avatar_url,
+           COALESCE(r.role, 'member') AS role
+      FROM user_sessions s
+      LEFT JOIN user_roles r
+        ON (s.github_user_id IS NOT NULL AND r.github_user_id = s.github_user_id)
+        OR (s.github_user_id IS NULL AND r.github_login = s.github_login COLLATE NOCASE)
+     WHERE s.session_id = ? AND s.expires_at > ?
+  `).bind(sid, now).first<Omit<SessionUser, 'github_token'>>();
   if (!row) return null;
 
   // Decrypt GitHub token from the encrypted HttpOnly cookie
@@ -122,7 +132,7 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
   }
 
   // Fetch GitHub user info
-  let login: string, avatarUrl: string, email: string = '';
+  let githubUserId: number, login: string, avatarUrl: string, email: string = '';
   try {
     const userRes = await fetch('https://api.github.com/user', {
       headers: {
@@ -131,8 +141,11 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
         'User-Agent':  'oasis-worker-auth/1.0',
       },
     });
-    const user = await userRes.json() as { login?: string; avatar_url?: string };
-    if (!user.login) return redirectWithError('/workspace/pull-requests', 'Could not fetch GitHub user');
+    const user = await userRes.json() as { id?: number; login?: string; avatar_url?: string };
+    if (!Number.isSafeInteger(user.id) || !user.login) {
+      return redirectWithError('/workspace/pull-requests', 'Could not fetch GitHub user');
+    }
+    githubUserId = user.id as number;
     login     = user.login;
     avatarUrl = user.avatar_url ?? `https://github.com/${user.login}.png?size=64`;
   } catch {
@@ -168,9 +181,10 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
 
   try {
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO user_sessions (session_id, github_login, avatar_url, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(sessionId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
+      `INSERT OR REPLACE INTO user_sessions (
+         session_id, github_user_id, github_login, avatar_url, created_at, expires_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(sessionId, githubUserId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
   } catch {
     return redirectWithError('/workspace/pull-requests', 'Session creation failed');
   }
@@ -226,12 +240,13 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
 export async function handleMe(request: Request, env: Env): Promise<Response> {
   const session = await getSession(request, env);
   if (!session) {
-    return jsonOk({ user: null }, request);
+    return jsonOk({ user: null, role: 'guest' }, request);
   }
   return jsonOk({
     user: {
       login:      session.github_login,
       avatar_url: session.avatar_url,
+      role:       session.role,
     },
   }, request);
 }

@@ -14,6 +14,7 @@
 
 import type { Env } from '../types.js';
 import { ghFetch, ghFetchAll, parseDecision, parseDetectionTool, ORG } from '../github.js';
+import type { GitHubReaction } from '../github.js';
 import { jsonOk, jsonErr, validateCSRF } from '../security.js';
 import { getSession } from './auth.js';
 
@@ -240,10 +241,36 @@ export async function handlePRReact(request: Request, env: Env, id: number): Pro
   if (!VALID_REACTIONS.has(reaction)) {
     return jsonErr(`Invalid reaction. Must be one of: ${[...VALID_REACTIONS].join(', ')}`, 400, request);
   }
+  if (!session.github_token) {
+    return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
+  }
+
+  const reactionsPath = `/repos/${ORG}/${pr.repo_name}/issues/comments/${commentId}/reactions`;
+
+  // GitHub deduplicates repeated reactions of the same type, but permits one
+  // reaction of each type. OASIS intentionally applies a stricter rule: one
+  // reaction total from each user on a comment. Check GitHub's live state so
+  // this remains correct between background syncs and across browser sessions.
+  let existingReaction: GitHubReaction | undefined;
+  try {
+    const reactions = await ghFetchAll<GitHubReaction>(reactionsPath, session.github_token);
+    existingReaction = reactions.find(candidate =>
+      candidate.user?.login?.toLowerCase() === session.github_login.toLowerCase(),
+    );
+  } catch (err) {
+    return jsonErr(`GitHub API error: ${(err as Error).message}`, 502, request);
+  }
+
+  if (existingReaction) {
+    return jsonOk({
+      created: false,
+      reaction: existingReaction.content,
+    }, request);
+  }
 
   // Use the user's OAuth token so the reaction appears as them
   const ghRes = await fetch(
-    `https://api.github.com/repos/${ORG}/${pr.repo_name}/issues/comments/${commentId}/reactions`,
+    `https://api.github.com${reactionsPath}`,
     {
       method: 'POST',
       headers: {
@@ -265,5 +292,8 @@ export async function handlePRReact(request: Request, env: Env, id: number): Pro
     return jsonErr(`GitHub API error ${ghRes.status}: ${text}`, 502, request);
   }
 
-  return jsonOk({ ok: true }, request);
+  // GitHub returns 200 when this exact reaction already exists and 201 only
+  // when it creates a new one. Preserve that distinction so even concurrent
+  // requests cannot inflate the Workspace count.
+  return jsonOk({ created: ghRes.status === 201, reaction }, request);
 }

@@ -1,7 +1,8 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
 
 import { applySchema, cleanDB, makeCsrf } from './helpers.js';
+import { fetchMock } from './fetchMock.js';
 import { SELF } from './testWorker.js';
 
 describe('POST /api/apply', () => {
@@ -9,7 +10,19 @@ describe('POST /api/apply', () => {
     await applySchema(env);
   });
 
+  beforeEach(() => {
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+    fetchMock
+      .when(req => req.method === 'GET' && req.url === 'https://api.github.com/users/ada')
+      .respondWith(new Response(
+        JSON.stringify({ login: 'ada', type: 'User' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ));
+  });
+
   afterEach(async () => {
+    fetchMock.deactivate();
     await cleanDB(env);
   });
 
@@ -80,6 +93,31 @@ describe('POST /api/apply', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ ok: false, error: 'Please select a role to apply for' });
+  });
+
+  it('rejects an application when the GitHub account does not exist', async () => {
+    fetchMock.deactivate();
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+    fetchMock
+      .when(req => req.method === 'GET' && req.url === 'https://api.github.com/users/not-a-real-oasis-user')
+      .respondWith(new Response('Not Found', { status: 404 }));
+
+    const res = await apply({
+      name: 'Ada Lovelace',
+      email: 'missing-github@oasis-test.internal',
+      github: 'not-a-real-oasis-user',
+      org: '',
+      why: '',
+      role: 'validator',
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ ok: false, error: 'GitHub account not found' });
+    const application = await env.DB.prepare(
+      'SELECT COUNT(*) AS count FROM applications WHERE email = ?',
+    ).bind('missing-github@oasis-test.internal').first<{ count: number }>();
+    expect(application?.count).toBe(0);
   });
 
   it('responds idempotently and refreshes an unsynced duplicate job', async () => {

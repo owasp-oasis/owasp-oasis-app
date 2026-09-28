@@ -3,32 +3,59 @@ import QuotesCarousel from '../components/QuotesCarousel'
 import type { Quote } from '../components/QuotesCarousel'
 import './Home.css'
 
-// TODO: Replace with third-party quotes — these are placeholder quotes from OASIS co-founders
 const quotes: Quote[] = [
   {
-    name: 'Chris Holt',
-    title: 'Community Architect',
-    company: 'Intigriti',
-    quote: 'It feels good to do good. OASIS is an opportunity for every hacker, developer, and security-interested practitioner to move the needle on securing open-source code. AI finally enables fixing vulnerabilities at the speed of compute, but we need to build trust in the tools first.',
-    photoUrl: '/headshots/chris-holt.jpeg',
-    linkedinUrl: 'https://www.linkedin.com/in/flyingtoasters/',
+    name: 'Debra A. Anderson',
+    title: 'Enterprise Exposure Management Leader',
+    company: '',
+    quote: 'Vulnerability management has never really had a discovery problem. We have a prioritization and remediation problem.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/debra-anderson-a41a5/',
   },
   {
-    name: 'Michael Cartsonis',
-    title: 'Co-Founder, VP of Product',
-    company: 'AppSecAI',
-    quote: "For the past 3 years, I've been building AI tools to enable developers and appsec teams to remediate at the speed of compute. OASIS takes that concept to the masses to showcase the power of AI to remediate vulnerabilities, and truly left-shift security up the supply chain.",
-    photoUrl: '/headshots/michael-cartsonis.jpeg',
-    linkedinUrl: 'https://www.linkedin.com/in/cartsoni/',
+    name: 'CyberSec Magazine',
+    title: '',
+    company: '',
+    quote: 'By delivering vetted, ready-to-use patches upstream, OASIS aims to strengthen software security at scale and protect thousands of downstream applications.',
+    photoUrl: null,
   },
   {
-    name: 'Aaron Birnbaum',
-    title: 'Co-founder & Chief Security Officer',
-    company: 'Seron Security',
-    quote: "Great to see OASIS officially accepted into OWASP. The increase in AI-accelerated attacks on open source software is alarming. From poisoned packages, automated dependency abuse, and over-extended security teams makes this one of the fastest-growing blind spots in modern security programs. A vendor-neutral, community-driven standard for defending the ecosystem is long overdue. So much of an organization's real exposure now lives in its open-source dependencies, so a project like this strengthens the whole chain. Congratulations to the team and to the validators making it happen — happy to contribute where useful.",
-    photoUrl: '/headshots/aaron-birnbaum.jpeg',
-    linkedinUrl: 'https://www.linkedin.com/in/aaron-s-birnbaum/',
-  }
+    name: 'Cybersecurity News / Cryptika',
+    title: '',
+    company: '',
+    quote: 'The initiative pairs AI-generated fix candidates with human validation from application security professionals, aiming to deliver credible, ready-to-use patches to open source maintainers instead of just longer vulnerability lists.',
+    photoUrl: null,
+  },
+  {
+    name: 'UNDERCODE NEWS',
+    title: '',
+    company: '',
+    quote: 'For years, cybersecurity teams have been told that the first step toward better security is discovering vulnerabilities faster. That advice is becoming outdated.',
+    photoUrl: null,
+  },
+  {
+    name: 'Jairo Garcia / Kiggu',
+    title: 'Cybersecurity Expert and Co-Founder',
+    company: 'Kiggu',
+    quote: 'AI is dramatically accelerating vulnerability detection, but the real bottleneck remains the shortage of experts to remediate them. The future of AppSec will be finding and fixing vulnerabilities before someone can exploit them.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/jairoandresgarciabenavides/',
+  },
+  {
+    name: 'Dr. Maria Sette',
+    title: 'Portfolio Manager, Cybersecurity',
+    company: '',
+    quote: 'A community of application security specialists validating AI-generated fixes for open source vulnerabilities, so maintainers get patches they can actually trust.',
+    photoUrl: null,
+  },
+  {
+    name: 'Mandana Madison',
+    title: 'Application Security / Product Security',
+    company: '',
+    quote: 'Human validation and security judgement remain an important part of this process, particularly when AI assisted remediation is being used at scale.',
+    photoUrl: null,
+    linkedinUrl: 'https://www.linkedin.com/in/mandana-madison/',
+  },
 ]
 
 const ShieldSVG = () => (

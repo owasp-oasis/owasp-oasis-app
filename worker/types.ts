@@ -12,9 +12,61 @@ export interface Env {
   ADMIN_SECRET: string;
   HUBSPOT_TOKEN?: string;
   HUBSPOT_PROPERTY_MAP?: string;
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
+  CLOUDFLARE_ZONE_ID?: string;
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
   OAUTH_CALLBACK_URL: string;
+  CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
+  ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
+  HUBSPOT_SYNC_WORKFLOW?: Workflow<HubSpotSyncParams>;
+  MANUAL_SYNC_JOB_WORKFLOW?: Workflow<ManualSyncJobParams>;
+}
+
+export interface OrphanCleanupActor {
+  githubUserId: number | null;
+  githubLogin: string;
+  role: 'admin' | 'moderator' | 'member' | 'guest';
+}
+
+export interface OrphanCleanupParams {
+  jobRunId: string;
+  pipelineRunId: string;
+  chunk: number;
+  legacyParentRunId?: string;
+  auditActor?: OrphanCleanupActor;
+}
+
+export type CanonicalSyncParams =
+  | { action: 'inventory'; pipelineRunId: string }
+  | { action: 'sync'; pipelineRunId: string }
+  | { action: 'reaction'; pipelineRunId: string }
+  | { action: 'duplicate'; pipelineRunId: string };
+
+export interface HubSpotSyncParams {
+  jobRunId: string;
+  chunk: number;
+  maxQueueId: number;
+  eligibleAt: string;
+  auditActor?: OrphanCleanupActor;
+}
+
+export type ManualSyncJobKey =
+  | 'repository_inventory'
+  | 'pull_request_catalog'
+  | 'upstream_merge_status'
+  | 'pull_request_comments'
+  | 'comment_reactions'
+  | 'vote_projection'
+  | 'duplicate_resolution'
+  | 'contributor_scores';
+
+export interface ManualSyncJobParams {
+  jobRunId: string;
+  pipelineRunId: string;
+  jobKey: ManualSyncJobKey;
+  chunk: number;
+  auditActor: OrphanCleanupActor;
 }
 
 export interface SyncResult {

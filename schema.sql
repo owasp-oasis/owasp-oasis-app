@@ -217,17 +217,62 @@ CREATE TABLE IF NOT EXISTS sync_state (
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_synced_at',   '2020-01-01T00:00:00Z');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('sync_running',     '0');
 INSERT OR IGNORE INTO sync_state (key, value) VALUES ('last_manual_sync', '2020-01-01T00:00:00Z');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_sync_enabled', '1');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_run_id', '');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_phase', 'idle');
+INSERT OR IGNORE INTO sync_state (key, value) VALUES ('canonical_pipeline_updated_at', '2020-01-01T00:00:00Z');
+
+CREATE TABLE IF NOT EXISTS sync_pipeline_locks (
+  lock_key         TEXT PRIMARY KEY,
+  pipeline_run_id  TEXT NOT NULL,
+  acquired_at      TEXT NOT NULL,
+  lease_expires_at TEXT NOT NULL
+);
 
 -- ── Auth tables (OAuth sessions + per-user vote records) ─────────────────────────────────────
 -- Migration note for existing deployments: run the following once via Wrangler console:
 --   ALTER TABLE user_sessions DROP COLUMN github_token;
 -- The token is now stored only in an AES-GCM encrypted HttpOnly cookie (__gh_token).
 CREATE TABLE IF NOT EXISTS user_sessions (
-  session_id   TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
-  github_login TEXT NOT NULL,
-  avatar_url   TEXT,
-  created_at   TEXT NOT NULL,
-  expires_at   TEXT NOT NULL       -- ISO-8601, 7 days from login
+  session_id     TEXT PRIMARY KEY,   -- 32-byte hex, HttpOnly cookie
+  github_user_id INTEGER,            -- immutable GitHub identity; null only on pre-migration sessions
+  github_login   TEXT NOT NULL,
+  avatar_url     TEXT,
+  created_at     TEXT NOT NULL,
+  expires_at     TEXT NOT NULL       -- ISO-8601, 7 days from login
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+  github_user_id             INTEGER PRIMARY KEY,
+  github_login               TEXT NOT NULL COLLATE NOCASE,
+  role                       TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  assigned_by_github_user_id INTEGER,
+  created_at                 TEXT NOT NULL,
+  updated_at                 TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_roles_login ON user_roles(github_login COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS privileged_action_audit (
+  id             TEXT PRIMARY KEY,
+  github_user_id INTEGER,
+  github_login   TEXT NOT NULL COLLATE NOCASE,
+  role           TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member', 'guest')),
+  action         TEXT NOT NULL,
+  target_type    TEXT,
+  target_id      TEXT,
+  outcome        TEXT NOT NULL CHECK (outcome IN ('accepted', 'succeeded', 'failed', 'rejected')),
+  created_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_privileged_action_audit_created
+  ON privileged_action_audit(created_at DESC);
+
+INSERT OR IGNORE INTO user_roles (
+  github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at
+) VALUES (
+  7505051, 'humor4fun', 'admin', 7505051,
+  '2026-09-02T00:00:00.000Z', '2026-09-02T00:00:00.000Z'
 );
 
 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -256,6 +301,7 @@ CREATE TABLE IF NOT EXISTS user_votes (
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
 -- ── Teams ────────────────────────────────────────────────────────────────
 -- Teams are community collaboration spaces. Membership and activity are
@@ -295,13 +341,13 @@ CREATE INDEX IF NOT EXISTS idx_team_memberships_login
 
 CREATE TABLE IF NOT EXISTS team_invites (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  team_id         INTEGER NOT NULL,
-  invitee_login   TEXT NOT NULL,
-  invited_by      TEXT NOT NULL,
-  status          TEXT NOT NULL DEFAULT 'pending'
+  team_id          INTEGER NOT NULL,
+  invitee_login    TEXT NOT NULL,
+  invited_by       TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending'
                   CHECK(status IN ('pending', 'accepted', 'declined', 'revoked')),
-  created_at      TEXT NOT NULL,
-  resolved_at     TEXT,
+  created_at       TEXT NOT NULL,
+  resolved_at      TEXT,
   FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_invites_pending
@@ -309,13 +355,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_team_invites_pending
 
 CREATE TABLE IF NOT EXISTS team_join_requests (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  team_id         INTEGER NOT NULL,
-  requester_login TEXT NOT NULL,
-  status          TEXT NOT NULL DEFAULT 'pending'
+  team_id          INTEGER NOT NULL,
+  requester_login  TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending'
                   CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')),
-  created_at      TEXT NOT NULL,
-  resolved_by     TEXT,
-  resolved_at     TEXT,
+  created_at       TEXT NOT NULL,
+  resolved_by      TEXT,
+  resolved_at      TEXT,
   FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_join_requests_pending
@@ -370,3 +416,83 @@ CREATE TABLE IF NOT EXISTS team_badges (
   FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 CREATE INDEX IF NOT EXISTS idx_team_badges_login ON team_badges(github_login, awarded_at);
+
+-- A validation request starts when a new open PR first becomes available in
+-- the OASIS Workspace. Response badges do not alter contributor reputation.
+CREATE TABLE IF NOT EXISTS validation_requests (
+  pr_id              INTEGER PRIMARY KEY,
+  requested_at       TEXT NOT NULL,
+  request_source     TEXT NOT NULL DEFAULT 'workspace_sync'
+                     CHECK(request_source IN ('workspace_sync', 'explicit_request')),
+  status             TEXT NOT NULL DEFAULT 'open'
+                     CHECK(status IN ('open', 'responded', 'closed', 'cancelled')),
+  badge_eligible     INTEGER NOT NULL DEFAULT 1
+                     CHECK(badge_eligible IN (0, 1)),
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_requests_eligibility
+  ON validation_requests(badge_eligible, requested_at);
+
+-- Maintainer disposition and upstream submission tracking. These tables are
+-- deliberately independent of validator votes and contributor reputation.
+CREATE TABLE IF NOT EXISTS maintainer_decisions (
+  id                 TEXT PRIMARY KEY,
+  pr_id              INTEGER NOT NULL,
+  decision           TEXT NOT NULL CHECK(decision IN ('changes_requested', 'accepted', 'declined')),
+  reason             TEXT NOT NULL,
+  head_sha           TEXT,
+  github_user_id     INTEGER,
+  github_login       TEXT NOT NULL,
+  created_at         TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_maintainer_decisions_pr_created
+  ON maintainer_decisions(pr_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS upstream_submissions (
+  id                       TEXT PRIMARY KEY,
+  source_pr_id             INTEGER NOT NULL,
+  upstream_full_name       TEXT NOT NULL,
+  upstream_default_branch  TEXT NOT NULL,
+  upstream_pr_id           INTEGER,
+  upstream_pr_number       INTEGER,
+  upstream_pr_node_id      TEXT,
+  upstream_pr_url          TEXT,
+  head_repo_full_name      TEXT NOT NULL,
+  head_branch              TEXT NOT NULL,
+  validated_head_sha       TEXT NOT NULL,
+  base_branch              TEXT NOT NULL,
+  status                   TEXT NOT NULL CHECK(status IN ('pending', 'open', 'changes_requested', 'merged', 'closed', 'failed')),
+  close_reason             TEXT,
+  close_reason_text        TEXT,
+  last_review_state        TEXT,
+  last_reviewed_by         TEXT,
+  last_reviewed_at         TEXT,
+  last_review_url           TEXT,
+  submitted_by_github_id   INTEGER,
+  submitted_by_login       TEXT NOT NULL,
+  submitted_at             TEXT,
+  last_synced_at           TEXT,
+  error_summary            TEXT,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL,
+  FOREIGN KEY (source_pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_upstream_submissions_source_updated
+  ON upstream_submissions(source_pr_id, updated_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_active_source
+  ON upstream_submissions(source_pr_id)
+  WHERE status IN ('pending', 'open', 'changes_requested');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_external_pr
+  ON upstream_submissions(upstream_full_name, upstream_pr_number)
+  WHERE upstream_pr_number IS NOT NULL;
+
+-- Sync observability tables are introduced by migrations/0007_sync_job_observability.sql.
+-- Apply migrations after this bootstrap schema when creating a fresh local database.

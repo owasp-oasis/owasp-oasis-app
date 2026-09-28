@@ -1,0 +1,30 @@
+name: Request a private security contact
+description: Ask maintainers for a private channel without disclosing vulnerability details.
+title: "[Security contact request]"
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not include any vulnerability details in this public issue.** Do not add an affected endpoint, reproduction steps, exploit, credentials, tokens, private data, screenshots, logs, or attachments. A maintainer will arrange a private reporting channel.
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Safety acknowledgement
+      options:
+        - label: I have read SECURITY.md and this request contains no technical or sensitive details about the suspected vulnerability.
+          required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Broad scope only
+      description: Select a category without identifying the vulnerable page, route, or component.
+      options:
+        - OASIS website or frontend
+        - OASIS API or authentication
+        - OASIS data handling or infrastructure
+        - OASIS repository or deployment process
+        - Unsure
+    validations:
+      required: true
