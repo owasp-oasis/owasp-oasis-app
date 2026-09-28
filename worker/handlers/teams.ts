@@ -7,7 +7,8 @@
  */
 
 import type { Env } from '../types.js';
-import { isAdminRequest, jsonErr, jsonOk, validateCSRF } from '../security.js';
+import { jsonErr, jsonOk, validateCSRF } from '../security.js';
+import { getRequestPrincipal, roleAllows } from '../authorization.js';
 import { getSession, type SessionUser } from './auth.js';
 import { parseBody, vGitHub, vText } from '../validation.js';
 import { isTeamBadgeThreshold, listTeamBadges, syncTeamBadges, type TeamBadgeSettings } from '../teamBadges.js';
@@ -113,7 +114,8 @@ export async function handleTeamMemberOptions(request: Request, env: Env, teamId
   if (!user) return jsonErr('Not authenticated', 401, request);
   if (!await requireManager(env, teamId, user.github_login)) return jsonErr('Only a Team owner or admin can invite members', 403, request);
   const team = await getTeam(env, teamId);
-  if (team?.status !== 'active') return jsonErr('This Team is not active', 409, request);
+  if (!team) return jsonErr('Team not found', 404, request);
+  if (team.status !== 'active') return jsonErr('This Team is not active', 409, request);
   const query = (url.searchParams.get('q') ?? '').trim().replace(/^@/, '').toLowerCase();
   if (query.length < 2) return jsonOk({ members: [] }, request, { cache: 'private, no-store' });
   if (query.length > 39 || !/^[a-z0-9-]+$/.test(query)) return jsonErr('Search by GitHub username', 400, request);
@@ -294,7 +296,7 @@ export async function handleTeamSettings(request: Request, env: Env, teamId: num
         const currentMembers = await env.DB.prepare(
           'SELECT github_login FROM team_memberships WHERE team_id = ? AND left_at IS NULL',
         ).bind(teamId).all<{ github_login: string }>();
-        for (const member of currentMembers.results ?? []) await syncTeamBadges(env, teamId, member.github_login);
+        await Promise.all((currentMembers.results ?? []).map(m => syncTeamBadges(env, teamId, m.github_login)));
       }
       if (publicBadges !== null) {
         await env.DB.prepare(
@@ -392,6 +394,10 @@ export async function handleTeamMembers(request: Request, env: Env, teamId: numb
     const transfer = await env.DB.prepare(`SELECT id FROM team_ownership_transfers WHERE id = ? AND team_id = ? AND proposed_owner = ? AND status = 'pending'`)
       .bind(parsed.val.transfer_id, teamId, user.github_login).first<{ id: number }>();
     if (!transfer) return jsonErr('Ownership transfer not found', 404, request);
+    const recipientMembership = await env.DB.prepare(
+      `SELECT id FROM team_memberships WHERE team_id = ? AND github_login = ? AND left_at IS NULL`,
+    ).bind(teamId, user.github_login).first();
+    if (!recipientMembership) return jsonErr('You are no longer a member of this team', 422, request);
     await env.DB.batch([
       env.DB.prepare(`UPDATE team_memberships SET role = 'member' WHERE team_id = ? AND role = 'owner' AND left_at IS NULL`).bind(teamId),
       env.DB.prepare(`UPDATE team_memberships SET role = 'owner' WHERE team_id = ? AND github_login = ? AND left_at IS NULL`).bind(teamId, user.github_login),
@@ -526,7 +532,10 @@ export async function handleTeamRepositories(request: Request, env: Env, teamId:
 
 /** POST /api/teams/:id/admin — operational moderation only. */
 export async function handleTeamAdmin(request: Request, env: Env, teamId: number): Promise<Response> {
-  if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
+  const principal = await getRequestPrincipal(request, env);
+  if (!principal.session) return jsonErr('Authentication required', 401, request);
+  if (!roleAllows(principal.role, 'admin')) return jsonErr('Admin role required', 403, request);
+  if (!validateCSRF(request)) return jsonErr('Invalid security token', 403, request);
   const parsed = await parseBody(request);
   if (!parsed.ok) return jsonErr(parsed.error, 400, request);
   const status = parsed.val.action === 'suspend' ? 'suspended' : parsed.val.action === 'archive' ? 'archived' : null;

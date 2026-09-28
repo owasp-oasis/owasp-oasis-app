@@ -377,9 +377,12 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       WHERE pr_id = ? AND status = 'open'
     `).bind(now, pr.id).run();
     voteRecorded = true;
-    if (teamId) await syncTeamBadges(env, teamId, session.github_login);
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
+  }
+  if (teamId) {
+    try { await syncTeamBadges(env, teamId, session.github_login); }
+    catch (err) { console.error('team_badge_sync error:', (err as Error)?.message); }
   }
 
   if (voteRecorded) {
