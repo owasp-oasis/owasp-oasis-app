@@ -116,4 +116,3 @@ class_name = "HubSpotSyncWorkflow"
 name       = "oasis-manual-sync-jobs"
 binding    = "MANUAL_SYNC_JOB_WORKFLOW"
 class_name = "ManualSyncJobWorkflow"
-

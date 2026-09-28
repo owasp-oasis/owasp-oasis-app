@@ -15,6 +15,7 @@ interface UserPreferences {
   severities?: string[] | null        // e.g., ["critical", "high"]
   experience?: string | null          // "new" | "some" | "experienced"
   onboarding_version?: string         // e.g., "2026.07.005"
+  show_team_badges?: boolean
 }
 
 /**
@@ -29,12 +30,13 @@ export async function handleGetPreferences(request: Request, env: Env): Promise<
   }
 
   const row = await env.DB.prepare(
-    'SELECT languages, severities, experience, onboarding_version FROM user_preferences WHERE github_login = ?'
+    'SELECT languages, severities, experience, onboarding_version, show_team_badges FROM user_preferences WHERE github_login = ?'
   ).bind(session.github_login).first<{
     languages: string | null
     severities: string | null
     experience: string | null
     onboarding_version: string | null
+    show_team_badges: number | null
   }>()
 
   const preferences = {
@@ -42,6 +44,7 @@ export async function handleGetPreferences(request: Request, env: Env): Promise<
     severities: row?.severities ? JSON.parse(row.severities) : null,
     experience: row?.experience ?? null,
     onboarding_version: row?.onboarding_version ?? null,
+    show_team_badges: row?.show_team_badges === 1,
   }
 
   return jsonOk({
@@ -79,13 +82,14 @@ export async function handlePutPreferences(request: Request, env: Env): Promise<
   const now = new Date().toISOString()
 
   const existing = await env.DB.prepare(
-    `SELECT languages, severities, experience, onboarding_version
+    `SELECT languages, severities, experience, onboarding_version, show_team_badges
      FROM user_preferences WHERE github_login = ?`
   ).bind(session.github_login).first<{
     languages: string | null
     severities: string | null
     experience: string | null
     onboarding_version: string | null
+    show_team_badges: number | null
   }>()
 
   const has = (key: keyof UserPreferences) => Object.prototype.hasOwnProperty.call(body, key)
@@ -100,18 +104,22 @@ export async function handlePutPreferences(request: Request, env: Env): Promise<
   const onboarding_version = has('onboarding_version')
     ? body.onboarding_version ?? CURRENT_ONBOARDING_VERSION
     : existing?.onboarding_version ?? CURRENT_ONBOARDING_VERSION
+  const show_team_badges = has('show_team_badges')
+    ? body.show_team_badges === true
+    : existing?.show_team_badges === 1
 
   // Upsert using INSERT OR REPLACE
   await env.DB.prepare(
     `INSERT OR REPLACE INTO user_preferences
-     (github_login, languages, severities, experience, onboarding_version, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_preferences WHERE github_login = ?), ?), ?)`
+     (github_login, languages, severities, experience, onboarding_version, show_team_badges, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM user_preferences WHERE github_login = ?), ?), ?)`
   ).bind(
     session.github_login,
     languages,
     severities,
     experience,
     onboarding_version,
+    show_team_badges ? 1 : 0,
     session.github_login,
     now,
     now
@@ -124,6 +132,7 @@ export async function handlePutPreferences(request: Request, env: Env): Promise<
       severities: severities ? JSON.parse(severities) : null,
       experience,
       onboarding_version,
+      show_team_badges,
     },
   })
 }

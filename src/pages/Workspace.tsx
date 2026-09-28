@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type MouseEvent } from 'react'
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Decision } from '../components/VoteForm'
 import ProjectsTab from './workspace/ProjectsTab'
@@ -7,14 +7,16 @@ import ContributorsTab from './workspace/ContributorsTab'
 import MaintainersTab from './workspace/MaintainersTab'
 import ToolsTab from './workspace/ToolsTab'
 import './Workspace.css'
+import TeamsTab from './workspace/TeamsTab'
 
-export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers'
+export type WorkspaceTab = 'projects' | 'prs' | 'contributors' | 'tools' | 'maintainers' | 'teams'
 
 const TABS: { id: WorkspaceTab; label: string; path: string }[] = [
   { id: 'projects',      label: 'Projects',      path: '/workspace/projects' },
   { id: 'prs',           label: 'Pull Requests', path: '/workspace/pull-requests' },
   { id: 'contributors', label: 'Contributors',  path: '/workspace/contributors' },
   { id: 'maintainers',  label: 'Maintainers',   path: '/workspace/maintainers' },
+  { id: 'teams',        label: 'Teams',         path: '/workspace/teams' },
 ]
 
 interface Meta {
@@ -44,6 +46,22 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
   const [meta, setMeta] = useState<Meta>({ last_synced_at: null, sync_running: false })
   const [tabsSticky, setTabsSticky] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const savedWorkspaceScroll = 'oasis_workspace_scroll_y'
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(savedWorkspaceScroll)
+    if (saved === null) return
+    sessionStorage.removeItem(savedWorkspaceScroll)
+    const scrollY = Number(saved)
+    if (!Number.isFinite(scrollY)) return
+    const restore = window.setTimeout(() => window.scrollTo({ top: scrollY, behavior: 'auto' }), 50)
+    return () => window.clearTimeout(restore)
+  }, [activeTab])
+
+  const preserveWorkspaceScroll = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    sessionStorage.setItem(savedWorkspaceScroll, String(window.scrollY))
+  }
 
   // Parse URL params for initial filters from onboarding
   const initialFilters = useMemo(() => {
@@ -60,6 +78,7 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
   const [contributors, setContributors] = useState<any[]>([])
   const [tools, setTools]               = useState<any[]>([])
   const [maintainers, setMaintainers]   = useState<any[]>([])
+  const [teams, setTeams]               = useState<any[]>([])
   const [loaded, setLoaded]             = useState<Set<WorkspaceTab>>(new Set())
   const [loading, setLoading]           = useState<WorkspaceTab | null>(null)
   const [tabErrors, setTabErrors]       = useState<Partial<Record<WorkspaceTab, string>>>({})
@@ -116,13 +135,14 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
         contributors: '/api/workspace/contributors',
         tools:        '/api/workspace/tools',
         maintainers:  '/api/workspace/maintainers',
+        teams:        '/api/teams',
       }
-      const res = await fetch(endpoints[tab])
+      const res = await fetch(endpoints[tab], tab === 'teams' ? { cache: 'no-store' } : undefined)
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} — ${res.statusText || 'server error'}`)
       }
       const data = await res.json()
-      if (!Array.isArray(data)) {
+      if (tab !== 'teams' && !Array.isArray(data)) {
         throw new Error('Server returned an unexpected format (not an array)')
       }
       if (tab === 'projects')     setRepos(data)
@@ -130,6 +150,7 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
       if (tab === 'contributors') setContributors(data)
       if (tab === 'tools')        setTools(data)
       if (tab === 'maintainers')  setMaintainers(data)
+      if (tab === 'teams')        setTeams(data.teams ?? [])
       setLoaded(prev => new Set([...prev, tab]))
     } catch (e) {
       const msg = (e as Error).message ?? 'Unknown error'
@@ -166,7 +187,7 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
   }, [activeTab, fetchTab])
 
   return (
-    <div className="workspace">
+    <div className={'workspace' + (activeTab === 'teams' ? ' workspace--teams' : '')}>
       <div className="page-hero workspace-hero">
         <div className="container">
           <div className="workspace-hero__eyebrow">OASIS work area</div>
@@ -191,8 +212,10 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
               <NavLink
                 key={tab.id}
                 role="tab"
+                preventScrollReset
                 aria-selected={activeTab === tab.id}
                 className={`lb-tab${activeTab === tab.id ? ' lb-tab--active' : ''}`}
+                onClick={preserveWorkspaceScroll}
                 to={{
                   pathname: tab.path,
                   search: searchParams.toString() ? `?${searchParams.toString()}` : '',
@@ -261,6 +284,8 @@ export default function Workspace({ activeTab }: WorkspaceProps) {
               <ToolsTab data={tools} loading={loading === 'tools'} />
             ) : activeTab === 'maintainers' ? (
               <MaintainersTab data={maintainers} loading={loading === 'maintainers'} />
+            ) : activeTab === 'teams' ? (
+              <TeamsTab data={teams} loading={loading === 'teams'} onCreated={() => handleRetry('teams')} />
             ) : null}
           </div>
 

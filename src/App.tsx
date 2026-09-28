@@ -43,6 +43,7 @@ function AppShell() {
           <Route path="/workspace/pull-requests" element={<Workspace activeTab="prs" />} />
           <Route path="/workspace/contributors" element={<Workspace activeTab="contributors" />} />
           <Route path="/workspace/maintainers" element={<Workspace activeTab="maintainers" />} />
+          <Route path="/workspace/teams" element={<Workspace activeTab="teams" />} />
           {/* Intentionally unlisted: available by direct link, but omitted from Workspace navigation. */}
           <Route path="/workspace/tools" element={<Workspace activeTab="tools" />} />
           {/* Intentionally unlisted: linked from the Workspace sync chip. */}

@@ -165,6 +165,25 @@ describe('POST /api/vote', () => {
 
       expect(res.status).toBe(200);
     });
+
+    it('records optional Team attribution for a current Team member', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      const timestamp = new Date().toISOString();
+      await env.DB.prepare(`INSERT INTO teams (name, description, membership_mode, status, owner_login, created_at, updated_at)
+        VALUES (?, '', 'invite_only', 'active', ?, ?, ?)`)
+        .bind('Vote attribution', login, timestamp, timestamp).run();
+      const team = await env.DB.prepare(`SELECT id FROM teams WHERE name = ?`).bind('Vote attribution').first<{ id: number }>();
+      await env.DB.prepare(`INSERT INTO team_memberships (team_id, github_login, role, joined_at) VALUES (?, ?, 'owner', ?)`)
+        .bind(team?.id, login, timestamp).run();
+      await insertTestPR(env);
+
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, { team_id: team?.id });
+      expect(res.status).toBe(200);
+      const stored = await env.DB.prepare('SELECT team_id FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first<{ team_id: number }>();
+      expect(stored?.team_id).toBe(team?.id);
+    });
   });
 
   describe('validation', () => {

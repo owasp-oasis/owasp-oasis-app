@@ -411,9 +411,26 @@ export async function handleContributorDetail(env: Env, req: Request, login: str
       };
     });
 
+  const publicBadges = await env.DB.prepare(
+    `SELECT tb.team_id, t.name AS team_name, t.status AS team_status, tb.badge_key,
+            tb.qualifying_count, tb.threshold, tb.awarded_at
+       FROM team_badges tb
+       JOIN teams t ON t.id = tb.team_id
+       JOIN team_badge_settings tbs ON tbs.team_id = tb.team_id
+       JOIN user_preferences up ON up.github_login = tb.github_login
+      WHERE tb.github_login = ? AND tbs.public_display = 1 AND up.show_team_badges = 1
+      ORDER BY tb.awarded_at`,
+  ).bind(login).all();
+
   const responseBadges = await getResponseBadgeSummary(env.DB, login);
 
-  return lbResponse({ contributor, allTimeRank, contributions, responseBadges }, req);
+  return lbResponse({
+    contributor,
+    allTimeRank,
+    contributions,
+    public_badges: publicBadges.results ?? [],
+    responseBadges,
+  }, req);
 }
 
 export async function handleMaintainers(env: Env, req: Request, url: URL): Promise<Response> {

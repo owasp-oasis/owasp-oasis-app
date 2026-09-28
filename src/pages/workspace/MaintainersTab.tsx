@@ -72,16 +72,6 @@ export default function MaintainersTab({ data, loading }: Props) {
 
   return (
     <>
-      <div className="todo-banner">
-        <span className="todo-badge">TODO</span>
-        <div>
-          <strong>This dashboard needs a redesign.</strong> The current data — submitted vs merged PR
-          counts — doesn't yet tell a useful story about maintainer impact. Once OASIS PRs start being
-          accepted upstream, we'll revisit this tab to surface meaningful signals: which maintainers
-          are most responsive, which projects are best-aligned with OASIS contributions, and how
-          maintainer engagement correlates with upstream acceptance rates.
-        </div>
-      </div>
       <p className="tab-note">
         Upstream merge detection compares OASIS PR commit SHAs against the upstream default branch.
         Time-to-merge metrics will appear once PRs are successfully merged upstream.
