@@ -1,7 +1,7 @@
 /**
  * PRPanel — slide-out side panel for reviewing a PR.
  *
- * Tabs: PR info | Body | Changes | Comments | Summary
+ * Tabs: Summary | Details | Diff | Comments | Workflow
  * Vote bar: Accept / Modify / Reject (open PRs only)
  * VoteForm drawer slides up from bottom when a decision is selected.
  */
@@ -16,6 +16,7 @@ import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
+import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
 import { trackReviewEngagement } from '../../analytics'
 
@@ -59,7 +60,7 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'body' | 'changes' | 'comments' | 'summary'
+type Tab = 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
 
 interface Props {
   pr: PanelPR | null
@@ -120,7 +121,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
   const { user } = useAuth()
 
   const [params, setParams] = useSearchParams()
-  const activeTab = (['summary','body','changes','comments'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
+  const activeTab = (['summary','body','changes','comments','workflow'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
   const setActiveTab = (tab: Tab) => { const next = new URLSearchParams(params); next.set('tab', tab); setParams(next, { replace: true }) }
   const { preferences } = useWorkspace()
   const [expanded, setExpanded] = useState(false)
@@ -266,6 +267,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     { id: 'body',     label: 'Details' },
     { id: 'changes',  label: 'Diff' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
+    { id: 'workflow', label: 'Workflow' },
   ]
 
   // SummaryTab needs details augmented with consensus counts from the workspace PR
@@ -360,6 +362,9 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
               loading={detailsLoading}
               error={detailsError}
             />
+          )}
+          {activeTab === 'workflow' && (
+            <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
           )}
         </div>
 
