@@ -157,7 +157,6 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
     <header className={'teams-heading team-profile-heading' + (bannerImage ? ' has-team-banner' : '')} style={bannerImage ? { backgroundImage: `url(${bannerImage})` } : undefined}>
       <div className="team-profile-banner-overlay" aria-hidden="true" />
       <div className="team-identity"><TeamAvatar team={{ ...detail.team, logo_image_data: logoImage }} large /><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
-      {detail.membership && active && <Link className="team-button" to={sectionUrl(canManage ? 'members' : 'repositories')}>{canManage ? 'Invite members' : 'Find a review'}</Link>}
     </header>
 
     <div className={detail.membership ? 'team-layout' : ''}>
@@ -199,7 +198,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
         </li>)}</ul>
         {!members.some(member => member.github_login.toLowerCase().includes(memberQuery.toLowerCase())) && <p className="team-empty">No members match your search.</p>}
       </section>
-      {canManage && <section className="team-surface"><div className="team-section-heading"><h3>Pending invitations <span className="team-badge">{invites.length}</span></h3></div>{invites.length === 0 ? <p className="team-empty">No invitations waiting for a response.</p> : <ul className="team-list">{invites.map(invite => <li className="team-row" key={invite.id}><strong className="team-row-main">{invite.invitee_login}</strong><span className="team-badge">Awaiting acceptance</span></li>)}</ul>}</section>}
+      {canManage && <section className="team-surface"><div className="team-section-heading"><h3>Pending invitations <span className="team-badge">{invites.length}</span></h3></div>{invites.length === 0 ? <p className="team-empty">No invitations waiting for a response.</p> : <ul className="team-list">{invites.map(invite => <li className="team-row" key={invite.id}><strong className="team-row-main">{invite.invitee_login}</strong><div className="team-actions"><span className="team-badge">Awaiting acceptance</span>{active && <button type="button" className="team-button team-button--danger" disabled={busy} onClick={() => setConfirmation({ title: 'Revoke invitation for ' + invite.invitee_login + '?', explanation: 'They will no longer be able to accept this invitation. You can invite them again later.', label: 'Revoke invitation', action: () => run('members', { action: 'revoke_invite', invite_id: invite.id }, 'Invitation revoked.') })}>Revoke</button>}</div></li>)}</ul>}</section>}
     </div>}
 
     {section === 'repositories' && <div className="team-content-stack">

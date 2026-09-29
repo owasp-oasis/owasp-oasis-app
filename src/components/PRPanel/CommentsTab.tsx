@@ -3,6 +3,7 @@
  * Fetches /api/pr-panel/:id/comments. Refetches when refetchTrigger increments.
  */
 import { useState, useEffect, useCallback } from 'react'
+import type { FormEvent } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { renderMarkdown } from './renderMarkdown'
 
@@ -66,6 +67,10 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
   const [reactionErrors, setReactionErrors] = useState<Map<number, string>>(new Map())
   const [pendingReactions, setPendingReactions] = useState<Set<number>>(new Set())
   const [viewerReactions, setViewerReactions] = useState<Map<number, string>>(new Map())
+  const [draft, setDraft] = useState('')
+  const [posting, setPosting] = useState(false)
+  const [postError, setPostError] = useState<string | null>(null)
+  const [postNotice, setPostNotice] = useState<string | null>(null)
 
   // Fetch CSRF token once the user is authenticated
   useEffect(() => {
@@ -91,6 +96,61 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
   }, [prId, onCountLoaded])
 
   useEffect(() => { fetchComments() }, [fetchComments, refetchTrigger])
+
+  async function handleSubmitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!user) {
+      onSignInRequired?.()
+      return
+    }
+
+    const body = draft.trim()
+    if (!body) {
+      setPostError('Write a comment before posting.')
+      return
+    }
+
+    setPosting(true)
+    setPostError(null)
+    setPostNotice(null)
+    try {
+      const res = await fetch(`/api/pr-panel/${prId}/comments`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        },
+        body: JSON.stringify({ body }),
+      })
+      const data = await res.json() as { ok: boolean; comment?: Comment; error?: string }
+
+      if (res.status === 401) {
+        onSignInRequired?.()
+        return
+      }
+      if (res.status === 403) {
+        setPostError('Re-authenticate to add comments — sign in again with the new scope.')
+        return
+      }
+      if (!res.ok || !data.comment) {
+        setPostError(data.error ?? 'Could not post comment.')
+        return
+      }
+
+      setComments(prev => {
+        const next = [...(prev ?? []), data.comment as Comment]
+        onCountLoaded(next.length)
+        return next
+      })
+      setDraft('')
+      setPostNotice('Comment posted to the GitHub PR.')
+    } catch {
+      setPostError('Could not post comment. Check your connection and try again.')
+    } finally {
+      setPosting(false)
+    }
+  }
 
   async function handleReact(commentId: number, reaction: string) {
     if (!user) {
@@ -163,11 +223,39 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
 
   if (loading) return <div className="prp-loading">Loading comments…</div>
   if (error)   return <div className="prp-error">{error}</div>
-  if (!comments || comments.length === 0) return <p className="prp-no-data">No comments yet.</p>
 
   return (
-    <div>
-      {comments.map(c => {
+    <div className="prp-comments">
+      {user ? (
+        <form className="prp-comment-composer" onSubmit={handleSubmitComment}>
+          <label htmlFor={`prp-comment-${prId}`} className="prp-comment-composer-label">Add a comment</label>
+          <textarea
+            id={`prp-comment-${prId}`}
+            className="prp-comment-textarea"
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            placeholder="Share context, questions, or follow-up…"
+            maxLength={2000}
+            rows={4}
+            disabled={posting}
+          />
+          <div className="prp-comment-composer-footer">
+            <span className="prp-comment-composer-help">Plain comments start a discussion. Use the validation footer to record a decision.</span>
+            <button type="submit" className="prp-comment-post" disabled={posting || !draft.trim()}>
+              {posting ? 'Posting…' : 'Post comment'}
+            </button>
+          </div>
+          {postError && <p className="prp-comment-notice prp-comment-notice--error" role="alert">{postError}</p>}
+          {postNotice && <p className="prp-comment-notice" role="status">{postNotice}</p>}
+        </form>
+      ) : (
+        <div className="prp-comment-signin">
+          <span>Sign in to join the discussion.</span>
+          <button type="button" className="prp-comment-post" onClick={() => onSignInRequired?.()}>Sign in to comment</button>
+        </div>
+      )}
+
+      {!comments || comments.length === 0 ? <p className="prp-no-data">No comments yet.</p> : comments.map(c => {
         const isOasis = c.oasis_decision !== null
         const reauthError = reactionErrors.get(c.id) === 'reauth'
         const reactionError = reactionErrors.get(c.id)

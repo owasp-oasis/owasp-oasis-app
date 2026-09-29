@@ -67,7 +67,7 @@ for (const [index, login] of identities.entries()) {
 }
 
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' }
-const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/(mine|workspace)$|workspace\/(meta|repos|prs|contributors|maintainers|tools)$|sync\/status(?:\/|$)|contributors\/[^/]+$|votes\/mine$|pr-panel\/\d+\/(details|files|comments|workflow)$)/
+const allowedAPI = /^\/api\/(teams(?:\/|$)|csrf$|auth\/(me|logout)$|preferences\/(mine|workspace)$|workspace\/(meta|repos|prs|contributors|maintainers|tools)$|sync\/status(?:\/|$)|contributors\/[^/]+$|votes\/mine$|pr-panel\/\d+\/(details|files|comments|react|workflow)$)/
 const mockContributor = {
   login: 'demo-member', avatar_url: '/__demo/avatar.svg', prs_worked: 1,
   total_interactions: 4, non_oasis_interactions: 0, reactions_received: 3,
@@ -115,6 +115,14 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'GET' && /\/api\/pr-panel\/\d+\/comments$/.test(url.pathname)) {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, comments: [] })); return
+      }
+      if (req.method === 'POST' && /\/api\/pr-panel\/\d+\/comments$/.test(url.pathname)) {
+        let requestBody = ''
+        for await (const chunk of req) requestBody += chunk
+        let parsed = {}
+        try { parsed = JSON.parse(requestBody) } catch { /* the real Worker validates malformed JSON */ }
+        const body = typeof parsed.body === 'string' ? parsed.body : ''
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, comment: { id: Date.now(), user: { login: persona, avatar_url: '/__demo/avatar.svg' }, body, created_at: new Date().toISOString(), reactions: { total_count: 0, '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 }, oasis_decision: null } })); return
       }
       const headers = new Headers()
       for (const [key, value] of Object.entries(req.headers)) if (typeof value === 'string' && !['host', 'content-length', 'connection'].includes(key)) headers.set(key, value)

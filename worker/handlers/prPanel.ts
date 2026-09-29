@@ -9,13 +9,14 @@
  *   GET  /api/pr-panel/:id/details
  *   GET  /api/pr-panel/:id/files
  *   GET  /api/pr-panel/:id/comments
+ *   POST /api/pr-panel/:id/comments
  *   POST /api/pr-panel/:id/react
  */
 
 import type { Env } from '../types.js';
 import { ghFetch, ghFetchAll, parseDecision, parseDetectionTool, ORG } from '../github.js';
 import type { GitHubReaction } from '../github.js';
-import { jsonOk, jsonErr, validateCSRF } from '../security.js';
+import { checkRateLimit, jsonOk, jsonErr, validateCSRF } from '../security.js';
 import { getSession } from './auth.js';
 
 /* ─── REACTION TYPES ──────────────────────────────────────────── */
@@ -212,6 +213,72 @@ export async function handlePRComments(request: Request, env: Env, id: number): 
   }));
 
   return jsonOk({ comments: result }, request);
+}
+
+/* ─── POST /api/pr-panel/:id/comments ───────────────────────── */
+export async function handlePRCommentCreate(request: Request, env: Env, id: number): Promise<Response> {
+  if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
+
+  const session = await getSession(request, env);
+  if (!session) return jsonErr('Sign in to comment', 401, request);
+
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const rateLimit = await checkRateLimit(env, ip);
+  if (!rateLimit.allowed) return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
+
+  const pr = await getPRRow(env, id);
+  if (!pr) return jsonErr('PR not found', 404, request);
+
+  let body: { body?: unknown };
+  try {
+    body = await request.json() as { body?: unknown };
+  } catch {
+    return jsonErr('Invalid JSON body', 400, request);
+  }
+
+  const commentBody = typeof body.body === 'string' ? body.body.trim() : '';
+  if (!commentBody) return jsonErr('Comment body is required', 400, request);
+  if (commentBody.length > 2000) return jsonErr('Comment body is too long (max 2000 characters)', 400, request);
+  if (!session.github_token) return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
+
+  const commentsPath = `/repos/${ORG}/${pr.repo_name}/issues/${pr.number}/comments`;
+  let ghRes: Response;
+  try {
+    ghRes = await fetch(`https://api.github.com${commentsPath}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.github_token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'oasis-worker-comment/1.0',
+      },
+      body: JSON.stringify({ body: commentBody }),
+    });
+  } catch {
+    return jsonErr('Failed to post comment to GitHub', 502, request);
+  }
+
+  if (ghRes.status === 403) return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
+  if (!ghRes.ok) {
+    const errorText = await ghRes.text().catch(() => 'unknown error');
+    return jsonErr(`GitHub API error ${ghRes.status}: ${errorText}`, 502, request);
+  }
+
+  const ghComment = await ghRes.json() as GHComment;
+  return jsonOk({
+    comment: {
+      id: ghComment.id,
+      user: {
+        login: ghComment.user?.login ?? session.github_login,
+        avatar_url: ghComment.user?.avatar_url ?? session.avatar_url ?? `https://github.com/${session.github_login}.png?size=32`,
+      },
+      body: ghComment.body ?? commentBody,
+      created_at: ghComment.created_at ?? new Date().toISOString(),
+      reactions: { total_count: 0, '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 },
+      oasis_decision: parseDecision(ghComment.body ?? commentBody),
+    },
+  }, request);
 }
 
 /* ─── POST /api/pr-panel/:id/react ───────────────────────────── */

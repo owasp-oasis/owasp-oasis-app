@@ -193,6 +193,35 @@ describe('Community Teams', () => {
     expect((await detail.json() as { members: unknown[] }).members).toHaveLength(2);
   });
 
+  it('lets a Team manager revoke a pending invitation without exposing the action to invitees', async () => {
+    const owner = await createTestSession(env, { github_login: 'revoke-owner' });
+    const invitee = await createTestSession(env, { github_login: 'revoke-invitee' });
+    const created = await post('/api/teams', { name: 'Revocable invitations' }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    const teamId = ((await created.json()) as { team: { id: number } }).team.id;
+
+    expect((await post(`/api/teams/${teamId}/members`, { action: 'invite', github_login: invitee.login }, makeCsrf(), owner.sessionCookie, owner.tokenCookie)).status).toBe(200);
+    const detail = await SELF.fetch(new Request(`http://localhost/api/teams/${teamId}`, {
+      headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` },
+    }));
+    const invite = ((await detail.json()) as { invites: Array<{ id: number; invitee_login: string }> }).invites[0];
+    expect(invite).toMatchObject({ invitee_login: invitee.login });
+
+    const forbidden = await post(`/api/teams/${teamId}/members`, { action: 'revoke_invite', invite_id: invite.id }, makeCsrf(), invitee.sessionCookie, invitee.tokenCookie);
+    expect(forbidden.status).toBe(403);
+
+    const revoked = await post(`/api/teams/${teamId}/members`, { action: 'revoke_invite', invite_id: invite.id }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(revoked.status).toBe(200);
+    expect(await revoked.json()).toMatchObject({ ok: true, revoked: invitee.login });
+
+    const mine = await SELF.fetch(new Request('http://localhost/api/teams/mine', {
+      headers: { Cookie: `${invitee.sessionCookie}; ${invitee.tokenCookie}` },
+    }));
+    expect((await mine.json() as { invites: unknown[] }).invites).toHaveLength(0);
+
+    const again = await post(`/api/teams/${teamId}/members`, { action: 'revoke_invite', invite_id: invite.id }, makeCsrf(), owner.sessionCookie, owner.tokenCookie);
+    expect(again.status).toBe(404);
+  });
+
   it('allows an active member to attribute a submitted validation to one Team', async () => {
     const owner = await createTestSession(env, { github_login: 'owner' });
     const csrf = makeCsrf();

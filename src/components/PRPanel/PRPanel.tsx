@@ -16,7 +16,6 @@ import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
 import SummaryTab from './SummaryTab'
-import WorkflowTab from './WorkflowTab'
 import './PRPanel.css'
 import { trackReviewEngagement } from '../../analytics'
 
@@ -59,7 +58,7 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
+type Tab = 'body' | 'changes' | 'comments' | 'summary'
 
 interface Props {
   pr: PanelPR | null
@@ -110,7 +109,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
   const { user } = useAuth()
 
   const [params, setParams] = useSearchParams()
-  const activeTab = (['summary','body','changes','comments','workflow'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
+  const activeTab = (['summary','body','changes','comments'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
   const setActiveTab = (tab: Tab) => { const next = new URLSearchParams(params); next.set('tab', tab); setParams(next, { replace: true }) }
   const { preferences } = useWorkspace()
   const [expanded, setExpanded] = useState(false)
@@ -118,7 +117,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
   const panelRef = useRef<HTMLElement>(null)
   const modal = expanded || presentation === 'drawer'
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
-  const [drawerDecision, setDrawerDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
   const [refetchComments, setRefetchComments] = useState(0)
   const [showSignIn, setShowSignIn]     = useState(false)
@@ -138,7 +136,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     if (pr.id !== prevPrId.current) {
       prevPrId.current = pr.id
       setVoteDecision(null)
-      setDrawerDecision(null)
       setCommentCount(null)
       setDetails(null)
       setDetailsError(null)
@@ -146,11 +143,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
       if (bodyRef.current) bodyRef.current.scrollTop = 0
     }
   }, [pr])
-
-  // Reset drawerDecision when top-level voteDecision button is clicked
-  useEffect(() => {
-    if (voteDecision) setDrawerDecision(voteDecision)
-  }, [voteDecision])
 
   // Fetch details when PR changes
   useEffect(() => {
@@ -262,7 +254,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     { id: 'body',     label: 'Details' },
     { id: 'changes',  label: 'Diff' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
-    { id: 'workflow', label: 'Workflow' },
   ]
 
   // SummaryTab needs details augmented with consensus counts from the workspace PR
@@ -311,39 +302,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
           </div>
         )}
 
-        {/* Vote bar (open PRs only, authenticated users only) */}
-        {isOpen && user && (
-          <div className="prp-vote-bar">
-            <span className="prp-vote-label">Your vote:</span>
-            {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
-              const isVoted  = myVote === d
-              const isOther  = !!myVote && myVote !== d
-              const isActive = voteDecision === d && !myVote
-              const classes  = [
-                'prp-vote-btn',
-                `prp-vote-btn--${d}`,
-                isVoted  ? 'prp-vote-btn--voted'  : '',
-                isActive ? 'prp-vote-btn--active' : '',
-                isOther  ? 'prp-vote-btn--other'  : '',
-              ].filter(Boolean).join(' ')
-
-              return (
-                <button
-                  key={d}
-                  className={classes}
-                  onClick={() => handleVoteButtonClick(d)}
-                  disabled={!!myVote || submitting}
-                  aria-pressed={isActive || isVoted}
-                  aria-keyshortcuts={preferences.keyboardShortcuts ? d[0].toUpperCase() : undefined}
-                  title={myVote ? `You voted ${myVote}` : `Vote ${d}`}
-                >
-                  {isVoted ? `You voted ${DECISION_LABELS[d]}` : <><u>{DECISION_LABELS[d][0]}</u>{DECISION_LABELS[d].slice(1)}</>}
-                </button>
-              )
-            })}
-          </div>
-        )}
-
         {/* Tab bar */}
         <div className="prp-tab-bar" role="tablist" aria-label="Candidate fix details">
           {tabs.map(t => (
@@ -389,40 +347,43 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
               error={detailsError}
             />
           )}
-          {activeTab === 'workflow' && (
-            <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
-          )}
         </div>
 
-         {/* Vote form drawer */}
-         {voteDecision && !myVote && isOpen && (
-           <div className="prp-vote-form">
-             <div className="prp-vote-form-header">
-               <span className="prp-vote-form-title">
-                 {(drawerDecision ?? voteDecision) === 'duplicate'
-                   ? 'Report duplicate'
-                   : `Your validation — ${DECISION_LABELS[drawerDecision ?? voteDecision]}`}
-               </span>
-               <button
-                 className="prp-vote-form-close"
-                 disabled={submitting}
-                 onClick={() => setVoteDecision(null)}
-                 aria-label="Close vote form"
-               >
-                 <X size={16} />
-               </button>
-             </div>
-             <VoteForm
-               key={activePR.id}
-               onSubmittingChange={setSubmitting}
-               pr={activePR}
-               initialDecision={voteDecision}
-               onClose={() => setVoteDecision(null)}
-               onSuccess={handleVoteSuccess}
-               onDecisionChange={setDrawerDecision}
-             />
-           </div>
-         )}
+        {/* Review footer: one decision bar, followed by its form. Keeping this
+            below the scrollable detail content matches the reference workflow
+            and prevents the form from obscuring a diff or comment thread. */}
+        <div className="prp-vote-footer">
+          {isOpen && user && !myVote && (
+            <div className="prp-vote-bar" aria-label="Your validation">
+              <span className="prp-vote-label">Your validation</span>
+              {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
+                const isActive = voteDecision === d
+                const classes = ['prp-vote-btn', `prp-vote-btn--${d}`, isActive ? 'prp-vote-btn--active' : ''].filter(Boolean).join(' ')
+                return <button key={d} className={classes} onClick={() => handleVoteButtonClick(d)} disabled={submitting} aria-pressed={isActive} aria-keyshortcuts={preferences.keyboardShortcuts ? d[0].toUpperCase() : undefined} title={`Vote ${d}`}><u>{DECISION_LABELS[d][0]}</u>{DECISION_LABELS[d].slice(1)}</button>
+              })}
+            </div>
+          )}
+          {isOpen && user && myVote && (
+            <div className="prp-vote-complete" role="status">
+              <span className="prp-vote-complete-icon" aria-hidden="true">✓</span>
+              <span>You voted <strong>{DECISION_LABELS[myVote]}</strong>. Your OASIS comment is on the GitHub PR.</span>
+            </div>
+          )}
+          {!user && isOpen && <div className="prp-vote-complete"><span>Sign in with GitHub to cast your validation.</span><a href="/api/auth/login" className="prp-nudge-signin">Sign in with GitHub</a></div>}
+          {!isOpen && <div className="prp-vote-complete"><span>This candidate fix is closed. Voting is disabled.</span></div>}
+          {voteDecision && !myVote && isOpen && (
+            <div className="prp-vote-form">
+              <VoteForm
+                key={activePR.id}
+                onSubmittingChange={setSubmitting}
+                pr={activePR}
+                initialDecision={voteDecision}
+                onClose={() => setVoteDecision(null)}
+                onSuccess={handleVoteSuccess}
+              />
+            </div>
+          )}
+        </div>
       </aside>
     </>
   )

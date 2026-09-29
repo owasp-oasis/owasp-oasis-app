@@ -419,6 +419,19 @@ export async function handleTeamMembers(request: Request, env: Env, teamId: numb
 
   const membership = await requireManager(env, teamId, user.github_login);
   if (!membership) return jsonErr('Only a Team owner or admin can manage members', 403, request);
+  if (action === 'revoke_invite') {
+    const inviteId = typeof parsed.val.invite_id === 'number' && Number.isInteger(parsed.val.invite_id) && parsed.val.invite_id > 0
+      ? parsed.val.invite_id
+      : 0;
+    if (!inviteId) return jsonErr('A valid invitation id is required', 400, request);
+    const invite = await env.DB.prepare(
+      `SELECT invitee_login FROM team_invites WHERE id = ? AND team_id = ? AND status = 'pending'`,
+    ).bind(inviteId, teamId).first<{ invitee_login: string }>();
+    if (!invite) return jsonErr('Invitation not found', 404, request);
+    await env.DB.prepare(`UPDATE team_invites SET status = 'revoked', resolved_at = ? WHERE id = ?`)
+      .bind(timestamp, inviteId).run();
+    return jsonOk({ revoked: invite.invitee_login }, request);
+  }
   const loginResult = vGitHub(parsed.val.github_login);
   if (!loginResult.ok || !loginResult.val) return jsonErr(loginResult.ok ? 'GitHub login is required' : loginResult.error, 400, request);
   const login = loginResult.val;
