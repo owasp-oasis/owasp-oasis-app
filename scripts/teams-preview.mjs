@@ -29,6 +29,14 @@ for (const login of identities) {
   await db.prepare('INSERT INTO user_sessions (session_id, github_login, avatar_url, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
     .bind(sessions[login], login, '/__demo/avatar.svg', now, expires).run()
 }
+// Keep the persona switcher useful for workflow walkthroughs: maintainer
+// controls are admin-authorized, while the other personas remain members.
+for (const [id, login] of [[9001, 'demo-owner'], [9002, 'demo-admin']]) {
+  await db.prepare(`INSERT INTO user_roles
+    (github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at)
+    VALUES (?, ?, 'admin', ?, ?, ?)`)
+    .bind(id, login, id, now, now).run()
+}
 await db.prepare("INSERT INTO teams (id, name, description, membership_mode, owner_login, created_at, updated_at) VALUES (1, 'Python security reviewers', 'Small reviews. Safer Python projects. Join us in validating security fixes across the ecosystem.', 'request', 'demo-owner', ?, ?)")
   .bind(now, now).run()
 await db.prepare("INSERT INTO teams (id, name, description, membership_mode, owner_login, created_at, updated_at) VALUES (2, 'Web application defenders', 'A community working together on authentication and safer web applications.', 'request', 'demo-admin', ?, ?)")
