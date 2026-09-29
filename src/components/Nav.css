@@ -1,6 +1,6 @@
 .nav { position:sticky; top:var(--banner-height,0px); z-index:100; height:64px; background:var(--nav-bg); border-bottom:1px solid var(--line); backdrop-filter:var(--blur-nav); flex-shrink:0 }
-.nav-inner { max-width:1600px; height:100%; padding:0 32px; margin:auto; display:flex; align-items:center; gap:20px }
-.nav-logo { flex-shrink:0; margin-right:28px }
+.nav-inner { max-width:1440px; height:100%; padding:0 24px; margin:auto; display:flex; align-items:center; gap:32px }
+.nav-logo { flex-shrink:0; margin-right:0 }
 .nav-logo img { height:36px; width:auto }
 .nav-links { display:flex; gap:4px; align-items:center; flex:1 }
 .nav-link { white-space:nowrap; font:500 15px var(--sans); color:var(--gray-600); padding:6px 14px; border-radius:6px }
@@ -24,6 +24,6 @@
 .nav-hamburger span { width:22px; height:2px; background:var(--blue-dark) }
 .skip-link { position:fixed; left:16px; top:-80px; padding:12px 20px; background:var(--ink); color:var(--white); border-radius:100px; z-index:1000 }
 .skip-link:focus { top:8px }
-@media(max-width:1279px) { .nav-inner{padding:0 24px;gap:10px}.nav-logo{margin-right:16px}.nav-link{padding:6px 8px;font-size:14px}.nav-cta{padding:8px} }
+@media(max-width:1279px) { .nav-inner{padding:0 24px;gap:16px}.nav-link{padding:6px 8px;font-size:14px}.nav-cta{padding:8px} }
 @media(max-width:1039px) { .nav-account-login{display:none}.nav-inner{padding:0 16px;gap:8px}.nav-logo{margin-right:8px}.nav-link{padding:6px;font-size:13px}.nav-cta{display:none} }
 @media(max-width:767px) { .nav-links{display:none}.nav-hamburger{display:flex}.nav-signin{margin-left:auto}.nav-links--open{display:flex;position:absolute;top:64px;left:0;right:0;background:var(--white);flex-direction:column;align-items:stretch;padding:8px 0;box-shadow:var(--shadow-menu)}.nav-link{padding:13px 24px;font-size:16px}.nav-account-trigger{min-height:44px}.nav-logo{margin-right:auto} }

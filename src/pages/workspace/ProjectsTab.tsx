@@ -141,7 +141,7 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                   }}
                 >
                   <span className="stat-value">{repo.open_prs}</span>
-                  <span className="stat-label">Open PRs</span>
+                  <span className="stat-label">Open</span>
                 </button>
                 <button
                   className="stat stat-clickable"
@@ -150,8 +150,8 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                     setSelectedRepo(repo)
                   }}
                 >
-                  <span className="stat-value">{repo.total_prs}</span>
-                  <span className="stat-label">Total PRs</span>
+                  <span className="stat-value">{Math.max(0, repo.open_prs - Array.from(myVotes.keys()).length)}</span>
+                  <span className="stat-label">Need my vote</span>
                 </button>
                 <button
                   className="stat stat-clickable"
@@ -160,28 +160,18 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                     setSelectedRepo(repo)
                   }}
                 >
-                  <span className="stat-value">{repo.contributors}</span>
-                  <span className="stat-label">Contributors</span>
+                  <span className="stat-value">{repo.accepted_outcomes ?? repo.total_accept}</span>
+                  <span className="stat-label">Accepted</span>
                 </button>
               </div>
 
               <div className="project-card-consensus">
-                <button
-                  className="consensus-labels"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onNavigateToPRs(repo.id)
-                  }}
-                >
-                  <span className="cl-accept">✓ {repo.total_accept} Accept</span>
-                  <span className="cl-modify">~ {repo.total_modify} Modify</span>
-                  <span className="cl-reject">✕ {repo.total_reject} Reject</span>
-                </button>
                 <ConsensusBar
                   accept={repo.total_accept}
                   modify={repo.total_modify}
                   reject={repo.total_reject}
                 />
+                <button className="consensus-labels" onClick={(e) => { e.stopPropagation(); onNavigateToPRs(repo.id) }}>Review {repo.name} fixes →</button>
               </div>
             </button>
           ))}

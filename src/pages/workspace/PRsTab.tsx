@@ -21,7 +21,7 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   const [closed, setClosed] = useState(false)
   const layoutParam = params.get('layout')
   const layout = layoutParam === 'split' || layoutParam === 'table' || layoutParam === 'focus' ? layoutParam : preferences.layout
-  const filter = params.get('filter') ?? (user ? 'mine' : 'open')
+  const filter = params.get('filter') ?? (user ? 'mine' : 'needs')
   const query = params.get('q') ?? ''
   const repo = params.get('repo') ?? ''
   const bypass = params.get('all') === '1'
@@ -35,7 +35,7 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
     (bypass || matchesPreferences(pr,preferences,myVotes)) &&
     (!languageFilters.length || languageFilters.some(lang=>lang.toLowerCase()===pr.language?.toLowerCase())) &&
     (!severityFilters.length || severityFilters.includes(finding(pr).severity)) &&
-    (filter==='mine' ? pr.state==='open' && !myVotes.has(pr.id) : filter==='open' ? pr.state==='open' : filter==='trusted' ? fixStatus(pr)==='Trusted' : true)
+    (filter==='mine' ? pr.state==='open' && !myVotes.has(pr.id) : filter==='needs' ? fixStatus(pr)==='Needs review' : filter==='trusted' ? fixStatus(pr)==='Trusted' : filter==='accepted' ? fixStatus(pr)==='Accepted' : filter==='withdrawn' ? fixStatus(pr)==='Withdrawn' : filter==='rejected' ? fixStatus(pr)==='Rejected' : true)
   )).sort((a,b)=>{
     if(sort==='severity') return (severityOrder[finding(a).severity]-severityOrder[finding(b).severity])*(ascending?1:-1)
     const av = sort==='status'?fixStatus(a):sort==='cwe'?finding(a).cwe:sort==='repo'?a.repo_name:a.updated_at??''
@@ -47,6 +47,7 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   const selectedIndex = filtered.findIndex(pr=>pr.id===selected?.id)
   const projects = [...new Map(data.map(pr=>[pr.repo_id,pr.repo_name])).entries()].sort((a,b)=>a[1].localeCompare(b[1]))
   const needCount = augmented.filter(pr=>pr.state==='open'&&!myVotes.has(pr.id)).length
+  const statusCount = (status: string) => augmented.filter(pr => fixStatus(pr) === status).length
   const patch = (values: Record<string,string|null>) => {const next=new URLSearchParams(params);Object.entries(values).forEach(([key,value])=>value===null?next.delete(key):next.set(key,value));navigate('/workspace/fixes?'+next.toString(),{replace:true});setClosed(false)}
   const open = (pr: CandidateFix) => {setClosed(false);navigate(fixPath(pr)+(params.size?'?'+params.toString():''),{replace:true})}
   useEffect(()=>{
@@ -70,12 +71,12 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   const restricted = !bypass && (preferences.hideClosed || (user&&preferences.hideVoted) || preferences.repositories.length>0 || preferences.cwes.length>0 || preferences.minimumSeverity!=='low' || languageFilters.length>0)
   return <>
     <div className="ws-toolbar">
+      <div className="ws-preferences-toggle"><button type="button" aria-pressed={!bypass} onClick={()=>patch({all:bypass?null:'1'})}>Preferences {bypass ? 'off' : 'on'}</button><Link to="/workspace/preferences">Edit</Link></div>
       <label className="ws-search"><Search size={16}/><input type="search" aria-label="Search candidate fixes" placeholder="Search PR #, repo, title, or CWE…" value={query} onChange={e=>patch({q:e.target.value||null})} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();patch({q:null});e.currentTarget.blur()}}}/></label>
-      <div className="ws-segmented" aria-label="Candidate fix status">{[...(user?[['mine',`Need my vote (${needCount})`]]:[]),['open','Open'],['trusted','Trusted'],['all','All']].map(([key,label])=><button key={key} aria-pressed={filter===key} onClick={()=>patch({filter:key})}>{label}</button>)}</div>
       <select aria-label="Project" value={repo} onChange={e=>patch({repo:e.target.value||null})}><option value="">All projects</option>{projects.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
-      <div className="ws-segmented" aria-label="Candidate fixes layout">{(['split','table','focus'] as const).map(value=><button key={value} aria-pressed={layout===value} onClick={()=>patch({layout:value})}>{value}</button>)}</div>
+      <div className="ws-status-tabs" aria-label="Candidate fix status">{[...(user?[['mine',`Needs my vote ${needCount}`]]:[]),['all',`All ${augmented.length}`],['needs',`Needs review ${statusCount('Needs review')}`],['trusted',`Trusted ${statusCount('Trusted')}`],['accepted',`Accepted ${statusCount('Accepted')}`],['withdrawn',`Withdrawn ${statusCount('Withdrawn')}`],['rejected',`Rejected ${statusCount('Rejected')}`]].map(([key,label])=><button key={key} aria-pressed={filter===key} onClick={()=>patch({filter:key})}>{label}</button>)}</div>
     </div>
-    <div className="ws-filter-summary"><span>{filtered.length} candidate fixes</span>{restricted ? <span>Filtered by your preferences · <Link to="/workspace/preferences">Edit</Link> · <button className="ws-link" onClick={()=>patch({all:'1'})}>Show all</button></span> : bypass && <button className="ws-link" onClick={()=>patch({all:null})}>Use my preferences</button>}</div>
+    <div className="ws-filter-summary"><span>{filtered.length} candidate fixes</span>{restricted ? <span>Filtered by your preferences · <button className="ws-link" onClick={()=>patch({all:'1'})}>Show all</button></span> : bypass && <button className="ws-link" onClick={()=>patch({all:null})}>Use my preferences</button>}</div>
     {prefsError&&<p className="ws-error">Saved preferences could not be loaded. <Link to="/workspace/preferences">Retry in Preferences</Link></p>}
     {route.repo&&!requested&&<p className="ws-error" role="alert">This candidate fix is not available in the current Workspace collection. <Link to="/workspace/fixes">Return to candidate fixes</Link></p>}
     {!filtered.length&&<div className="ws-empty"><h2>No candidate fixes match</h2><p>{needCount?'Your filters hide available work.':'Nothing needs your vote in this collection.'}</p><button className="ws-button" onClick={()=>patch({q:null,repo:null,all:'1',filter:'all',lang:null,severity:null})}>Clear filters</button></div>}

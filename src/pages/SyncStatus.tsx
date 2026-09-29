@@ -168,6 +168,19 @@ function duration(value: number | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
+function relativeTime(value: string | null): string {
+  if (!value) return 'Not available'
+  const elapsed = Math.max(0, Date.now() - Date.parse(value))
+  const minutes = Math.round(elapsed / 60_000)
+  if (minutes > 60 * 24 * 365) return 'not available'
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
+  const days = Math.round(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
 function MetricList({ metrics }: { metrics: Record<string, number | boolean | null> }) {
   const entries = Object.entries(metrics)
   if (entries.length === 0) return null
@@ -606,6 +619,36 @@ export default function SyncStatus() {
         {!payload && !error && <p>Loading synchronization status…</p>}
         {payload && (
           <>
+            <section className="sync-v3-summary" aria-label="Workspace sync health">
+              <div className="sync-v3-health">
+                <div className={`sync-v3-health-dot sync-v3-health-dot--${payload.overall.status}`} aria-hidden="true" />
+                <div>
+                  <h2>{payload.overall.status === 'succeeded' ? 'Healthy' : payload.overall.status === 'unknown' ? 'Status unavailable' : 'Needs attention'}</h2>
+                  <p>Last complete sync {relativeTime(payload.overall.last_success_at)}. Syncs run every 4 hours.</p>
+                </div>
+                <button type="button" onClick={() => void refresh()} disabled={refreshing}>
+                  {refreshing ? 'Refreshing…' : 'Refresh status'}
+                </button>
+              </div>
+              <div className="sync-v3-history" role="table" aria-label="Recent synchronization history">
+                <div className="sync-v3-history-head" role="row">
+                  <span>Result</span><span>Job</span><span>Started</span><span>Duration</span>
+                </div>
+                {payload.jobs
+                  .flatMap(job => job.recent_runs)
+                  .sort((left, right) => Date.parse(right.started_at) - Date.parse(left.started_at))
+                  .slice(0, 5)
+                  .map(run => (
+                    <Link key={run.id} to={`/workspace/sync/runs/${run.id}`} className="sync-v3-history-row" role="row">
+                      <span className={`sync-v3-result sync-v3-result--${run.status}`}>{run.status === 'succeeded' ? 'SUCCESS' : run.status.toUpperCase()}</span>
+                      <span>{run.label}</span>
+                      <time dateTime={run.started_at}>{relativeTime(run.started_at)}</time>
+                      <span>{duration(run.duration_ms)}</span>
+                    </Link>
+                  ))}
+              </div>
+            </section>
+            <div className="sync-legacy-content">
             {!payload.observability_ready && (
               <p className="sync-schema-warning" role="status">
                 Detailed job history is temporarily unavailable while the synchronization schema is being initialized.
@@ -807,6 +850,7 @@ export default function SyncStatus() {
                 {groups.analytics.map(job => renderJob(job, `analytics:${job.key}`, 'analytics'))}
               </div>
             </section>
+            </div>
           </>
         )}
       </div></section>

@@ -86,6 +86,7 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
            (SELECT COUNT(DISTINCT pp.login)
               FROM pr_participants pp JOIN pull_requests participant_pr ON participant_pr.id = pp.pr_id
              WHERE participant_pr.repo_id = r.id AND pp.decision IS NOT NULL) AS contributors,
+           (SELECT COALESCE(SUM(p.merged_upstream), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS accepted_outcomes,
            (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_accept,
            (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_modify,
            (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_reject,
