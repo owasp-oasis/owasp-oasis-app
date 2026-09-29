@@ -64,13 +64,19 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   useEffect(()=>{
     if(!preferences.keyboardShortcuts) return
     const handle=(event:KeyboardEvent)=>{
-      if(event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || (event.target as HTMLElement)?.closest('input,textarea,select,button,a,[contenteditable=true],[role=dialog],dialog'))return
+      if(event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey)return
+      const target = event.target as HTMLElement | null
+      const typing = !!target?.closest('input,textarea,select,[contenteditable=true]')
+      if(typing){
+        if(event.key==='Escape') target?.blur()
+        return
+      }
       if(!['ArrowDown','ArrowUp'].includes(event.key))return
       const next=filtered[selectedIndex+(event.key==='ArrowDown'?1:-1)]
       if(next){event.preventDefault();open(next)}
     }
     document.addEventListener('keydown',handle);return()=>document.removeEventListener('keydown',handle)
-  })
+  },[preferences.keyboardShortcuts,filtered,selectedIndex,open])
   function voted(pr:PanelPR,decision:Decision){
     setRecorded(previous=>new Map(previous).set(pr.id,decision));notify(`Vote recorded on ${pr.repo_name}#${pr.number}`)
     const rest=[...filtered.slice(selectedIndex+1),...filtered.slice(0,Math.max(0,selectedIndex))]
@@ -89,6 +95,7 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
         <div className="ws-preferences-toggle"><button type="button" aria-pressed={!bypass} onClick={()=>patch({all:bypass?null:'1'})}>{preferenceLabel}</button><Link to="/workspace/preferences">Edit</Link></div>
         <label className="ws-search"><Search size={16}/><input type="search" aria-label="Search candidate fixes" placeholder="Search PR #, repo, title, or CWE…" value={query} onChange={e=>patch({q:e.target.value||null})} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();patch({q:null});e.currentTarget.blur()}}}/></label>
         <select aria-label="Project" value={repo} onChange={e=>patch({repo:e.target.value||null})}><option value="">All projects</option>{projects.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
+        {preferences.keyboardShortcuts&&<span className="ws-keyboard-hint" aria-label="Use the up and down arrow keys to navigate candidate fixes"><kbd>↑</kbd><kbd>↓</kbd><span>navigate</span></span>}
       </div>
       <div className="ws-status-tabs" aria-label="Candidate fix status">{[...(user?[['mine',`Needs my vote ${needCount}`]]:[]),['all',`All ${augmented.length}`],['needs',`Needs review ${statusCount('Needs review')}`],['trusted',`Trusted ${statusCount('Trusted')}`],['accepted',`Accepted ${statusCount('Accepted')}`],['withdrawn',`Withdrawn ${statusCount('Withdrawn')}`],['rejected',`Rejected ${statusCount('Rejected')}`]].map(([key,label])=><button key={key} aria-pressed={filter===key} onClick={()=>patch({filter:key})}>{label}</button>)}</div>
     </div>
