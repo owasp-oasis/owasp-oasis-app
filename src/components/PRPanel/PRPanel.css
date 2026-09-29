@@ -41,6 +41,19 @@
   min-height: 48px;
   flex-wrap: wrap;
 }
+.prp-header-top { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
+.prp-header-top .prp-identity { color:var(--blue); font-size:13px; }
+.prp-header-top .ws-chips { flex:none; }
+.prp-header .prp-fix-title { width:100%; margin:0; font-size:22px; line-height:1.25; font-weight:700; text-wrap:pretty; }
+.prp-meta-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; width:100%; background:var(--gray-200); border:1px solid var(--gray-200); border-radius:8px; overflow:hidden; }
+.prp-meta-grid > div { display:flex; flex-direction:column; gap:4px; min-width:0; padding:10px 12px; background:var(--white); }
+.prp-meta-grid > div > span { color:var(--muted); font:700 10px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+.prp-meta-grid > div > strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font:600 13px var(--sans); }
+.prp-meta-grid .prp-meta-mono { font-family:var(--mono); font-weight:400; }
+.prp-meta-severity { overflow:visible!important; text-overflow:clip!important; white-space:normal!important; }
+.prp-meta-severity .ws-chip { font-size:10px; }
+.prp-donor { display:inline-flex; align-items:center; gap:7px; min-width:0; color:var(--muted)!important; }
+.prp-donor img { width:auto; height:20px; max-width:92px; object-fit:contain; flex:none; }
 
 .prp-close {
   background: none;
@@ -159,58 +172,67 @@
 }
 
 .prp-vote-btn {
-  padding: 5px 14px;
-  border-radius: 6px;
+  flex: 1;
+  min-width: 88px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  border: 1.5px solid transparent;
+  border: 2px solid transparent;
   transition: opacity 0.15s, transform 0.1s;
   white-space: nowrap;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
 }
 .prp-vote-btn:active { transform: scale(0.97); }
+.prp-vote-btn u { text-decoration-thickness:2px; text-underline-offset:3px; }
+.prp-vote-glyph { font-size:15px; line-height:1; }
 
 .prp-vote-btn--accept {
-  background: #dcfce7;
-  color: #166534;
-  border-color: #16a34a;
+  background: var(--dec-accept-bg);
+  color: var(--dec-accept-fg);
+  border-color: var(--dec-accept);
 }
 .prp-vote-btn--accept.prp-vote-btn--active,
 .prp-vote-btn--accept.prp-vote-btn--voted {
-  background: #16a34a;
+  background: var(--dec-accept);
   color: #fff;
 }
 
 .prp-vote-btn--modify {
-  background: #fef9c3;
-  color: #854d0e;
-  border-color: #ca8a04;
+  background: var(--dec-modify-bg);
+  color: var(--dec-modify-fg);
+  border-color: var(--dec-modify);
 }
 .prp-vote-btn--modify.prp-vote-btn--active,
 .prp-vote-btn--modify.prp-vote-btn--voted {
-  background: #ca8a04;
+  background: var(--dec-modify);
   color: #fff;
 }
 
 .prp-vote-btn--reject {
-   background: #fee2e2;
-   color: #991b1b;
-   border-color: #dc2626;
+   background: var(--dec-reject-bg);
+   color: var(--dec-reject-fg);
+   border-color: var(--dec-reject);
  }
  .prp-vote-btn--reject.prp-vote-btn--active,
  .prp-vote-btn--reject.prp-vote-btn--voted {
-   background: #dc2626;
+   background: var(--dec-reject);
    color: #fff;
  }
 
  .prp-vote-btn--duplicate {
-   background: #ede9fe;
-   color: #5b21b6;
-   border-color: #7c3aed;
+   background: var(--dec-duplicate-bg);
+   color: var(--dec-duplicate-fg);
+   border-color: var(--dec-duplicate);
  }
  .prp-vote-btn--duplicate.prp-vote-btn--active,
  .prp-vote-btn--duplicate.prp-vote-btn--voted {
-   background: #7c3aed;
+   background: var(--dec-duplicate);
    color: #fff;
  }
 
@@ -1073,6 +1095,24 @@
   color: var(--muted);
   font-style: italic;
 }
+
+.prp-summary { display:flex; flex-direction:column; gap:18px; }
+.prp-summary-brief { display:flex; flex-direction:column; gap:6px; }
+.prp-summary-eyebrow { color:var(--blue); font:700 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; }
+.prp-summary-brief p { color:var(--ink-soft); font-size:15px; line-height:1.65; text-wrap:pretty; }
+.prp-consensus-card { background:var(--paper); border-radius:8px; padding:16px; margin:0; }
+.prp-consensus-heading { display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.prp-consensus-heading strong { color:var(--ink); font-size:14px; }
+.prp-consensus-heading span { color:var(--ink-soft); font:12px var(--mono); }
+.prp-consensus-card .prp-consensus-bar { height:10px; border-radius:5px; margin-bottom:10px; }
+.prp-consensus-counts { font-size:13px; }
+.prp-consensus-trust { display:flex; flex-direction:column; gap:6px; padding-top:10px; margin-top:10px; border-top:1px solid var(--line); color:var(--ink-soft); font-size:13px; }
+.prp-consensus-meters { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.prp-consensus-meters > div { display:flex; flex-direction:column; gap:4px; }
+.prp-consensus-meters span { color:var(--muted); font:11px var(--mono); }
+.prp-consensus-meters i { display:block; height:5px; border-radius:3px; background:var(--gray-200); overflow:hidden; }
+.prp-consensus-meters b { display:block; height:100%; background:var(--blue); }
+.prp-consensus-meters > div:last-child b { background:var(--green); }
 
 /* ── Mermaid diagram container ──────────────────────────────── */
 .prp-mermaid {

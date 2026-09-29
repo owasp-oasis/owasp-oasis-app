@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import VoteForm, { type Decision } from '../VoteForm'
 import { Maximize2, Minimize2, X, ExternalLink, LockKeyhole } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { FixChips } from '../../pages/workspace/FixChips'
+import { FixChips, SeverityChip } from '../../pages/workspace/FixChips'
 import { useSearchParams } from 'react-router-dom'
 import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
@@ -31,6 +31,7 @@ export interface PanelPR {
   consensus_modify: number
   consensus_reject: number
   consensus_duplicate?: number
+  participants?: number
 }
 
 /* ── Details shape returned by /api/pr-panel/:id/details ─────── */
@@ -66,6 +67,16 @@ interface Props {
   myVotes: Map<number, Decision>
   onClose: () => void
   onVoteSuccess: (pr: PanelPR, decision: Decision) => void
+}
+
+const DONOR_LOGOS: Record<string, { src: string; alt: string }> = {
+  appsecai: { src: 'https://www.appsecai.io/hubfs/Logo.%20Blue.%20Horizontal.svg', alt: 'AppSecAI' },
+  'dryrun security': { src: 'https://cdn.prod.website-files.com/645932d9286e9c20dd8e0fca/688b80486034525524cedf86_DRS-Logo-icon-green-white-dark%20background.svg', alt: 'DryRun Security' },
+}
+
+function DonorLogo({ tool }: { tool: string }) {
+  const logo = DONOR_LOGOS[tool.trim().toLowerCase()]
+  return <span className="prp-donor">{logo && <img src={logo.src} alt={logo.alt} />}<span>{tool}</span></span>
 }
 
 /* ── Sign-in modal (shown when unauthenticated user clicks a row) */
@@ -247,6 +258,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     reject: 'Reject',
     duplicate: 'Duplicate',
   }
+  const DECISION_GLYPHS: Record<Decision, string> = { accept: '✓', modify: '~', reject: '✕', duplicate: '⧉' }
 
 
   const tabs: { id: Tab; label: string }[] = [
@@ -263,6 +275,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     consensus_modify: activePR.consensus_modify,
     consensus_reject: activePR.consensus_reject,
     consensus_duplicate: activePR.consensus_duplicate ?? 0,
+    participants: activePR.participants ?? 0,
   } : null
 
   return (
@@ -276,19 +289,20 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
 
         {/* Header */}
         <div className="prp-header">
-          <button className="prp-close" disabled={submitting} onClick={onClose} aria-label="Close panel"><X size={18}/></button>
-          <span className="prp-identity">{activePR.repo_name} #{activePR.number}</span>
-          <h2 className="prp-fix-title">{activePR.title}</h2><div className="ws-chips"><FixChips pr={activePR}/></div>
-          <div className="prp-header-spacer" />
-          <a
-            href={activePR.html_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="prp-gh-link"
-            title="Open on GitHub"
-          >
-            <ExternalLink size={14}/> Open on GitHub
-          </a>
+          <div className="prp-header-top">
+            <span className="prp-identity">{activePR.repo_name} #{activePR.number}</span>
+            <div className="ws-chips"><FixChips pr={activePR}/></div>
+            <span className="prp-header-spacer" />
+            <a href={activePR.html_url} target="_blank" rel="noopener noreferrer" className="prp-gh-link" title="Open on GitHub"><ExternalLink size={14}/> Open on GitHub</a>
+            <button className="prp-close" disabled={submitting} onClick={onClose} aria-label="Close panel"><X size={18}/></button>
+          </div>
+          <h2 className="prp-fix-title">{activePR.title}</h2>
+          <div className="prp-meta-grid" aria-label="Candidate fix metadata">
+            <div><span>Severity</span><strong className="prp-meta-severity"><SeverityChip title={activePR.title}/>{details?.cvss_score ? ` · ${details.cvss_score}` : ''}</strong></div>
+            <div><span>Weakness</span><strong>{details?.cwe_id ? `${details.cwe_id}${details.cwe_desc ? ` · ${details.cwe_desc}` : ''}` : '—'}</strong></div>
+            <div><span>CVE</span><strong className="prp-meta-mono">{details?.cve_id ?? '—'}</strong></div>
+            <div><span>Fix automation</span><strong>{details?.detection_tool ? <DonorLogo tool={details.detection_tool} /> : '—'}</strong></div>
+          </div>
         </div>
 
         {/* Auth nudge banner (unauthenticated users only, dismissible) */}
@@ -359,7 +373,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
               {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
                 const isActive = voteDecision === d
                 const classes = ['prp-vote-btn', `prp-vote-btn--${d}`, isActive ? 'prp-vote-btn--active' : ''].filter(Boolean).join(' ')
-                return <button key={d} className={classes} onClick={() => handleVoteButtonClick(d)} disabled={submitting} aria-pressed={isActive} aria-keyshortcuts={preferences.keyboardShortcuts ? d[0].toUpperCase() : undefined} title={`Vote ${d}`}><u>{DECISION_LABELS[d][0]}</u>{DECISION_LABELS[d].slice(1)}</button>
+                return <button key={d} className={classes} onClick={() => handleVoteButtonClick(d)} disabled={submitting} aria-pressed={isActive} aria-keyshortcuts={preferences.keyboardShortcuts ? d[0].toUpperCase() : undefined} title={`Vote ${d}`}><span className="prp-vote-glyph" aria-hidden="true">{DECISION_GLYPHS[d]}</span><span><u>{DECISION_LABELS[d][0]}</u>{DECISION_LABELS[d].slice(1)}</span></button>
               })}
             </div>
           )}
