@@ -1,10 +1,12 @@
 /**
- * Leaderboard API handlers: meta, repos, PRs, contributors, maintainers, tools.
+ * Workspace API handlers: meta, repos, PRs, contributors, maintainers, tools.
  */
 
 import type { Env, ParsedQuery } from '../types.js';
 import { secHeaders } from '../security.js';
 import { BOT_TO_TOOL, BOT_TO_VALIDATOR_TOOL } from '../github.js';
+import { getResponseBadgeSummary } from '../responseBadges.js';
+import { isMissingSchemaObject } from '../schemaCompatibility.js';
 
 /* ─── QUERY HELPER ───────────────────────────────────────────── */
 export function parseQuery(url: URL): ParsedQuery {
@@ -23,6 +25,42 @@ function lbResponse(data: unknown, req: Request, status = 200): Response {
   const r = secHeaders(res, req);
   r.headers.set('Cache-Control', 'public, max-age=300');
   return r;
+}
+
+const WORKFLOW_FIELDS = `
+           (SELECT md.decision FROM maintainer_decisions md
+             WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision,
+           (SELECT md.created_at FROM maintainer_decisions md
+             WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision_at,
+           (SELECT us.status FROM upstream_submissions us
+             WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_status,
+           (SELECT us.upstream_pr_url FROM upstream_submissions us
+             WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_pr_url`;
+
+const EMPTY_WORKFLOW_FIELDS = `
+           NULL AS maintainer_decision,
+           NULL AS maintainer_decision_at,
+           NULL AS upstream_status,
+           NULL AS upstream_pr_url`;
+
+async function getRepoPRRows(db: D1Database, repoId: number): Promise<D1Result<Record<string, unknown>>> {
+  const common = `
+      SELECT id, number, title, state, author, html_url,
+             comment_count, oasis_comment_count, non_oasis_comment_count,
+             participants, consensus_accept, consensus_modify, consensus_reject,
+             merged_upstream, updated_at,`;
+  const tail = `
+      FROM pull_requests WHERE repo_id = ? AND deleted = 0
+      ORDER BY updated_at DESC`;
+
+  try {
+    return await db.prepare(`${common}${WORKFLOW_FIELDS.replaceAll('p.', 'pull_requests.')}\n${tail}`)
+      .bind(repoId).all<Record<string, unknown>>();
+  } catch (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    return db.prepare(`${common}${EMPTY_WORKFLOW_FIELDS}\n${tail}`)
+      .bind(repoId).all<Record<string, unknown>>();
+  }
 }
 
 /* ─── HANDLERS ───────────────────────────────────────────────── */
@@ -69,7 +107,7 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
 }
 
 /**
- * GET /api/leaderboard/repos/:id
+ * GET /api/workspace/repos/:id
  * Returns detailed project info for the ProjectPanel slide-out:
  *   - repo row (full metadata)
  *   - all PRs for the repo
@@ -91,14 +129,7 @@ export async function handleRepoDetail(env: Env, req: Request, repoId: number): 
              (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate
       FROM repos r WHERE r.id = ? AND r.active = 1
     `).bind(repoId).first<Record<string, unknown>>(),
-    env.DB.prepare(`
-      SELECT id, number, title, state, author, html_url,
-             comment_count, oasis_comment_count, non_oasis_comment_count,
-             participants, consensus_accept, consensus_modify, consensus_reject,
-             merged_upstream, updated_at
-      FROM pull_requests WHERE repo_id = ? AND deleted = 0
-      ORDER BY updated_at DESC
-    `).bind(repoId).all<Record<string, unknown>>(),
+    getRepoPRRows(env.DB, repoId),
   ]);
 
   if (!repoRow) {
@@ -138,7 +169,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
     'oasis_comment_count','non_oasis_comment_count','participants',
     'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
-  const rows = await env.DB.prepare(`
+  const base = `
     SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url,
            comment_count,
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
@@ -146,11 +177,18 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            participants,
            consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
            duplicate_of, closed_as_duplicate,
-           merged_upstream, merged_at, created_at, updated_at
+           merged_upstream, merged_at, created_at, updated_at,`;
+  const tail = `
     FROM pull_requests p JOIN repos r ON r.id = p.repo_id
     WHERE p.deleted = 0 AND r.active = 1
-    ORDER BY ${col} ${dir} LIMIT 500
-  `).all();
+    ORDER BY ${col} ${dir} LIMIT 500`;
+  let rows;
+  try {
+    rows = await env.DB.prepare(`${base}${WORKFLOW_FIELDS}${tail}`).all();
+  } catch (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    rows = await env.DB.prepare(`${base}${EMPTY_WORKFLOW_FIELDS}${tail}`).all();
+  }
   let results = rows.results;
   if (q) results = results.filter((r: Record<string, unknown>) =>
     String(r['repo_name'] ?? '').toLowerCase().includes(q) ||
@@ -373,7 +411,26 @@ export async function handleContributorDetail(env: Env, req: Request, login: str
       };
     });
 
-  return lbResponse({ contributor, allTimeRank, contributions }, req);
+  const publicBadges = await env.DB.prepare(
+    `SELECT tb.team_id, t.name AS team_name, t.status AS team_status, tb.badge_key,
+            tb.qualifying_count, tb.threshold, tb.awarded_at
+       FROM team_badges tb
+       JOIN teams t ON t.id = tb.team_id
+       JOIN team_badge_settings tbs ON tbs.team_id = tb.team_id
+       JOIN user_preferences up ON up.github_login = tb.github_login
+      WHERE tb.github_login = ? AND tbs.public_display = 1 AND up.show_team_badges = 1
+      ORDER BY tb.awarded_at`,
+  ).bind(login).all();
+
+  const responseBadges = await getResponseBadgeSummary(env.DB, login);
+
+  return lbResponse({
+    contributor,
+    allTimeRank,
+    contributions,
+    public_badges: publicBadges.results ?? [],
+    responseBadges,
+  }, req);
 }
 
 export async function handleMaintainers(env: Env, req: Request, url: URL): Promise<Response> {

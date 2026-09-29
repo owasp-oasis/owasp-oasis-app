@@ -244,6 +244,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   severities           TEXT,
   experience           TEXT,
   onboarding_version   TEXT,
+  show_team_badges     INTEGER NOT NULL DEFAULT 0,
   created_at           TEXT NOT NULL,
   updated_at           TEXT NOT NULL
 );
@@ -255,6 +256,7 @@ CREATE TABLE IF NOT EXISTS user_votes (
   pr_number    INTEGER NOT NULL,
   decision     TEXT    NOT NULL,
   parent_pr_id INTEGER DEFAULT NULL,
+  team_id      INTEGER DEFAULT NULL,
   comment_id   INTEGER,
   voted_at     TEXT    NOT NULL,
   PRIMARY KEY (github_login, pr_id)
@@ -263,6 +265,163 @@ CREATE TABLE IF NOT EXISTS user_votes (
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  membership_mode TEXT NOT NULL DEFAULT 'invite_only' CHECK(membership_mode IN ('invite_only', 'request')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'archived', 'suspended')),
+  owner_login TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  archived_at TEXT,
+  suspended_at TEXT,
+  logo_key TEXT NOT NULL DEFAULT 'initials',
+  logo_image_data TEXT,
+  banner_image_data TEXT
+);
+CREATE TABLE IF NOT EXISTS team_memberships (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'member')),
+  joined_at TEXT NOT NULL,
+  left_at TEXT,
+  left_reason TEXT,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_memberships_current ON team_memberships(team_id, github_login) WHERE left_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_team_memberships_login ON team_memberships(github_login, left_at);
+CREATE TABLE IF NOT EXISTS team_invites (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  invitee_login TEXT NOT NULL,
+  invited_by TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'revoked')),
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_invites_pending ON team_invites(team_id, invitee_login) WHERE status = 'pending';
+CREATE TABLE IF NOT EXISTS team_join_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  requester_login TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')),
+  created_at TEXT NOT NULL,
+  resolved_by TEXT,
+  resolved_at TEXT,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_join_requests_pending ON team_join_requests(team_id, requester_login) WHERE status = 'pending';
+CREATE TABLE IF NOT EXISTS team_repositories (
+  team_id INTEGER NOT NULL,
+  repo_id INTEGER NOT NULL,
+  added_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (team_id, repo_id),
+  FOREIGN KEY (team_id) REFERENCES teams(id),
+  FOREIGN KEY (repo_id) REFERENCES repos(id)
+);
+CREATE TABLE IF NOT EXISTS team_ownership_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  proposed_owner TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined', 'cancelled')),
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_ownership_transfers_pending ON team_ownership_transfers(team_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_user_votes_team ON user_votes(team_id, voted_at);
+CREATE TABLE IF NOT EXISTS team_badge_settings (
+  team_id INTEGER PRIMARY KEY,
+  contribution_threshold INTEGER NOT NULL DEFAULT 5 CHECK(contribution_threshold IN (3, 5, 10, 25)),
+  public_display INTEGER NOT NULL DEFAULT 0,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE TABLE IF NOT EXISTS team_badges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL,
+  badge_key TEXT NOT NULL CHECK(badge_key IN ('membership', 'contributor_milestone')),
+  qualifying_count INTEGER NOT NULL DEFAULT 0,
+  threshold INTEGER,
+  awarded_at TEXT NOT NULL,
+  UNIQUE(team_id, github_login, badge_key),
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+CREATE INDEX IF NOT EXISTS idx_team_badges_login ON team_badges(github_login, awarded_at);
+
+CREATE TABLE IF NOT EXISTS validation_requests (
+  pr_id              INTEGER PRIMARY KEY,
+  requested_at       TEXT NOT NULL,
+  request_source     TEXT NOT NULL DEFAULT 'workspace_sync',
+  status             TEXT NOT NULL DEFAULT 'open',
+  badge_eligible     INTEGER NOT NULL DEFAULT 1,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_requests_eligibility
+  ON validation_requests(badge_eligible, requested_at);
+
+CREATE TABLE IF NOT EXISTS maintainer_decisions (
+  id TEXT PRIMARY KEY,
+  pr_id INTEGER NOT NULL,
+  decision TEXT NOT NULL CHECK(decision IN ('changes_requested', 'accepted', 'declined')),
+  reason TEXT NOT NULL,
+  head_sha TEXT,
+  github_user_id INTEGER,
+  github_login TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+);
+CREATE INDEX IF NOT EXISTS idx_maintainer_decisions_pr_created
+  ON maintainer_decisions(pr_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS upstream_submissions (
+  id TEXT PRIMARY KEY,
+  source_pr_id INTEGER NOT NULL,
+  upstream_full_name TEXT NOT NULL,
+  upstream_default_branch TEXT NOT NULL,
+  upstream_pr_id INTEGER,
+  upstream_pr_number INTEGER,
+  upstream_pr_node_id TEXT,
+  upstream_pr_url TEXT,
+  head_repo_full_name TEXT NOT NULL,
+  head_branch TEXT NOT NULL,
+  validated_head_sha TEXT NOT NULL,
+  base_branch TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'open', 'changes_requested', 'merged', 'closed', 'failed')),
+  close_reason TEXT,
+  close_reason_text TEXT,
+  last_review_state TEXT,
+  last_reviewed_by TEXT,
+  last_reviewed_at TEXT,
+  last_review_url TEXT,
+  submitted_by_github_id INTEGER,
+  submitted_by_login TEXT NOT NULL,
+  submitted_at TEXT,
+  last_synced_at TEXT,
+  error_summary TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (source_pr_id) REFERENCES pull_requests(id)
+);
+CREATE INDEX IF NOT EXISTS idx_upstream_submissions_source_updated
+  ON upstream_submissions(source_pr_id, updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_active_source
+  ON upstream_submissions(source_pr_id)
+  WHERE status IN ('pending', 'open', 'changes_requested');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_external_pr
+  ON upstream_submissions(upstream_full_name, upstream_pr_number)
+  WHERE upstream_pr_number IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sync_job_runs (
   id TEXT PRIMARY KEY, pipeline_run_id TEXT, workflow_instance_id TEXT,
@@ -290,27 +449,6 @@ CREATE TABLE IF NOT EXISTS sync_work_items (
   attempts INTEGER NOT NULL DEFAULT 0, leased_at TEXT, lease_expires_at TEXT,
   last_error_code TEXT, last_error_summary TEXT, created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_shadow_entities (
-  pipeline_run_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
-  repository_id INTEGER, source_updated_at TEXT, fingerprint TEXT NOT NULL,
-  payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
-  PRIMARY KEY(pipeline_run_id, entity_type, entity_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_parity_runs (
-  pipeline_run_id TEXT PRIMARY KEY, canonical_cutoff_at TEXT NOT NULL,
-  status TEXT NOT NULL, comparable_entities INTEGER NOT NULL DEFAULT 0,
-  matched_entities INTEGER NOT NULL DEFAULT 0, changed_during_run INTEGER NOT NULL DEFAULT 0,
-  difference_count INTEGER NOT NULL DEFAULT 0, consecutive_matches INTEGER NOT NULL DEFAULT 0,
-  eligible_for_cutover INTEGER NOT NULL DEFAULT 0, compared_at TEXT, created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_parity_differences (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_run_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, difference_type TEXT NOT NULL,
-  fields_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sync_daily_budgets (
@@ -379,15 +517,20 @@ CREATE TABLE IF NOT EXISTS analytics_event_receipts (
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'team_badges',
+    'team_badge_settings',
+    'team_ownership_transfers',
+    'team_repositories',
+    'team_join_requests',
+    'team_invites',
+    'team_memberships',
+    'teams',
     'analytics_dataset_capabilities',
     'analytics_event_receipts',
     'analytics_daily_engagement',
     'analytics_collection_days',
     'analytics_daily_cloudflare',
     'analytics_daily_routes',
-    'sync_parity_differences',
-    'sync_parity_runs',
-    'sync_shadow_entities',
     'sync_work_items',
     'sync_job_events',
     'sync_job_runs',
@@ -395,6 +538,9 @@ export async function cleanDB(env: Env): Promise<void> {
     'sync_pipeline_locks',
     'hubspot_sync_queue',
     'user_votes',
+    'validation_requests',
+    'upstream_submissions',
+    'maintainer_decisions',
     'user_preferences',
     'user_sessions',
     'privileged_action_audit',

@@ -1,0 +1,22 @@
+.contributor-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #0b4f8a, #0f6fcf 60%, #0d9e52);
+  box-shadow: 0 2px 7px rgba(11, 79, 138, 0.22);
+  color: #fff;
+  font-family: var(--sans);
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  user-select: none;
+}
+
+.contributor-avatar-fallback.cp-avatar,
+.contributor-avatar-fallback.contributor-avatar {
+  background: linear-gradient(145deg, #0b4f8a, #0f6fcf 60%, #0d9e52);
+  color: #fff;
+}

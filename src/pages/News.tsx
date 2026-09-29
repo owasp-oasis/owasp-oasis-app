@@ -51,7 +51,7 @@ const upcomingEvents: Event[] = [
   },
   {
     date: '2026-10-08',
-    day: '1',
+    day: '8',
     month: 'OCT',
     dateLabel: 'October 8, 2026',
     venue: 'Online · Zoom Webinar',

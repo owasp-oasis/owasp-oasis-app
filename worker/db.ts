@@ -204,6 +204,31 @@ export async function upsertPR(
     mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
     pr.created_at, pr.updated_at, detectionTool, syncStart,
   ).run();
+
+  // The MVP response clock starts when a newly discovered open PR first becomes
+  // visible in OASIS. Existing PRs without a request row are observation-only
+  // because their true availability time cannot be reconstructed.
+  if (state === 'open') {
+    await db.prepare(`
+      INSERT OR IGNORE INTO validation_requests
+        (pr_id, requested_at, request_source, status, badge_eligible, created_at, updated_at)
+      VALUES (?, ?, 'workspace_sync', 'open', ?, ?, ?)
+    `).bind(pr.id, syncStart, existing ? 0 : 1, syncStart, syncStart).run();
+
+    // A routine sync must not turn a fulfilled request back into an open one.
+    // Reopened PRs retain their original clock until explicit request events exist.
+    await db.prepare(`
+      UPDATE validation_requests
+      SET status = 'open', updated_at = ?
+      WHERE pr_id = ? AND status = 'closed'
+    `).bind(syncStart, pr.id).run();
+  } else {
+    await db.prepare(`
+      UPDATE validation_requests
+      SET status = 'closed', updated_at = ?
+      WHERE pr_id = ? AND status != 'cancelled'
+    `).bind(syncStart, pr.id).run();
+  }
 }
 
 export async function upsertParticipants(
@@ -395,6 +420,12 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       comment.id,
       comment.created_at,
     ).run();
+
+    await db.prepare(`
+      UPDATE validation_requests
+      SET status = 'responded', updated_at = ?
+      WHERE pr_id = ? AND status = 'open'
+    `).bind(comment.created_at, comment.pr_id).run();
   }
 }
 

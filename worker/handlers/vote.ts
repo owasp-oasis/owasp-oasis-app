@@ -25,6 +25,7 @@ import {
 } from '../security.js';
 import { getSession } from './auth.js';
 import { ORG } from '../github.js';
+import { syncTeamBadges } from '../teamBadges.js';
 import { recordSubmittedVote } from '../analytics.js';
 
 /* ─── POST /api/vote ─────────────────────────────────────────── */
@@ -51,10 +52,23 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   const prId    = typeof body['pr_id'] === 'number' ? body['pr_id'] : null;
   const decision = typeof body['decision'] === 'string' ? body['decision'].toLowerCase() : null;
+  const teamId = typeof body['team_id'] === 'number' && Number.isInteger(body['team_id']) && body['team_id'] > 0
+    ? body['team_id']
+    : null;
 
   if (!prId || !Number.isInteger(prId) || prId < 1) return jsonErr('pr_id must be a positive integer', 400, request);
   if (!decision || !['accept', 'modify', 'reject', 'duplicate'].includes(decision)) {
     return jsonErr('decision must be accept, modify, reject, or duplicate', 400, request);
+  }
+
+  // Team attribution is optional, but a submitted validation may only be
+  // attributed to one active Team in which the contributor is currently a member.
+  if (teamId) {
+    const teamMembership = await env.DB.prepare(
+      `SELECT tm.id FROM team_memberships tm JOIN teams t ON t.id = tm.team_id
+        WHERE tm.team_id = ? AND tm.github_login = ? AND tm.left_at IS NULL AND t.status = 'active'`,
+    ).bind(teamId, session.github_login).first();
+    if (!teamMembership) return jsonErr('You can only attribute a validation to one of your active Teams', 403, request);
   }
 
   const confidence     = typeof body['confidence'] === 'string' ? body['confidence'].trim() : '';
@@ -354,12 +368,21 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   let voteRecorded = false;
   try {
     await env.DB.prepare(
-      `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, commentId, now).run();
+      `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now).run();
+    await env.DB.prepare(`
+      UPDATE validation_requests
+      SET status = 'responded', updated_at = ?
+      WHERE pr_id = ? AND status = 'open'
+    `).bind(now, pr.id).run();
     voteRecorded = true;
   } catch (err) {
     console.error('user_votes insert error:', (err as Error)?.message);
+  }
+  if (teamId) {
+    try { await syncTeamBadges(env, teamId, session.github_login); }
+    catch (err) { console.error('team_badge_sync error:', (err as Error)?.message); }
   }
 
   if (voteRecorded) {
@@ -374,7 +397,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
     }
   }
 
-  return jsonOk({ comment_id: commentId, decision: decisionKey, parent_pr_id: resolvedParentId }, request);
+  return jsonOk({ comment_id: commentId, decision: decisionKey, parent_pr_id: resolvedParentId, team_id: teamId }, request);
 }
 
 /* ─── GET /api/votes/mine ────────────────────────────────────── */
@@ -383,7 +406,7 @@ export async function handleMyVotes(request: Request, env: Env): Promise<Respons
   if (!session) return jsonOk({ votes: [] }, request);
 
   const rows = await env.DB.prepare(
-    'SELECT pr_id, repo_name, pr_number, decision, comment_id, voted_at FROM user_votes WHERE github_login = ?',
+    'SELECT pr_id, repo_name, pr_number, decision, team_id, comment_id, voted_at FROM user_votes WHERE github_login = ?',
   ).bind(session.github_login).all();
 
   return jsonOk({ votes: rows.results ?? [] }, request);

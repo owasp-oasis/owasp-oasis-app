@@ -8,8 +8,8 @@
   height: var(--nav-height);
 }
 
-/* When leaderboard tabs are docked, un-stick the nav so it scrolls away */
-body.lb-tabs-docked .nav {
+/* When workspace tabs are docked, un-stick the nav so it scrolls away */
+body.ws-tabs-docked .nav {
   position: relative;
   top: 0;
 }

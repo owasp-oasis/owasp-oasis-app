@@ -261,7 +261,7 @@ function ValidateCard({ tool }: { tool: Tool }) {
         <p className="tool-detect-note">
           Human validators post OASIS-template comments with accept, modify, or
           reject decisions. Their combined activity is shown here as an aggregate.
-          Individual scores appear on the Contributors leaderboard.
+          Individual scores appear on the Contributors tab.
         </p>
       )}
     </div>

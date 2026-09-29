@@ -17,7 +17,6 @@ export interface Env {
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
   OAUTH_CALLBACK_URL: string;
-  SHADOW_SYNC_WORKFLOW?: Workflow<ShadowSyncParams>;
   CANONICAL_SYNC_WORKFLOW?: Workflow<CanonicalSyncParams>;
   ORPHAN_CLEANUP_WORKFLOW?: Workflow<OrphanCleanupParams>;
   HUBSPOT_SYNC_WORKFLOW?: Workflow<HubSpotSyncParams>;
@@ -38,19 +37,11 @@ export interface OrphanCleanupParams {
   auditActor?: OrphanCleanupActor;
 }
 
-export type ShadowSyncParams =
-  | { action: 'start'; legacyPipelineRunId: string; canonicalCutoffAt: string }
-  | { action: 'repository'; pipelineRunId: string }
-  | { action: 'pull_request'; pipelineRunId: string }
-  | { action: 'finalize'; pipelineRunId: string };
-
 export type CanonicalSyncParams =
-  | { action: 'inventory'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
-  | { action: 'sync'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
-  | { action: 'reaction'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind }
-  | { action: 'duplicate'; pipelineRunId: string; pipelineKind?: WorkspacePipelineKind };
-
-export type WorkspacePipelineKind = 'legacy' | 'canonical';
+  | { action: 'inventory'; pipelineRunId: string }
+  | { action: 'sync'; pipelineRunId: string }
+  | { action: 'reaction'; pipelineRunId: string }
+  | { action: 'duplicate'; pipelineRunId: string };
 
 export interface HubSpotSyncParams {
   jobRunId: string;
@@ -74,7 +65,6 @@ export interface ManualSyncJobParams {
   jobRunId: string;
   pipelineRunId: string;
   jobKey: ManualSyncJobKey;
-  pipeline: WorkspacePipelineKind;
   chunk: number;
   auditActor: OrphanCleanupActor;
 }
