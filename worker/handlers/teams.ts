@@ -236,7 +236,7 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
 
   await syncTeamBadges(env, teamId, user!.github_login);
 
-  const [members, activity, repositories, requests, invites, transfers, badgeSettings, badges, userBadgePreference] = await Promise.all([
+  const [members, activity, repositories, requests, invites, transfers, badgeSettings, badges, userBadgePreference, myAttribution] = await Promise.all([
     env.DB.prepare(`SELECT github_login, role, joined_at FROM team_memberships WHERE team_id = ? AND left_at IS NULL ORDER BY role = 'owner' DESC, role = 'admin' DESC, github_login COLLATE NOCASE`).bind(teamId).all(),
     env.DB.prepare(`SELECT uv.github_login, uv.pr_id, uv.repo_name, uv.pr_number, uv.decision, uv.voted_at, pr.title
       FROM user_votes uv JOIN pull_requests pr ON pr.id = uv.pr_id WHERE uv.team_id = ? ORDER BY uv.voted_at DESC LIMIT 100`).bind(teamId).all(),
@@ -253,8 +253,9 @@ export async function handleTeamDetail(request: Request, env: Env, teamId: numbe
     env.DB.prepare(`SELECT contribution_threshold, public_display, updated_at FROM team_badge_settings WHERE team_id = ?`).bind(teamId).first<TeamBadgeSettings>(),
     listTeamBadges(env, teamId, user!.github_login),
     env.DB.prepare('SELECT show_team_badges FROM user_preferences WHERE github_login = ?').bind(user!.github_login).first<{ show_team_badges: number }>(),
+    env.DB.prepare('SELECT COUNT(*) AS count FROM user_votes WHERE team_id = ? AND github_login = ?').bind(teamId, user!.github_login).first<{ count: number }>(),
   ]);
-  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [], badge_settings: badgeSettings, badges, user_badges_public: userBadgePreference?.show_team_badges === 1 }, request);
+  return jsonOk({ team: summary, membership: membership.role, members: members.results ?? [], activity: activity.results ?? [], repositories: repositories.results ?? [], join_requests: requests.results ?? [], invites: invites.results ?? [], ownership_transfers: transfers.results ?? [], badge_settings: badgeSettings, badges, my_attributed_validations: myAttribution?.count ?? 0, user_badges_public: userBadgePreference?.show_team_badges === 1 }, request);
 }
 
 /** POST /api/teams/:id/settings */
