@@ -1,3 +1,4 @@
+import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
  * React SPA served via ASSETS binding; API routes handled by worker.
@@ -153,6 +154,7 @@ export default {
        if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
 
        /* ── User Preferences ───────────────────────────────────────── */
+       if ((method === 'GET' || method === 'PUT') && url.pathname === '/api/preferences/workspace') return await handleWorkspacePreferences(request, env);
        if (method === 'GET'  && url.pathname === '/api/preferences/mine') return await handleGetPreferences(request, env);
        if (method === 'PUT'  && url.pathname === '/api/preferences/mine') return await handlePutPreferences(request, env);
 
