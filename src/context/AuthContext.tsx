@@ -1,3 +1,4 @@
+import { clearVoteDrafts } from '../components/VoteForm'
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
 interface AuthUser {
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => { fetchMe() }, [fetchMe])
 
   const logout = useCallback(async () => {
+    clearVoteDrafts()
     try {
       // Fetch a fresh CSRF token
       const csrfRes = await fetch('/api/csrf', { credentials: 'include' })

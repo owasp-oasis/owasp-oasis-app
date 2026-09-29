@@ -5,10 +5,13 @@
  * Vote bar: Accept / Modify / Reject (open PRs only)
  * VoteForm drawer slides up from bottom when a decision is selected.
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import VoteForm, { type Decision } from '../VoteForm'
-import PRTab from './PRTab'
+import { Maximize2, Minimize2, X, ExternalLink, LockKeyhole } from 'lucide-react'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import { FixChips } from '../../pages/workspace/FixChips'
+import { useSearchParams } from 'react-router-dom'
 import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
 import CommentsTab from './CommentsTab'
@@ -28,6 +31,7 @@ export interface PanelPR {
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
+  consensus_duplicate?: number
 }
 
 /* ── Details shape returned by /api/pr-panel/:id/details ─────── */
@@ -55,10 +59,11 @@ interface PRDetails {
   detection_tool: string | null
 }
 
-type Tab = 'pr' | 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
+type Tab = 'body' | 'changes' | 'comments' | 'summary' | 'workflow'
 
 interface Props {
   pr: PanelPR | null
+  presentation?: 'drawer' | 'inline'
   myVotes: Map<number, Decision>
   onClose: () => void
   onVoteSuccess: (pr: PanelPR, decision: Decision) => void
@@ -78,7 +83,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
   return (
     <div className="prp-signin-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="prp-signin-card" role="dialog" aria-modal="true" aria-label="Sign in required">
-        <div className="prp-signin-icon">🔒</div>
+        <div className="prp-signin-icon" aria-hidden="true"><LockKeyhole size={24} /></div>
         <h2 className="prp-signin-title">Sign in to review PRs</h2>
         <p className="prp-signin-body">
           You need to sign in with GitHub to view PR details, read comments,
@@ -101,10 +106,17 @@ export function SignInModal({ onClose }: SignInModalProps) {
 }
 
 /* ── Main panel ──────────────────────────────────────────────── */
-export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) {
+export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentation = 'drawer' }: Props) {
   const { user } = useAuth()
 
-  const [activeTab, setActiveTab]       = useState<Tab>('summary')
+  const [params, setParams] = useSearchParams()
+  const activeTab = (['summary','body','changes','comments','workflow'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
+  const setActiveTab = (tab: Tab) => { const next = new URLSearchParams(params); next.set('tab', tab); setParams(next, { replace: true }) }
+  const { preferences } = useWorkspace()
+  const [expanded, setExpanded] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
+  const modal = expanded || presentation === 'drawer'
   const [voteDecision, setVoteDecision] = useState<Decision | null>(null)
   const [drawerDecision, setDrawerDecision] = useState<Decision | null>(null)
   const [commentCount, setCommentCount] = useState<number | null>(null)
@@ -125,7 +137,6 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     if (!pr) return
     if (pr.id !== prevPrId.current) {
       prevPrId.current = pr.id
-      setActiveTab('summary')
       setVoteDecision(null)
       setDrawerDecision(null)
       setCommentCount(null)
@@ -142,21 +153,17 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   }, [voteDecision])
 
   // Fetch details when PR changes
-  const fetchDetails = useCallback(() => {
+  useEffect(() => {
     if (!pr) return
-    setDetailsLoading(true)
-    setDetailsError(null)
-    fetch(`/api/pr-panel/${pr.id}/details`)
-      .then(r => r.json() as Promise<{ ok: boolean } & Partial<PRDetails> & { error?: string }>)
-      .then(d => {
-        if (!d.ok) { setDetailsError(d.error ?? 'Failed to load PR details'); return }
-        setDetails(d as unknown as PRDetails)
-      })
-      .catch(err => setDetailsError((err as Error).message))
-      .finally(() => setDetailsLoading(false))
-  }, [pr])
-
-  useEffect(() => { fetchDetails() }, [fetchDetails])
+    const controller = new AbortController()
+    setDetailsLoading(true); setDetailsError(null); setDetails(null)
+    fetch(`/api/pr-panel/${pr.id}/details`, { signal: controller.signal })
+      .then(async r => { const data = await r.json(); if (!r.ok || !data.ok) throw new Error(data.error ?? 'Could not load candidate fix details'); return data })
+      .then(setDetails)
+      .catch(err => { if (!controller.signal.aborted) setDetailsError(err.message) })
+      .finally(() => { if (!controller.signal.aborted) setDetailsLoading(false) })
+    return () => controller.abort()
+  }, [pr?.id])
 
   // Record aggregate active-review time without sending a login or stable user
   // identifier. Hidden or idle tabs do not accrue active seconds.
@@ -186,13 +193,44 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     }
   }, [pr, user])
 
-  // Close on Escape
+  useEffect(() => {
+    if (!pr || !modal) return
+    const previous = document.activeElement as HTMLElement | null
+    const oldOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    panelRef.current?.focus()
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const nodes = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]') ?? []).filter(el => el.getClientRects().length)
+      const first = nodes[0], last = nodes[nodes.length-1]
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) { e.preventDefault(); last?.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+    }
+    document.addEventListener('keydown', trap)
+    return () => { document.body.style.overflow = oldOverflow; document.removeEventListener('keydown',trap); previous?.focus() }
+  }, [!!pr, modal])
   useEffect(() => {
     if (!pr) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [pr, onClose])
+    const key = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || submitting) return
+      const field = (e.target as HTMLElement)?.closest('input,textarea,select,[contenteditable=true]')
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (field) { (e.target as HTMLElement).blur(); return }
+        if (voteDecision) setVoteDecision(null)
+        else if (expanded) setExpanded(false)
+        else onClose()
+        return
+      }
+      if (!preferences.keyboardShortcuts || field || e.ctrlKey || e.metaKey || e.altKey || !user || pr.state !== 'open' || myVotes.has(pr.id)) return
+      if ((e.target as HTMLElement)?.closest('button,a,[role=tab]')) return
+      const decisions: Record<string,Decision> = { a:'accept',m:'modify',r:'reject',d:'duplicate' }
+      const decision = decisions[e.key.toLowerCase()]
+      if (decision) { e.preventDefault(); setVoteDecision(old => old === decision ? null : decision) }
+    }
+    document.addEventListener('keydown',key)
+    return () => document.removeEventListener('keydown',key)
+  }, [pr, submitting, voteDecision, expanded, preferences.keyboardShortcuts, user, myVotes, onClose])
 
   if (!pr) return null
 
@@ -218,13 +256,11 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     duplicate: 'Duplicate',
   }
 
-  const stateClass = activePR.state === 'open' ? 'state-badge state-open' : 'state-badge state-closed'
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'summary',  label: 'Summary' },
-    { id: 'pr',       label: 'PR' },
-    { id: 'body',     label: 'Body' },
-    { id: 'changes',  label: 'Diffs' },
+    { id: 'body',     label: 'Details' },
+    { id: 'changes',  label: 'Diff' },
     { id: 'comments', label: commentCount !== null ? `Comments (${commentCount})` : 'Comments' },
     { id: 'workflow', label: 'Workflow' },
   ]
@@ -235,22 +271,23 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     consensus_accept: activePR.consensus_accept,
     consensus_modify: activePR.consensus_modify,
     consensus_reject: activePR.consensus_reject,
+    consensus_duplicate: activePR.consensus_duplicate ?? 0,
   } : null
 
   return (
     <>
       {showSignIn && <SignInModal onClose={() => setShowSignIn(false)} />}
-      <div className="prp-backdrop" onClick={onClose} aria-hidden="true" />
+      <>{modal && <div className="prp-backdrop" onClick={() => { if (!submitting) expanded ? setExpanded(false) : onClose() }} aria-hidden="true" />}</>
 
-      <aside className="prp-panel prp-panel--open"
-             role="complementary"
+      <aside ref={panelRef} tabIndex={-1} className={"prp-panel prp-panel--open prp-v3 " + (expanded ? "prp-panel--expanded" : presentation === "inline" ? "prp-panel--inline" : "")}
+             role={modal ? "dialog" : "region"} aria-modal={modal || undefined}
              aria-label={`PR #${activePR.number} details`}>
 
         {/* Header */}
         <div className="prp-header">
-          <button className="prp-close" onClick={onClose} aria-label="Close panel">✕</button>
+          <button className="prp-close" disabled={submitting} onClick={onClose} aria-label="Close panel"><X size={18}/></button>
           <span className="prp-identity">{activePR.repo_name} #{activePR.number}</span>
-          <span className={stateClass}>{activePR.state}</span>
+          <h2 className="prp-fix-title">{activePR.title}</h2><div className="ws-chips"><FixChips pr={activePR}/></div>
           <div className="prp-header-spacer" />
           <a
             href={activePR.html_url}
@@ -259,7 +296,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
             className="prp-gh-link"
             title="Open on GitHub"
           >
-            ↗ GitHub
+            <ExternalLink size={14}/> Open on GitHub
           </a>
         </div>
 
@@ -295,10 +332,12 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
                   key={d}
                   className={classes}
                   onClick={() => handleVoteButtonClick(d)}
-                  disabled={!!myVote}
+                  disabled={!!myVote || submitting}
+                  aria-pressed={isActive || isVoted}
+                  aria-keyshortcuts={preferences.keyboardShortcuts ? d[0].toUpperCase() : undefined}
                   title={myVote ? `You voted ${myVote}` : `Vote ${d}`}
                 >
-                  {isVoted ? `✓ ${DECISION_LABELS[d]}` : DECISION_LABELS[d]}
+                  {isVoted ? `You voted ${DECISION_LABELS[d]}` : <><u>{DECISION_LABELS[d][0]}</u>{DECISION_LABELS[d].slice(1)}</>}
                 </button>
               )
             })}
@@ -306,7 +345,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
         )}
 
         {/* Tab bar */}
-        <div className="prp-tab-bar" role="tablist">
+        <div className="prp-tab-bar" role="tablist" aria-label="Candidate fix details">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -320,17 +359,11 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
               {t.label}
             </button>
           ))}
+          <button className="prp-expand" disabled={submitting} onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Collapse detail" : "Expand detail"}>{expanded ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}<span>{expanded ? "Collapse" : "Expand"}</span></button>
         </div>
 
         {/* Scrollable body */}
         <div id="prp-tabpanel" className="prp-body" ref={bodyRef} role="tabpanel" aria-labelledby={`prp-tab-${activeTab}`}>
-          {activeTab === 'pr' && (
-            <PRTab
-              details={details}
-              loading={detailsLoading}
-              error={detailsError}
-            />
-          )}
           {activeTab === 'body' && (
             <BodyTab
               body={details?.body ?? null}
@@ -339,7 +372,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
             />
           )}
           {activeTab === 'changes' && (
-            <ChangesTab prId={activePR.id} />
+            <ChangesTab prId={activePR.id} diffView={preferences.diffView} />
           )}
           {activeTab === 'comments' && (
             <CommentsTab
@@ -367,18 +400,21 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
              <div className="prp-vote-form-header">
                <span className="prp-vote-form-title">
                  {(drawerDecision ?? voteDecision) === 'duplicate'
-                   ? 'Report Duplicate'
-                   : `Cast your vote — ${DECISION_LABELS[drawerDecision ?? voteDecision]}`}
+                   ? 'Report duplicate'
+                   : `Your validation — ${DECISION_LABELS[drawerDecision ?? voteDecision]}`}
                </span>
                <button
                  className="prp-vote-form-close"
+                 disabled={submitting}
                  onClick={() => setVoteDecision(null)}
                  aria-label="Close vote form"
                >
-                 ✕
+                 <X size={16} />
                </button>
              </div>
              <VoteForm
+               key={activePR.id}
+               onSubmittingChange={setSubmitting}
                pr={activePR}
                initialDecision={voteDecision}
                onClose={() => setVoteDecision(null)}

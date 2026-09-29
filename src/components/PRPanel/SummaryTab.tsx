@@ -14,6 +14,7 @@ interface PRDetails {
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
+  consensus_duplicate: number
 }
 
 interface Props {
@@ -32,10 +33,11 @@ export default function SummaryTab({ details, loading, error }: Props) {
   const sev = details.cvss_severity ?? null
   const sevClass = sev && SEVERITY_ORDER.includes(sev) ? `prp-severity-badge--${sev}` : 'prp-severity-badge--low'
 
-  const totalVotes = details.consensus_accept + details.consensus_modify + details.consensus_reject
+  const totalVotes = details.consensus_accept + details.consensus_modify + details.consensus_reject + details.consensus_duplicate
   const acceptPct  = totalVotes > 0 ? (details.consensus_accept / totalVotes) * 100 : 0
   const modifyPct  = totalVotes > 0 ? (details.consensus_modify / totalVotes) * 100 : 0
   const rejectPct  = totalVotes > 0 ? (details.consensus_reject / totalVotes) * 100 : 0
+  const duplicatePct = totalVotes > 0 ? (details.consensus_duplicate / totalVotes) * 100 : 0
 
   const hasVulnData = details.cwe_id || details.cve_id || details.cvss_severity || details.tldr
 
@@ -108,11 +110,13 @@ export default function SummaryTab({ details, loading, error }: Props) {
               <div className="prp-consensus-seg-accept" style={{ width: `${acceptPct}%` }} />
               <div className="prp-consensus-seg-modify" style={{ width: `${modifyPct}%` }} />
               <div className="prp-consensus-seg-reject" style={{ width: `${rejectPct}%` }} />
+              <div className="prp-consensus-seg-duplicate" style={{ width: `${duplicatePct}%` }} />
             </div>
             <div className="prp-consensus-counts">
-              <span className="consensus-accept">✓ {details.consensus_accept} accept</span>
-              <span className="consensus-modify">~ {details.consensus_modify} modify</span>
-              <span className="consensus-reject">✗ {details.consensus_reject} reject</span>
+              <span className="consensus-accept">{details.consensus_accept} accept</span>
+              <span className="consensus-modify">{details.consensus_modify} modify</span>
+              <span className="consensus-reject">{details.consensus_reject} reject</span>
+              <span className="consensus-duplicate">{details.consensus_duplicate} duplicate</span>
             </div>
           </>
         ) : (

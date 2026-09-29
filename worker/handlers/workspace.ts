@@ -170,7 +170,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
     'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const base = `
-    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url,
+    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url, r.language,
            comment_count,
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,

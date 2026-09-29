@@ -335,7 +335,7 @@ export function SyncRunDetail() {
       </div>
       <section className="section"><div className="container">
         <div className="sync-page-actions">
-          <Link className="sync-back-link" to="/workspace/status">← All sync jobs</Link>
+          <Link className="sync-back-link" to="/workspace/sync">← All sync jobs</Link>
           {user?.role === 'admin' && detail && (detail.run.status === 'queued' || detail.run.status === 'running') && (
             <button
               type="button"
@@ -567,7 +567,7 @@ export default function SyncStatus() {
           {job.recent_runs.map(run => (
             <Link
               key={run.id}
-              to={`/workspace/status/runs/${run.id}`}
+              to={`/workspace/sync/runs/${run.id}`}
               className="sync-run-row"
               onClick={rememberStatusView}
             >
@@ -594,7 +594,7 @@ export default function SyncStatus() {
       </div>
       <section className="section"><div className="container">
         <div className="sync-page-actions">
-          <Link className="sync-back-link" to="/workspace/pull-requests">← Back to Workspace</Link>
+          <Link className="sync-back-link" to="/workspace/fixes">← Back to Workspace</Link>
           <button onClick={() => void refresh()} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
         </div>
         {error && <div className="sync-error">{error}. Existing results remain visible while retrying.</div>}
@@ -719,7 +719,7 @@ export default function SyncStatus() {
                 {payload.incomplete_runs.map(run => (
                   <Link
                     key={run.id}
-                    to={`/workspace/status/runs/${run.id}`}
+                    to={`/workspace/sync/runs/${run.id}`}
                     className="sync-run-row sync-run-row--archive"
                     onClick={rememberStatusView}
                   >
@@ -755,7 +755,7 @@ export default function SyncStatus() {
                         <div className="sync-pipeline-overview">
                           <span>Latest parent run</span>
                           <Link
-                            to={`/workspace/status/runs/${pipeline.parent.latest_run.id}`}
+                            to={`/workspace/sync/runs/${pipeline.parent.latest_run.id}`}
                             onClick={rememberStatusView}
                           >
                             {dateTime(pipeline.parent.latest_run.started_at)} · View run →

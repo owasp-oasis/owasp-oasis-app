@@ -109,7 +109,7 @@ function statusClass(status: number): '2xx' | '3xx' | '4xx' | '5xx' | null {
 
 export function normalizeAnalyticsRoute(pathname: string): string {
   const path = pathname.split('?')[0].replace(/\/+$/, '') || '/';
-  if (/^\/workspace\/status\/runs\/[^/]+$/.test(path)) return '/workspace/status/runs/:id';
+  if (/^\/workspace\/(?:status|sync)\/runs\/[^/]+$/.test(path)) return path.startsWith('/workspace/sync/') ? '/workspace/sync/runs/:id' : '/workspace/status/runs/:id';
   if (/^\/api\/pr-panel\/\d+\/(details|files|comments|react)$/.test(path)) {
     return path.replace(/\/\d+\//, '/:id/');
   }
@@ -117,8 +117,9 @@ export function normalizeAnalyticsRoute(pathname: string): string {
   if (/^\/api\/admin\/users\/\d+\/role$/.test(path)) return '/api/admin/users/:id/role';
   const approved = new Set([
     '/', '/about', '/overview', '/support', '/sponsors', '/brand', '/news', '/news/launch',
-    '/calculator', '/workspace', '/workspace/projects', '/workspace/pull-requests',
-    '/workspace/contributors', '/workspace/maintainers', '/workspace/tools', '/workspace/status',
+    '/calculator', '/workspace', '/workspace/projects', '/workspace/fixes', '/workspace/pull-requests',
+    '/workspace/validators', '/workspace/contributors', '/workspace/maintainers', '/workspace/teams',
+    '/workspace/preferences', '/workspace/fix-automation', '/workspace/tools', '/workspace/sync', '/workspace/status',
     '/admin', '/admin/analytics',
   ]);
   if (approved.has(path)) return path;
