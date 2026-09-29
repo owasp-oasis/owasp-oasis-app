@@ -46,26 +46,83 @@ await db.prepare("INSERT INTO teams (id, name, description, membership_mode, own
 for (const [team, login, role] of [[1, 'demo-owner', 'owner'], [1, 'demo-admin', 'admin'], [1, 'demo-member', 'member'], [2, 'demo-admin', 'owner']]) {
   await db.prepare('INSERT INTO team_memberships (team_id, github_login, role, joined_at) VALUES (?, ?, ?, ?)').bind(team, login, role, now).run()
 }
-for (const [id, name, description] of [[41, 'sample-python-project', 'A sample Python repository for this local walkthrough.'], [42, 'sample-auth-library', 'A sample authentication library.'], [43, 'sample-web-framework', 'A sample web framework.']]) {
-  await db.prepare('INSERT INTO repos (id, name, full_name, description, language, open_prs, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, name, 'owasp-oasis/' + name, description, id === 41 ? 'Python' : 'TypeScript', 2, now).run()
+// The preview uses the same OASIS repository set shown by the product's
+// dashboard snapshot.  The records are local, but the names, languages,
+// upstream links, and security findings mirror the projects reviewers see in
+// a real workspace, so every view has enough variety to exercise its workflow.
+const previewRepos = [
+  [41, 'juice-shop', 'OWASP Juice Shop', 'TypeScript', 'OWASP/juice-shop', 'Intentionally insecure web application used for security training.'],
+  [42, 'webgoat', 'OWASP WebGoat', 'Java', 'WebGoat/WebGoat', 'Interactive lessons for learning web application security.'],
+  [43, 'crapi', 'OWASP crAPI', 'Python', 'OWASP/crAPI', 'Completely Ridiculous API for learning API security.'],
+  [44, 'nodegoat', 'OWASP NodeGoat', 'JavaScript', 'OWASP/NodeGoat', 'Vulnerable Node.js application for secure coding practice.'],
+  [45, 'pysap', 'OWASP PySAP', 'Python', 'OWASP/pysap', 'Python implementation of SAP network protocols.'],
+  [46, 'wrongsecrets', 'OWASP WrongSecrets', 'Java', 'OWASP/wrongsecrets', 'A deliberately vulnerable application for secret-management training.'],
+]
+for (const [id, name, label, language, fullName, description] of previewRepos) {
+  await db.prepare('INSERT INTO repos (id, name, full_name, description, language, upstream_url, open_prs, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, name, fullName, `${label}. ${description}`, language, `https://github.com/${fullName}`, 2, now).run()
 }
-await db.prepare("INSERT INTO team_repositories (team_id, repo_id, added_by, created_at) VALUES (1, 41, 'demo-owner', ?)").bind(now).run()
+for (const repoId of [41, 42, 43, 44, 45, 46]) {
+  await db.prepare("INSERT INTO team_repositories (team_id, repo_id, added_by, created_at) VALUES (1, ?, 'demo-owner', ?)").bind(repoId, now).run()
+}
 await db.prepare("INSERT INTO team_join_requests (team_id, requester_login, created_at) VALUES (1, 'demo-newcomer', ?)").bind(now).run()
 await db.prepare("INSERT INTO team_invites (team_id, invitee_login, invited_by, created_at) VALUES (2, 'demo-owner', 'demo-admin', ?)").bind(now).run()
 const candidateFixes = [
-  [100, 41, 'sample-python-project', 42, 'High severity CWE-22 (Path traversal) in archive extraction', 'open', 8, 6, 1, 1],
-  [101, 42, 'sample-auth-library', 17, 'Critical severity CWE-287 (Improper authentication) in token refresh', 'open', 3, 2, 1, 0],
-  [102, 43, 'sample-web-framework', 88, 'Medium severity CWE-79 (Cross-site scripting) in error pages', 'open', 1, 0, 1, 0],
-  [103, 41, 'sample-python-project', 39, 'Low severity CWE-400 (Resource consumption) in parser', 'closed', 11, 9, 1, 1],
+  [100, 41, 'juice-shop', 421, 'High severity CWE-79 (Cross-site scripting) in product review rendering', 'open', 14, 12, 1, 1],
+  [101, 41, 'juice-shop', 422, 'High severity CWE-352 (Cross-Site Request Forgery) in profile updates', 'open', 6, 3, 2, 1],
+  [102, 41, 'juice-shop', 423, 'Medium severity CWE-532 (Sensitive Information in Log File) in diagnostic logs', 'closed', 13, 11, 2, 0],
+  [103, 42, 'webgoat', 88, 'Medium severity CWE-89 (SQL Injection) in lesson progress lookup', 'open', 4, 1, 2, 1],
+  [104, 42, 'webgoat', 91, 'High severity CWE-22 (Path Traversal) in assignment upload', 'closed', 17, 15, 2, 0],
+  [105, 43, 'crapi', 17, 'Critical severity CWE-918 (Server-Side Request Forgery) in webhook verifier', 'open', 12, 10, 1, 1],
+  [106, 43, 'crapi', 21, 'High severity CWE-639 (Authorization Bypass) in vehicle reports', 'open', 7, 4, 2, 1],
+  [107, 44, 'nodegoat', 144, 'High severity CWE-79 (Cross-site scripting) in account exports', 'closed', 11, 9, 1, 1],
+  [108, 44, 'nodegoat', 147, 'Medium severity CWE-613 (Insufficient Session Expiration)', 'open', 3, 1, 2, 0],
+  [109, 45, 'pysap', 72, 'Critical severity CWE-409 (Improper Handling of Highly Compressed Data)', 'open', 15, 13, 1, 1],
+  [110, 45, 'pysap', 75, 'High severity CWE-20 (Improper Input Validation) before allocation', 'closed', 18, 16, 2, 0],
+  [111, 46, 'wrongsecrets', 205, 'High severity CWE-798 (Hard-coded Credentials) in example build history', 'open', 5, 2, 2, 1],
+  [112, 46, 'wrongsecrets', 211, 'Medium severity CWE-312 (Cleartext Storage of Sensitive Information)', 'open', 9, 5, 3, 1],
+  [113, 42, 'webgoat', 99, 'High severity CWE-434 (Unrestricted Upload of File with Dangerous Type)', 'closed', 5, 1, 1, 3],
+  [114, 46, 'wrongsecrets', 218, 'Medium severity CWE-522 (Insufficiently Protected Credentials) in sample configuration', 'closed', 6, 0, 1, 5],
 ]
+const repoByName = new Map(previewRepos.map(repo => [repo[1], repo]))
 for (const [id, repoId, repoName, number, title, state, participants, accepts, modifies, rejects] of candidateFixes) {
+  const repo = repoByName.get(repoName)
+  const fullName = repo?.[4] ?? `OWASP/${repoName}`
   await db.prepare(`INSERT INTO pull_requests
     (id, repo_id, repo_name, number, title, state, author, html_url, comment_count, participants,
      consensus_accept, consensus_modify, consensus_reject, merged_upstream, created_at, updated_at, synced_at)
     VALUES (?, ?, ?, ?, ?, ?, 'security-contributor', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, repoId, repoName, number, title, state, `https://github.com/owasp-oasis/${repoName}/pull/${number}`, participants + 2, participants, accepts, modifies, rejects, state === 'closed' ? 1 : 0, now, now, now).run()
+    .bind(id, repoId, repoName, number, title, state, `https://github.com/${fullName}/pull/${number}`, participants + 2, participants, accepts, modifies, rejects, state === 'closed' && ![113, 114].includes(id) ? 1 : 0, now, now, now).run()
 }
-await db.prepare("INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at) VALUES ('demo-member', 100, 'sample-python-project', 42, 'accept', 1, ?)").bind(now).run()
+// Seed a few lifecycle examples so the review panel can be inspected in each
+// phase without performing an irreversible action in the preview.
+await db.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, github_user_id, github_login, created_at)
+  VALUES ('preview-decision-100', 100, 'accepted', 'Community consensus is strong and the patch is ready for upstream review.', 9001, 'demo-owner', ?)`)
+  .bind(now).run()
+await db.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, github_user_id, github_login, created_at)
+  VALUES ('preview-decision-101', 101, 'changes_requested', 'Please add a regression test for the profile update flow.', 9001, 'demo-owner', ?)`)
+  .bind(new Date(Date.now() - 86400000).toISOString()).run()
+await db.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, github_user_id, github_login, created_at)
+  VALUES ('preview-decision-105', 105, 'accepted', 'The SSRF guard covers the reported internal network targets.', 9002, 'demo-admin', ?)`)
+  .bind(now).run()
+await db.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, github_user_id, github_login, created_at)
+  VALUES ('preview-decision-107', 107, 'declined', 'This report is already addressed by the upstream release.', 9002, 'demo-admin', ?)`)
+  .bind(now).run()
+await db.prepare(`INSERT INTO upstream_submissions
+  (id, source_pr_id, upstream_full_name, upstream_default_branch, upstream_pr_id, upstream_pr_number, upstream_pr_url,
+   head_repo_full_name, head_branch, validated_head_sha, base_branch, status, submitted_by_github_id, submitted_by_login,
+   submitted_at, last_synced_at, created_at, updated_at)
+  VALUES ('preview-submission-102', 102, 'OWASP/juice-shop', 'master', 902102, 1201, 'https://github.com/OWASP/juice-shop/pull/1201',
+   'owasp-oasis/juice-shop', 'oasis-fix-423', '0123456789abcdef0123456789abcdef01234567', 'master', 'merged', 9001, 'demo-owner', ?, ?, ?, ?)`)
+  .bind(now, now, now, now).run()
+await db.prepare(`INSERT INTO upstream_submissions
+  (id, source_pr_id, upstream_full_name, upstream_default_branch, upstream_pr_id, upstream_pr_number, upstream_pr_url,
+   head_repo_full_name, head_branch, validated_head_sha, base_branch, status, submitted_by_github_id, submitted_by_login,
+   submitted_at, last_synced_at, created_at, updated_at)
+  VALUES ('preview-submission-105', 105, 'OWASP/crAPI', 'main', 902105, 121, 'https://github.com/OWASP/crAPI/pull/121',
+   'owasp-oasis/crapi', 'oasis-fix-17', 'abcdef0123456789abcdef0123456789abcdef01', 'main', 'failed', 9002, 'demo-admin', ?, ?, ?, ?)`)
+  .bind(now, now, now, now).run()
+await db.prepare("INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, team_id, voted_at) VALUES ('demo-member', 100, 'juice-shop', 421, 'accept', 1, ?)").bind(now).run()
 for (const [index, login] of identities.entries()) {
   await db.prepare(`INSERT INTO contributors
     (login, avatar_url, prs_worked, total_interactions, accepts, modifies, rejects, comment_score,
@@ -91,6 +148,34 @@ const mockPublicBadges = [{
   team_id: 1, team_name: 'Python security reviewers', team_status: 'active',
   badge_key: 'contributor_milestone', qualifying_count: 10, threshold: 5, awarded_at: now,
 }]
+const cweCatalog = {
+  'CWE-20': ['Improper Input Validation', 7.5],
+  'CWE-22': ['Path Traversal', 8.1],
+  'CWE-79': ['Improper Neutralization of Input During Web Page Generation', 7.4],
+  'CWE-89': ['SQL Injection', 8.8],
+  'CWE-312': ['Cleartext Storage of Sensitive Information', 6.5],
+  'CWE-352': ['Cross-Site Request Forgery', 6.5],
+  'CWE-409': ['Improper Handling of Highly Compressed Data', 7.5],
+  'CWE-434': ['Unrestricted Upload of File with Dangerous Type', 8.1],
+  'CWE-532': ['Insertion of Sensitive Information into Log File', 5.5],
+  'CWE-613': ['Insufficient Session Expiration', 6.5],
+  'CWE-639': ['Authorization Bypass Through User-Controlled Key', 8.1],
+  'CWE-798': ['Use of Hard-coded Credentials', 7.5],
+  'CWE-918': ['Server-Side Request Forgery', 9.1],
+}
+const repoTools = { 'juice-shop': 'CodeQL', webgoat: 'Semgrep', crapi: 'Bandit', nodegoat: 'ESLint security', pysap: 'CodeQL', wrongsecrets: 'Trivy' }
+const detailCatalog = new Map(candidateFixes.map(row => {
+  const cwe = String(row[4]).match(/CWE-\d+/)?.[0] ?? ''
+  const [cweDesc, score] = cweCatalog[cwe] ?? ['Security weakness', null]
+  const severity = String(row[4]).match(/^(Critical|High|Medium|Low)/)?.[1] ?? 'Medium'
+  const repoName = String(row[2])
+  return [row[0], {
+    cwe, cweDesc, score, severity, detectionTool: repoTools[repoName] ?? 'OASIS analyzer',
+    cve: row[0] === 105 ? 'CVE-2026-1742' : row[0] === 100 ? 'CVE-2026-1417' : null,
+    tldr: `The ${repoName} patch adds a focused ${cweDesc.toLowerCase()} guard and keeps the security-sensitive path covered by a regression test.`,
+    body: `## Security fix\n\nThis candidate addresses ${cwe} (${cweDesc}) in ${repoName}. The change validates untrusted input at the boundary, preserves the existing behavior for valid requests, and adds coverage for the reported exploit path.`,
+  }]
+}))
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://127.0.0.1:' + port)
@@ -116,13 +201,18 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && /\/api\/pr-panel\/\d+\/details$/.test(url.pathname)) {
         const prId = Number(url.pathname.split('/')[3])
         const row = candidateFixes.find(item => item[0] === prId) ?? candidateFixes[0]
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, title: row[4], number: row[3], state: row[5], html_url: `https://github.com/owasp-oasis/${row[2]}/pull/${row[3]}`, body: '## Security fix\n\nThis candidate validates untrusted input before it reaches the vulnerable operation.', user: { login: 'security-contributor', avatar_url: '/__demo/avatar.svg' }, created_at: now, updated_at: now, merged_at: null, additions: 12, deletions: 4, changed_files: 1, head_sha: '0123456789abcdef0123456789abcdef01234567', cwe_id: String(row[4]).match(/CWE-\d+/)?.[0] ?? null, cwe_desc: String(row[4]).match(/\(([^)]+)\)/)?.[1] ?? null, cvss_severity: String(row[4]).match(/^(Critical|High|Medium|Low)/)?.[1] ?? null, cve_id: null, capec_id: null, cvss_score: null, tldr: 'The patch adds a bounded validation step and a regression test.', detection_tool: null })); return
+        const repo = repoByName.get(row[2])
+        const detail = detailCatalog.get(prId) ?? detailCatalog.get(100)
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, title: row[4], number: row[3], state: row[5], html_url: `https://github.com/${repo?.[4] ?? `OWASP/${row[2]}`}/pull/${row[3]}`, body: detail.body, user: { login: 'security-contributor', avatar_url: '/__demo/avatar.svg' }, created_at: new Date(Date.now() - 14 * 86400000).toISOString(), updated_at: now, merged_at: row[5] === 'closed' && row[0] !== 113 ? now : null, additions: row[0] % 4 + 4, deletions: row[0] % 3 + 1, changed_files: row[0] % 3 + 1, head_sha: '0123456789abcdef0123456789abcdef01234567', cwe_id: detail.cwe, cwe_desc: detail.cweDesc, cvss_severity: detail.severity, cve_id: detail.cve, capec_id: null, cvss_score: detail.score, tldr: detail.tldr, detection_tool: detail.detectionTool })); return
       }
       if (req.method === 'GET' && /\/api\/pr-panel\/\d+\/files$/.test(url.pathname)) {
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, files: [{ filename: 'src/security/validate.ts', status: 'modified', additions: 4, deletions: 2, changes: 6, patch: '@@ -10,3 +10,5 @@\n export function validate(input: string) {\n-  return input\n+  const normalized = input.trim()\n+  if (!normalized) throw new Error("Input is required")\n+  return normalized\n }' }] })); return
+        const prId = Number(url.pathname.split('/')[3]); const row = candidateFixes.find(item => item[0] === prId) ?? candidateFixes[0]; const extension = row[2] === 'webgoat' ? 'java' : row[2] === 'nodegoat' ? 'js' : row[2] === 'juice-shop' ? 'ts' : 'py'; const base = row[2] === 'crapi' ? 'app/api/security.py' : row[2] === 'webgoat' ? 'src/main/java/org/owasp/webgoat/lessons/security/Fix.java' : row[2] === 'nodegoat' ? 'routes/account.js' : row[2] === 'wrongsecrets' ? 'src/main/java/ secrets/Example.java' : `src/security/validate.${extension}`
+        const files = [{ filename: base, status: 'modified', additions: 4 + (prId % 4), deletions: 2, changes: 6 + (prId % 4), patch: '@@ -10,3 +10,8 @@\n-  return input\n+  const normalized = input.trim()\n+  if (!normalized) throw new Error("Input is required")\n+  return normalized\n+\n+  // Regression coverage protects the reported security boundary.' }, { filename: row[2] === 'webgoat' ? 'src/test/java/security/FixTest.java' : 'test/security-regression.spec.ts', status: 'added', additions: 12, deletions: 0, changes: 12, patch: '@@ -0,0 +1,12 @@\n+describe(\'security regression\', () => {\n+  it(\'rejects the reported exploit input\', () => {\n+    expect(validate(untrustedInput)).toThrow()\n+  })\n+})' }]
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, files })); return
       }
       if (req.method === 'GET' && /\/api\/pr-panel\/\d+\/comments$/.test(url.pathname)) {
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, comments: [] })); return
+        const prId = Number(url.pathname.split('/')[3]); const row = candidateFixes.find(item => item[0] === prId) ?? candidateFixes[0]; const comments = prId % 3 === 0 ? [{ id: prId * 10 + 1, user: { login: 'casey-maintainer', avatar_url: '/__demo/avatar.svg' }, body: 'Please keep the regression test close to the validation boundary.', created_at: new Date(Date.now() - 2 * 86400000).toISOString(), reactions: { total_count: 2, '+1': 2, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 }, oasis_decision: null }] : [{ id: prId * 10 + 1, user: { login: 'alice-validator', avatar_url: '/__demo/avatar.svg' }, body: `Reviewed ${row[2]} #${row[3]} against the reported ${String(row[4]).match(/CWE-\d+/)?.[0] ?? 'weakness'}.`, created_at: new Date(Date.now() - 3 * 86400000).toISOString(), reactions: { total_count: 3, '+1': 2, '-1': 0, laugh: 0, hooray: 1, confused: 0, heart: 0, rocket: 0, eyes: 0 }, oasis_decision: 'accept' }]
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, comments })); return
       }
       if (req.method === 'POST' && /\/api\/pr-panel\/\d+\/comments$/.test(url.pathname)) {
         let requestBody = ''
@@ -155,7 +245,7 @@ const server = createServer(async (req, res) => {
     let html = false
     try { content = await readFile(filename) } catch { content = await readFile(resolve(dist, 'index.html')); html = true }
     if (html || extname(filename) === '.html') {
-      const toolbar = '<aside style="padding:9px 16px;background:#fff6da;border-bottom:1px solid #dfd0a7;color:#594b21;font:12px system-ui;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><strong>LOCAL UX PREVIEW</strong><span>Sample data · saved in this session · viewing as ' + (identities.includes(persona) ? persona : 'public') + '</span>' + [...identities, 'public'].map(login => '<a style="color:#594b21;text-decoration:underline" href="/__demo/persona?as=' + login + '">' + login.replace('demo-', '') + '</a>').join('') + '</aside>'
+      const toolbar = '<aside style="padding:9px 16px;background:#fff6da;border-bottom:1px solid #dfd0a7;color:#594b21;font:12px system-ui;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><strong>LOCAL UX PREVIEW</strong><span>Curated OASIS repository snapshot · saved in this session · viewing as ' + (identities.includes(persona) ? persona : 'public') + '</span>' + [...identities, 'public'].map(login => '<a style="color:#594b21;text-decoration:underline" href="/__demo/persona?as=' + login + '">' + login.replace('demo-', '') + '</a>').join('') + '</aside>'
       content = content.toString().replace('<body>', '<body>' + toolbar)
     }
     res.writeHead(200, { 'content-type': html ? 'text/html' : types[extname(filename)] || 'text/html', 'cache-control': 'no-store' })
