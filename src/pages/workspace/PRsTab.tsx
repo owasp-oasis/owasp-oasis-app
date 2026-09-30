@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import PRPanel, { type PanelPR } from '../../components/PRPanel/PRPanel'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -92,7 +92,12 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   return <>
     <div className="ws-toolbar">
       <div className="ws-toolbar-main">
-        <div className="ws-preferences-toggle"><button type="button" aria-pressed={!bypass} onClick={()=>patch({all:bypass?null:'1'})}>{preferenceLabel}</button><Link to="/workspace/preferences">Edit</Link></div>
+        <div className={`ws-preferences-toggle ${bypass ? 'is-off' : 'is-active'}`}>
+          <button type="button" aria-pressed={!bypass} aria-label={bypass ? 'Use my preferences' : 'Turn off my preferences'} onClick={()=>patch({all:bypass?null:'1'})}>
+            <Filter size={15} strokeWidth={2.25} aria-hidden="true" />{preferenceLabel}
+          </button>
+          <Link to="/workspace/preferences" aria-label="Edit workspace preferences">Edit</Link>
+        </div>
         <label className="ws-search"><Search size={16}/><input type="search" aria-label="Search candidate fixes" placeholder="Search PR #, repo, title, or CWE…" value={query} onChange={e=>patch({q:e.target.value||null})} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();patch({q:null});e.currentTarget.blur()}}}/></label>
         <select aria-label="Project" value={repo} onChange={e=>patch({repo:e.target.value||null})}><option value="">All projects</option>{projects.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
         {preferences.keyboardShortcuts&&<span className="ws-keyboard-hint" aria-label="Use the up and down arrow keys to navigate candidate fixes"><kbd>↑</kbd><kbd>↓</kbd><span>navigate</span></span>}
