@@ -62,21 +62,30 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
     if (!selected || (layout !== 'split' && layout !== 'table')) return
     const scrollSelectedRow = () => {
       const row = document.querySelector<HTMLElement>(`.ws-fix-row[data-pr-id="${selected.id}"]`)
-      if (!row) return
+      if (!row) return false
       const list = row.closest<HTMLElement>('.ws-fix-list')
       if (list) {
         const rowRect = row.getBoundingClientRect()
         const listRect = list.getBoundingClientRect()
         const targetTop = list.scrollTop + rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2
         list.scrollTop = Math.max(0, Math.min(targetTop, list.scrollHeight - list.clientHeight))
-        return
+        return true
       }
       row.scrollIntoView({ block: 'center', inline: 'nearest' })
+      return true
     }
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(scrollSelectedRow)
     })
-    return () => cancelAnimationFrame(frame)
+    let attempts = 0
+    const retry = window.setInterval(() => {
+      attempts += 1
+      if (scrollSelectedRow() || attempts >= 40) window.clearInterval(retry)
+    }, 50)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearInterval(retry)
+    }
   }, [layout, selected?.id, reviewItems.length])
   const projects = [...new Map(data.map(pr=>[pr.repo_id,pr.repo_name])).entries()].sort((a,b)=>a[1].localeCompare(b[1]))
   const needCount = augmented.filter(pr=>pr.state==='open'&&!myVotes.has(pr.id)).length
