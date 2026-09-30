@@ -80,7 +80,8 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
     let attempts = 0
     const retry = window.setInterval(() => {
       attempts += 1
-      if (scrollSelectedRow() || attempts >= 40) window.clearInterval(retry)
+      scrollSelectedRow()
+      if (attempts >= 40) window.clearInterval(retry)
     }, 50)
     return () => {
       cancelAnimationFrame(frame)
