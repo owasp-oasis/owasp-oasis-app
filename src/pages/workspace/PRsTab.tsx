@@ -65,7 +65,9 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
     if (!row) return
     const list = row.closest<HTMLElement>('.ws-fix-list')
     if (list) {
-      const targetTop = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2
+      const rowRect = row.getBoundingClientRect()
+      const listRect = list.getBoundingClientRect()
+      const targetTop = list.scrollTop + rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2
       list.scrollTop = Math.max(0, Math.min(targetTop, list.scrollHeight - list.clientHeight))
       return
     }
