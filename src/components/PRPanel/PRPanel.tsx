@@ -11,6 +11,7 @@ import VoteForm, { type Decision } from '../VoteForm'
 import { Maximize2, Minimize2, X, ExternalLink, LockKeyhole } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { FixChips, SeverityChip } from '../../pages/workspace/FixChips'
+import { getToolUrl } from '../../pages/workspace/toolLinks'
 import { useSearchParams } from 'react-router-dom'
 import BodyTab from './BodyTab'
 import ChangesTab from './ChangesTab'
@@ -75,9 +76,26 @@ const DONOR_LOGOS: Record<string, { src: string; alt: string }> = {
   'dryrun security': { src: 'https://cdn.prod.website-files.com/645932d9286e9c20dd8e0fca/688b80486034525524cedf86_DRS-Logo-icon-green-white-dark%20background.svg', alt: 'DryRun Security' },
 }
 
+const FIX_AUTOMATION_BY_AUTHOR: Record<string, string> = {
+  'appsecai-app[bot]': 'AppSecAI',
+  'appsecai-bot': 'AppSecAI',
+  'dryrun-bot': 'DryRun Security',
+  'dryrun-security': 'DryRun Security',
+  'dryrun-security[bot]': 'DryRun Security',
+}
+
+function fixAutomation(details: PRDetails): string | null {
+  const author = details.user?.login?.trim().toLowerCase()
+  return (author && FIX_AUTOMATION_BY_AUTHOR[author]) || details.detection_tool
+}
+
 function DonorLogo({ tool }: { tool: string }) {
   const logo = DONOR_LOGOS[tool.trim().toLowerCase()]
-  return <span className="prp-donor">{logo && <img src={logo.src} alt={logo.alt} />}<span>{tool}</span></span>
+  const content = <>{logo && <img src={logo.src} alt={logo.alt} />}<span>{tool}</span></>
+  const url = getToolUrl(tool)
+  return url
+    ? <a className="prp-donor" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${tool} website`}>{content}</a>
+    : <span className="prp-donor">{content}</span>
 }
 
 /* ── Sign-in modal (shown when unauthenticated user clicks a row) */
@@ -281,6 +299,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     consensus_duplicate: activePR.consensus_duplicate ?? 0,
     participants: activePR.participants ?? 0,
   } : null
+  const automation = details ? fixAutomation(details) : null
 
   return (
     <>
@@ -305,7 +324,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
             <div><span>Severity</span><strong className="prp-meta-severity"><SeverityChip title={activePR.title}/>{details?.cvss_score ? ` · ${details.cvss_score}` : ''}</strong></div>
             <div><span>Weakness</span><strong>{details?.cwe_id ? `${details.cwe_id}${details.cwe_desc ? ` · ${details.cwe_desc}` : ''}` : '—'}</strong></div>
             <div><span>CVE</span><strong className="prp-meta-mono">{details?.cve_id ?? '—'}</strong></div>
-            <div><span>Fix automation</span><strong>{details?.detection_tool ? <DonorLogo tool={details.detection_tool} /> : '—'}</strong></div>
+            <div><span>Fix automation</span><strong>{automation ? <DonorLogo tool={automation} /> : '—'}</strong></div>
           </div>
         </div>
 

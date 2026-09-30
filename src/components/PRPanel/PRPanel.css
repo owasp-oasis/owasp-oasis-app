@@ -52,7 +52,9 @@
 .prp-meta-grid .prp-meta-mono { font-family:var(--mono); font-weight:400; }
 .prp-meta-severity { overflow:visible!important; text-overflow:clip!important; white-space:normal!important; }
 .prp-meta-severity .ws-chip { font-size:10px; }
-.prp-donor { display:inline-flex; align-items:center; gap:7px; min-width:0; color:var(--muted)!important; }
+.prp-donor { display:inline-flex; align-items:center; gap:7px; min-width:0; color:var(--muted)!important; text-decoration:none; }
+.prp-donor[href]:hover { color:var(--blue)!important; text-decoration:underline; }
+.prp-donor[href]:focus-visible { outline:2px solid var(--blue); outline-offset:2px; border-radius:3px; }
 .prp-donor img { width:auto; height:20px; max-width:92px; object-fit:contain; flex:none; }
 
 .prp-close {
