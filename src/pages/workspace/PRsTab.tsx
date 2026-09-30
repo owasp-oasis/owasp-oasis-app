@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import PRPanel, { type PanelPR } from '../../components/PRPanel/PRPanel'
@@ -59,9 +59,17 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
   const reviewItems = requested && !filtered.some(pr=>pr.id===requested.id) ? [requested, ...filtered] : filtered
   const selected = closed ? null : requested ?? (layout !== 'table' ? filtered[0] : null)
   const selectedIndex = reviewItems.findIndex(pr=>pr.id===selected?.id)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selected || (layout !== 'split' && layout !== 'table')) return
-    rowRefs.current.get(selected.id)?.scrollIntoView({ block: 'center', inline: 'nearest' })
+    const row = rowRefs.current.get(selected.id)
+    if (!row) return
+    const list = row.closest<HTMLElement>('.ws-fix-list')
+    if (list) {
+      const targetTop = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2
+      list.scrollTop = Math.max(0, Math.min(targetTop, list.scrollHeight - list.clientHeight))
+      return
+    }
+    row.scrollIntoView({ block: 'center', inline: 'nearest' })
   }, [layout, selected?.id, reviewItems.length])
   const projects = [...new Map(data.map(pr=>[pr.repo_id,pr.repo_name])).entries()].sort((a,b)=>a[1].localeCompare(b[1]))
   const needCount = augmented.filter(pr=>pr.state==='open'&&!myVotes.has(pr.id)).length
