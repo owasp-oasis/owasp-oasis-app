@@ -136,6 +136,9 @@
 
 /* ── Advisor ── */
 .advisor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   margin-bottom: 32px;
 }
 
@@ -145,7 +148,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gray-400);
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .team-card--advisor {
