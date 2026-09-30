@@ -15,13 +15,6 @@ const team = [
      github: null,
      photoUrl: '/headshots/michael-cartsonis.jpeg',
    },
-   {
-     name: 'Daryl “Radar” Riley',
-     role: 'Project Ambassador',
-     bio: `Daryl “Radar” Riley is a cybersecurity, GRC, and AI practitioner with more than 15 years of experience across enterprise security, critical infrastructure, and public-sector engagements. As OASIS’s Project Ambassador, Daryl helps bring the project’s crowdsourced fix model to the broader security community.`,
-     github: null,
-     photoUrl: '/headshots/daryl-riley.png',
-   },
 ]
 
 const advisor = {
@@ -29,6 +22,14 @@ const advisor = {
    role: 'Founding Member & OWASP Liaison',
    bio: `David Wichers is one of the founders of OWASP and the creator of the OWASP Benchmark — the industry's most widely cited standard for evaluating SAST tool performance. His involvement in OASIS signals something important: the technologies and processes OASIS is building represent a genuine advance for the application security community. David submitted the OASIS project proposal to OWASP — securing its official acceptance — and is already validating PRs himself.`,
   github: null,
+}
+
+const ambassador = {
+  name: 'Daryl “Radar” Riley',
+  role: 'Project Ambassador',
+  bio: `Daryl “Radar” Riley is a cybersecurity, GRC, and AI practitioner with more than 15 years of experience across enterprise security, critical infrastructure, and public-sector engagements. As OASIS’s Project Ambassador, Daryl helps bring the project’s crowdsourced fix model to the broader security community.`,
+  github: null,
+  photoUrl: '/headshots/daryl-riley.png',
 }
 
 export default function About() {
@@ -161,6 +162,20 @@ export default function About() {
                 <h3>{advisor.name}</h3>
                 <p className="team-role">{advisor.role}</p>
                 <p className="team-bio">{advisor.bio}</p>
+              </div>
+            </div>
+            <div className="team-card team-card--advisor">
+              <div className="team-avatar-container">
+                <img
+                  src={ambassador.photoUrl}
+                  alt={ambassador.name}
+                  className="team-avatar team-avatar--photo"
+                />
+              </div>
+              <div className="team-info">
+                <h3>{ambassador.name}</h3>
+                <p className="team-role">{ambassador.role}</p>
+                <p className="team-bio">{ambassador.bio}</p>
               </div>
             </div>
           </div>
