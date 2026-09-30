@@ -153,7 +153,7 @@ export default function About() {
 
           {/* Advisor */}
           <div className="advisor-section">
-            <h3 className="advisor-label">Founding Advisor</h3>
+            <h3 className="advisor-label">Advisors</h3>
             <div className="team-card team-card--advisor">
               <div className="team-avatar team-avatar--advisor" aria-hidden="true">
                 {advisor.name.split(' ').map(n => n[0]).join('')}
