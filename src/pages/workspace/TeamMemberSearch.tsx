@@ -37,13 +37,33 @@ export default function TeamMemberSearch({ teamId, excluded, busy, onInvite }: P
   async function invite(login: string) {
     setInviting(login)
     try {
-      if (await onInvite(login)) input.current?.focus()
+      if (await onInvite(login)) {
+        // A successful invitation has been acknowledged by the parent. Clear
+        // the stale query so the no-match/direct-invite state does not linger.
+        setQuery('')
+        setResult(null)
+        input.current?.focus()
+      }
     } finally { setInviting(null) }
   }
 
+  const helper = !query.trim()
+    ? 'Search by GitHub username to invite a member.'
+    : !ready
+      ? 'Type at least 2 characters to find OASIS members.'
+      : loading
+        ? 'Finding members…'
+        : error
+          ? 'Member search is unavailable.'
+          : matches.length
+            ? `${matches.length} matching ${matches.length === 1 ? 'member' : 'members'}. Choose whom to invite.`
+            : excludedSet.has(search)
+              ? 'This person is already a member or has a pending invitation.'
+              : 'No available members match your search.'
+
   return <div className="team-repo-form">
     <label>Find a member<input ref={input} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by GitHub username…" maxLength={40} aria-describedby="team-member-results-summary" /></label>
-    <p className="team-help" id="team-member-results-summary" role="status">{!ready ? 'Type at least 2 characters to find OASIS members.' : loading ? 'Finding members…' : error ? 'Member search is unavailable.' : matches.length ? `${matches.length} matching ${matches.length === 1 ? 'member' : 'members'}. Choose whom to invite.` : excludedSet.has(search) ? 'This person is already a member or has a pending invitation.' : 'No available members match your search.'}</p>
+    <p className="team-help" id="team-member-results-summary" role="status">{helper}</p>
     {error && <p className="team-error" role="alert">{error} <button className="team-link" onClick={() => { setResult(null); setRetry(value => value + 1) }}>Retry</button></p>}
     {matches.length > 0 && <ul className="team-repo-results" aria-label="Matching members">{matches.map(member => <li className="team-row" key={member.login}>
       <strong className="team-row-main">@{member.login}</strong>

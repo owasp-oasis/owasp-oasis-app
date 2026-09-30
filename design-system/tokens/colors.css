@@ -1,0 +1,97 @@
+:root {
+  /* ── Base palette (source: owasp-oasis-app src/index.css) ── */
+  --ink: #07111f;
+  --ink-soft: #243247;
+  --muted: #61738b;
+  --blue-dark: #0b4f8a;       /* Navy */
+  --blue-darker: #083c6b;     /* Navy pressed / hover on navy buttons */
+  --blue: #0f6fcf;
+  --blue-hover: #1280ed;      /* hover for --blue fills */
+  --blue-mid: #1558d6;
+  --blue-soft: #e7f1ff;
+  --blue-sky: #9fd0ff;        /* labels on --ink surfaces */
+  --green: #0d9e52;
+  --green-bright: #4cd964;
+  --green-soft: #e8f9ef;
+  --green-ink: #0b7a40;       /* green text on --green-soft */
+  --paper: #f7fbff;
+  --white: #fff;
+
+  --gray-100: #f4f7fb;
+  --gray-200: #e8edf5;
+  --gray-400: #9aacbe;
+  --gray-600: #4a5c70;
+  --gray-800: #1e2d3d;
+  --ink-raised: #0d1929;      /* cards on --ink sections */
+  --code-bg: #eef3f9;
+
+  --line: rgba(15, 111, 207, .16);
+  --line-strong: rgba(15, 111, 207, .28);
+  --line-on-dark: rgba(255, 255, 255, .14);
+
+  /* ── Severity (Workspace v2) ── */
+  --sev-critical-bg: #fee2e2; --sev-critical-fg: #991b1b;
+  --sev-high-bg: #ffedd5;     --sev-high-fg: #9a3412;
+  --sev-medium-bg: #fef9c3;   --sev-medium-fg: #854d0e;
+  --sev-low-bg: #e7f1ff;      --sev-low-fg: #0b4f8a;
+
+  /* ── Validator decisions: solid (button/bar), soft bg, text ── */
+  --dec-accept: #0d9e52;    --dec-accept-bg: #e8f9ef;    --dec-accept-fg: #0b7a40;
+  --dec-modify: #e0a800;    --dec-modify-bg: #fef9c3;    --dec-modify-fg: #854d0e;
+  --dec-reject: #d64545;    --dec-reject-bg: #fee2e2;    --dec-reject-fg: #991b1b;
+  --dec-duplicate: #5b21b6; --dec-duplicate-bg: #ede9fe; --dec-duplicate-fg: #5b21b6;
+
+  /* ── Candidate-fix status ── */
+  --status-needs-bg: #fef9c3;    --status-needs-fg: #854d0e;
+  --status-trusted-bg: #dcfce7;  --status-trusted-fg: #166534;
+  --status-accepted-bg: #ede9fe; --status-accepted-fg: #5b21b6;
+  --status-withdrawn-bg: #ffedd5;--status-withdrawn-fg: #9a3412;
+  --status-rejected-bg: #fee2e2; --status-rejected-fg: #991b1b;
+
+  /* ── Site badges (src/index.css .badge-*) ── */
+  --badge-green-bg: #e6faea; --badge-green-fg: #1a7a2e;
+  --badge-purple-bg: #ede9fe; --badge-purple-fg: #5b21b6;
+
+  /* ── Semantic aliases ── */
+  --surface-page: var(--paper);
+  --surface-card: var(--white);
+  --surface-subtle: var(--gray-100);
+  --surface-selected: var(--blue-soft);
+  --surface-inverse: var(--ink);
+  --surface-footer: var(--gray-800);
+  --text-strong: var(--ink);
+  --text-body: var(--ink-soft);
+  --text-muted: var(--muted);
+  --text-subtle: var(--gray-600);
+  --text-disabled: var(--gray-400);
+  --text-link: var(--blue);
+  --text-on-brand: var(--white);
+  --border-default: var(--line);
+  --border-strong: var(--line-strong);
+  --border-divider: var(--gray-200);
+  --action-primary-bg: var(--green-bright);
+  --action-primary-fg: var(--blue-dark);
+  --action-secondary-bg: var(--blue);
+  --action-secondary-fg: var(--white);
+  --focus-ring: rgba(76, 217, 100, .65);
+  --danger: var(--dec-reject);
+
+  /* ── Brand gradient (hero surfaces only) ── */
+  --gradient-hero: linear-gradient(135deg, #0b4f8a 0%, #0f6fcf 100%);
+  --gradient-card: linear-gradient(155deg, #0b4f8a 0%, #0f6fcf 68%, #1280ed 100%);
+  --gradient-wash: linear-gradient(135deg, rgba(15,111,207,.08), rgba(76,217,100,.06));
+}
+
+/* Reserved — dark theme tokens (not yet designed; do not ship) */
+[data-theme="dark"] {
+  --surface-page: #07111f;
+  --surface-card: #0d1929;
+  --surface-subtle: #1e2d3d;
+  --surface-selected: rgba(15,111,207,.22);
+  --text-strong: #ffffff;
+  --text-body: rgba(255,255,255,.86);
+  --text-muted: #9aacbe;
+  --border-default: rgba(255,255,255,.14);
+  --border-strong: rgba(255,255,255,.24);
+  --text-link: #9fd0ff;
+}

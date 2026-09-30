@@ -1,0 +1,9 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-family: var(--sans); font-size: 16px; color: var(--ink); background: var(--paper); -webkit-font-smoothing: antialiased; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, h3, h4 { line-height: 1.2; }
+p { line-height: 1.7; }
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; border-radius: 6px; }

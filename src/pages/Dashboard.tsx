@@ -380,7 +380,7 @@ export default function Dashboard() {
         </div>
 
         <section className="dashboard-panel dashboard-leaderboard">
-          <div className="panel-heading"><div><span className="panel-index">05</span><h2>Community leaderboard</h2></div><Link to="/workspace/contributors">Full leaderboard</Link></div>
+          <div className="panel-heading"><div><span className="panel-index">05</span><h2>Community leaderboard</h2></div><Link to="/workspace/validators">Full leaderboard</Link></div>
           <div className="leaderboard-list">
             {[...contributors].sort((a, b) => number(b.modified_reputation) - number(a.modified_reputation)).slice(0, 5).map((contributor, index) => (
               <div className="leaderboard-row" key={contributor.login}>

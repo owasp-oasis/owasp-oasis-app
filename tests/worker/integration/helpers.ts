@@ -22,6 +22,7 @@ import { encryptToken } from '../../../worker/security.js';
  */
 export async function applySchema(env: Env): Promise<void> {
   const schema = `
+CREATE TABLE IF NOT EXISTS workspace_preferences (github_login TEXT PRIMARY KEY, settings TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(settings)), updated_at TEXT NOT NULL);
 -- Registrations and applications
 CREATE TABLE IF NOT EXISTS registrations (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -541,7 +542,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'validation_requests',
     'upstream_submissions',
     'maintainer_decisions',
-    'user_preferences',
+    'user_preferences', 'workspace_preferences',
     'user_sessions',
     'privileged_action_audit',
     'comment_reactions',

@@ -1,0 +1,38 @@
+<!-- @dsCard group="Components" viewport="700x200" name="Feedback" subtitle="Toast, EmptyState" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><style>body{padding:16px;background:#fff}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script></head><body><div id="root"></div>
+<script type="text/babel">
+
+const V = {
+  primary: { background: 'var(--green-bright)', color: 'var(--blue-dark)', border: '1px solid transparent' },
+  secondary: { background: 'var(--blue)', color: 'var(--white)', border: '1px solid transparent', boxShadow: 'var(--shadow-btn-blue)' },
+  outline: { background: 'transparent', color: 'var(--blue)', border: '2px solid var(--blue)' },
+  quiet: { background: 'var(--white)', color: 'var(--blue-dark)', border: '1px solid var(--line-strong)' },
+  'ghost-light': { background: 'transparent', color: 'var(--white)', border: '2px solid rgba(255,255,255,.5)' },
+};
+function Button({ variant = 'primary', size = 'lg', iconRight, disabled, onClick, children }) {
+  const [h, setH] = React.useState(false);
+  const s = size === 'lg' ? { minHeight: 42, padding: '10px 20px', fontSize: 16 } : { minHeight: 38, padding: '8px 16px', fontSize: 14 };
+  return (
+    <button disabled={disabled} onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 8, fontFamily: 'var(--sans)', fontWeight: 700, whiteSpace: 'nowrap', cursor: disabled ? 'not-allowed' : 'pointer', transition: 'transform var(--dur), box-shadow var(--dur), background var(--dur), opacity var(--dur)', ...V[variant], ...s, opacity: disabled ? .45 : h ? .9 : 1, transform: h && !disabled ? 'translateY(-1px)' : 'none' }}>
+      {children}{iconRight}
+    </button>
+  );
+}
+
+function Toast({ message, tone = 'default' }) {
+  return <div role="status" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', borderRadius: 10, background: 'var(--ink)', color: '#fff', fontSize: 14, boxShadow: 'var(--shadow-strong)' }}>
+    {tone === 'success' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green-bright)', boxShadow: 'var(--ring-success)' }}/>}{message}</div>;
+}
+
+function EmptyState({ title, body, action }) {
+  return <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 24px', textAlign: 'center', border: '1px dashed var(--line-strong)', borderRadius: 8, background: 'var(--white)' }}>
+    <b style={{ fontSize: 16, color: 'var(--ink)' }}>{title}</b>{body && <p style={{ fontSize: 14, color: 'var(--muted)', maxWidth: 420, lineHeight: 1.6 }}>{body}</p>}{action}</div>;
+}
+
+function Demo(){return <div style={{position:'relative',height:170,transform:'translateZ(0)'}}><EmptyState title="Nothing needs your vote" body="Your filters hide 12 candidate fixes." action={<Button size="md" variant="quiet">Clear filters</Button>}/><Toast tone="success" message="Vote recorded on react#14"/></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

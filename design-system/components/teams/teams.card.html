@@ -1,0 +1,107 @@
+<!-- @dsCard group="Components" viewport="760x560" name="Teams" subtitle="TeamAvatar, TeamLogoField, TeamMediaField, TeamBadgeCard, InlineSearchResults, ConfirmDialog" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><style>body{padding:16px;background:#fff}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script></head><body><div id="root"></div>
+<script type="text/babel">
+
+const MARKS = { shield: '◇', bug: '✣', lock: '▣', spark: '✦', code: '</>', leaf: '⌁' };
+const SIZES = { list: [44, 11, 14], leaderboard: [34, 9, 12], header: [58, 14, 19] };
+const init = (n) => n.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+function TeamAvatar({ name, logoKey = 'initials', imageSrc, size = 'list' }) {
+  const [failed, setFailed] = React.useState(false);
+  const [px, r, fs] = SIZES[size];
+  const mark = MARKS[logoKey];
+  return <span aria-hidden="true" style={{ width: px, height: px, flex: 'none', borderRadius: r, background: 'var(--blue-soft)', color: 'var(--blue-dark)', display: 'grid', placeItems: 'center', fontSize: fs, fontWeight: 700, overflow: 'hidden' }}>
+    {imageSrc && !failed ? <img src={imageSrc} alt="" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : mark || init(name)}
+  </span>;
+}
+
+const OPTS = [['initials','Initials','Aa'],['shield','Shield','◇'],['bug','Bug','✣'],['lock','Lock','▣'],['spark','Spark','✦'],['code','Code','</>'],['leaf','Leaf','⌁']];
+function TeamLogoField({ source, onSourceChange, logoKey, onLogoKeyChange, custom, disabled, name }) {
+  const lbl = { fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 10 };
+  return <fieldset disabled={disabled} style={{ border: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <legend style={lbl}>Team logo</legend>
+    <div role="radiogroup" aria-label="Logo source" style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13 }}>
+      {[['builtin', 'Choose an icon'], ['custom', 'Custom image']].map(([v, l]) => <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7 }}><input type="radio" name={name} checked={source === v} onChange={() => onSourceChange(v)} style={{ accentColor: 'var(--green)' }} /> {l}</label>)}
+    </div>
+    {source === 'builtin' ? <div role="radiogroup" aria-label="Team logo" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {OPTS.map(([k, l, m]) => { const on = k === logoKey; return <button key={k} type="button" role="radio" aria-checked={on} onClick={() => onLogoKeyChange(k)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px', border: '1px solid ' + (on ? 'var(--green)' : 'var(--line-strong)'), borderRadius: 7, background: on ? 'var(--green-soft)' : 'var(--white)', color: on ? 'var(--green-ink)' : 'var(--ink-soft)', fontSize: 12, fontWeight: 600 }}>
+        <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: 8, background: on ? 'var(--green)' : 'var(--blue-soft)', color: on ? 'var(--white)' : 'var(--blue-dark)', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}>{m}</span>{l}</button>; })}
+    </div> : custom}
+  </fieldset>;
+}
+
+const D = { logo: ['Custom logo', 'Square PNG, JPEG, or WebP.', 'image/png,image/jpeg,image/webp'], banner: ['Team homepage banner', 'Wide PNG, JPEG, or WebP · up to 768 KB', 'image/png,image/jpeg,image/webp'] };
+function TeamMediaField({ kind, preview, note, onChoose, onRemove, error, disabled }) {
+  const ref = React.useRef(null);
+  const [label, help, accept] = D[kind];
+  const box = kind === 'logo' ? { width: 88, height: 88, borderRadius: 14 } : { width: 200, height: 84, borderRadius: 8 };
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: 12, border: '1px solid var(--line)', borderRadius: 8, background: 'var(--gray-100)' }}>
+    <div aria-hidden="true" style={{ ...box, flex: 'none', overflow: 'hidden', background: 'var(--blue-soft)', display: 'grid', placeItems: 'center', color: 'var(--blue-dark)', fontSize: 12, fontWeight: 600 }}>{preview ? <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : kind === 'logo' ? 'Logo' : 'Banner'}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 200 }}>
+      <strong style={{ fontSize: 13 }}>{label}</strong><span style={{ fontSize: 12, color: 'var(--muted)' }}>{help}</span>{note && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{note}</span>}
+      {error && <span role="alert" style={{ fontSize: 12, color: 'var(--dec-reject-fg)' }}>{error}</span>}
+      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+        <button type="button" disabled={disabled} onClick={() => ref.current && ref.current.click()} style={{ minHeight: 34, padding: '6px 12px', border: '1px solid var(--line-strong)', borderRadius: 7, background: 'var(--white)', color: 'var(--blue-dark)', fontWeight: 700, fontSize: 13 }}>{preview ? 'Replace' : 'Choose image'}</button>
+        {preview && onRemove && <button type="button" disabled={disabled} onClick={onRemove} style={{ border: 0, background: 'none', color: 'var(--blue)', fontSize: 13 }}>Remove</button>}
+      </div>
+    </div>
+    <input ref={ref} type="file" accept={accept} aria-label={label} disabled={disabled} onChange={e => { const f = e.target.files && e.target.files[0]; if (f) onChoose(f); e.target.value = ''; }} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
+  </div>;
+}
+
+function TeamBadgeCard({ kind, earned, threshold, earnedThreshold, progress = 0 }) {
+  const member = kind === 'membership';
+  const bar = earned ? (earnedThreshold ?? threshold) : threshold;
+  const pct = Math.min(100, progress / threshold * 100);
+  return <li style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, padding: 14, border: '1px solid ' + (earned ? 'rgba(13,158,82,.35)' : 'var(--line)'), borderRadius: 8, background: earned ? '#f5faf7' : 'var(--white)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', background: earned ? 'var(--green-soft)' : 'var(--gray-100)', color: earned ? 'var(--green)' : 'var(--gray-400)' }}>{member ? '◎' : '✦'}</span>
+      <div style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{member ? 'Team member' : 'Team contributor'}</strong><p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{member ? 'Membership badge' : bar + ' attributed validations'}</p></div>
+      <span style={{ padding: '2px 8px', borderRadius: 100, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', background: earned ? 'var(--green-soft)' : 'var(--gray-100)', color: earned ? 'var(--green-ink)' : 'var(--gray-600)' }}>{earned ? 'Earned' : 'In progress'}</span>
+    </div>
+    {!earned && <div role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={threshold} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>Attributed validations</span><span style={{ fontFamily: 'var(--mono)' }}>{progress} / {threshold}</span></div><div style={{ height: 6, borderRadius: 100, background: 'var(--gray-200)' }}><div style={{ width: pct + '%', height: '100%', borderRadius: 100, background: 'var(--blue)' }} /></div></div>}
+    {earned && earnedThreshold && earnedThreshold !== threshold && <p style={{ fontSize: 12, color: 'var(--muted)' }}>Earned at the {earnedThreshold}-validation bar. The Team now uses {threshold}; earned badges are never revoked.</p>}
+  </li>;
+}
+
+function InlineSearchResults({ label, placeholder, query, onQuery, status, results, actionLabel, onAction, fallback }) {
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 420 }}><span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>{label}</span>
+      <input type="search" value={query} onChange={e => onQuery(e.target.value)} placeholder={placeholder} style={{ minHeight: 38, padding: '9px 12px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 14 }} /></label>
+    <p role="status" style={{ fontSize: 12, color: 'var(--muted)' }}>{status}</p>
+    {results.length > 0 && <ul style={{ listStyle: 'none', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden', maxWidth: 620 }}>
+      {results.map(r => <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderTop: '1px solid var(--gray-200)' }}><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 13 }}>{r.title}</strong>{r.description && <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{r.description}</p>}</div>
+        <button type="button" aria-label={actionLabel.replace('+ ', '') + ' ' + r.title} onClick={() => onAction(r.id)} style={{ minHeight: 32, padding: '5px 12px', border: '1px solid var(--line-strong)', borderRadius: 7, background: 'var(--white)', color: 'var(--blue-dark)', fontWeight: 700, fontSize: 12 }}>{actionLabel}</button></li>)}
+    </ul>}
+    {fallback}
+  </div>;
+}
+
+function ConfirmDialog({ open, title, explanation, confirmLabel, danger, busy, onConfirm, onCancel }) {
+  const cancel = React.useRef(null);
+  React.useEffect(() => { if (open && cancel.current) cancel.current.focus(); }, [open]);
+  React.useEffect(() => { if (!open) return; const k = e => { if (e.key === 'Escape' && !busy) onCancel(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [open, busy, onCancel]);
+  if (!open) return null;
+  return <>
+    <div onClick={busy ? undefined : onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(7,17,31,.4)', zIndex: 90 }} />
+    <div role="dialog" aria-modal="true" aria-labelledby="confirm-title" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 91, width: 'min(460px, calc(100vw - 32px))', padding: 26, background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-strong)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <h3 id="confirm-title" style={{ fontSize: 18, fontWeight: 700 }}>{title}</h3>
+      <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-soft)' }}>{explanation}</p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button ref={cancel} disabled={busy} onClick={onCancel} style={{ minHeight: 38, padding: '8px 16px', border: '1px solid var(--line-strong)', borderRadius: 8, background: 'var(--white)', color: 'var(--blue-dark)', fontWeight: 700, fontSize: 14 }}>Cancel</button>
+        <button disabled={busy} onClick={onConfirm} style={{ minHeight: 38, padding: '8px 16px', border: 0, borderRadius: 8, background: danger ? 'var(--dec-reject)' : 'var(--green-bright)', color: danger ? 'var(--white)' : 'var(--blue-dark)', fontWeight: 700, fontSize: 14 }}>{busy ? 'Saving…' : confirmLabel}</button>
+      </div>
+    </div>
+  </>;
+}
+
+function Demo(){const [src,setSrc]=React.useState('builtin');const [k,setK]=React.useState('shield');const [q,setQ]=React.useState('om');
+return <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
+<div style={{display:'flex',flexDirection:'column',gap:14}}><div style={{display:'flex',gap:10,alignItems:'center'}}><TeamAvatar name="Python security reviewers" logoKey="shield" size="header"/><TeamAvatar name="Java guild" size="list"/><TeamAvatar name="Go reviewers" logoKey="spark" size="leaderboard"/></div>
+<TeamLogoField name="demo" source={src} onSourceChange={setSrc} logoKey={k} onLogoKeyChange={setK} custom={<TeamMediaField kind="logo" onChoose={()=>{}}/>}/><TeamMediaField kind="banner" note="Optional. Add a banner to your team homepage." onChoose={()=>{}}/></div>
+<div style={{display:'flex',flexDirection:'column',gap:14}}><ul style={{display:'flex',flexDirection:'column',gap:10}}><TeamBadgeCard kind="membership" earned threshold={5}/><TeamBadgeCard kind="contributor" earned earnedThreshold={5} threshold={10}/><TeamBadgeCard kind="contributor" earned={false} threshold={10} progress={2}/></ul>
+<InlineSearchResults label="Find a member" placeholder="Search by GitHub username…" query={q} onQuery={setQ} status="1 matching member. Choose whom to invite." results={[{id:'omar-farouk',title:'@omar-farouk'}]} actionLabel="+ Invite" onAction={()=>{}}/></div></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

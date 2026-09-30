@@ -34,6 +34,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const [query, setQuery] = useState('')
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<'all_time' | '90d'>('all_time')
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
+  const [leaderboardRevision, setLeaderboardRevision] = useState(0)
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
   const nameInput = useRef<HTMLInputElement>(null)
@@ -78,7 +79,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
       .catch(caught => { if (!controller.signal.aborted) setLeaderboardError(errorMessage(caught)) })
       .finally(() => { if (!controller.signal.aborted) setLeaderboardLoading(false) })
     return () => controller.abort()
-  }, [view, leaderboardPeriod, data])
+  }, [view, leaderboardPeriod, data, leaderboardRevision])
 
   async function accept(team: number, body: Record<string, unknown>) {
     if (busy) return
@@ -100,15 +101,15 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
 
   return <div className="teams-ui">
     <header className="teams-heading">
-      <div><h2>Teams</h2><p>Review together. Make a shared impact.</p></div>
+      <div><p>Amplify your impact together.</p></div>
       {user && !creating && <button className="team-button team-button--primary" onClick={() => { setError(null); setParams({ view, create: '1' }) }}>+ Create team</button>}
     </header>
     {creating && user && <section className="team-surface team-create" aria-labelledby="create-heading">
       <div className="team-section-heading"><div><h3 id="create-heading">Create a team</h3><p>Start with a name. You can invite members next.</p></div></div>
       <form className="team-form" onSubmit={createTeam}>
         <fieldset disabled={busy}>
-          <label>Team name<input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
-          <label>Description <span className="team-optional">(optional)</span><textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="Tell others about your team." /></label>
+          <label>Team name <span className="vm-required">*</span><input ref={nameInput} value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="e.g. Python reviewers" /></label>
+          <label>Description<textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={500} rows={2} placeholder="Tell others about your team." /></label>
           <label>How people join<select value={mode} onChange={event => setMode(event.target.value as MembershipMode)}><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
           <TeamLogoChoice value={logoSource} onChange={source => { setLogoSource(source); setLogoFile(null) }} disabled={busy} name="create-logo-source"
             builtin={<TeamLogoPicker value={logoKey} onChange={setLogoKey} disabled={busy} name="create-team-logo" />}
@@ -139,7 +140,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
         <button role="tab" aria-selected={leaderboardPeriod === 'all_time'} className={leaderboardPeriod === 'all_time' ? 'is-selected' : ''} onClick={() => setLeaderboardPeriod('all_time')}>All time</button>
         <button role="tab" aria-selected={leaderboardPeriod === '90d'} className={leaderboardPeriod === '90d' ? 'is-selected' : ''} onClick={() => setLeaderboardPeriod('90d')}>Last 90 days</button>
       </div></div>
-      {leaderboardError ? <p className="team-error">{leaderboardError} <button className="team-link" onClick={() => setLeaderboardPeriod(period => period)}>Retry</button></p> : leaderboardLoading ? <p className="team-empty" role="status">Loading leaderboard…</p> : <ol className="team-leaderboard-list">{leaderboard.map((team, index) => <li key={team.id} className="team-leaderboard-row"><span className="team-rank">{index + 1}</span><TeamAvatar team={team} /><div className="team-row-main"><Link to={'?view=explore&team=' + team.id}><strong>{team.name}</strong></Link><span className="team-meta">{team.status !== 'active' ? team.status : leaderboardPeriod === 'all_time' ? 'All-time achievement' : 'Recent activity'}</span></div><div className="team-directory-stats"><span><strong>{leaderboardPeriod === 'all_time' ? team.accepted_outcome_reviews : team.attributed_validations}</strong>{leaderboardPeriod === 'all_time' ? 'Accepted outcomes' : 'Validations'}</span>{leaderboardPeriod === '90d' && <span><strong>{team.validations_per_active_contributor.toFixed(1)}</strong>Per active contributor</span>}</div></li>)}</ol>}
+      {leaderboardError ? <p className="team-error">{leaderboardError} <button className="team-link" onClick={() => setLeaderboardRevision(n => n + 1)}>Retry</button></p> : leaderboardLoading ? <p className="team-empty" role="status">Loading leaderboard…</p> : <ol className="team-leaderboard-list">{leaderboard.map((team, index) => <li key={team.id} className="team-leaderboard-row"><span className="team-rank">{index + 1}</span><TeamAvatar team={team} /><div className="team-row-main"><Link to={'?view=explore&team=' + team.id}><strong>{team.name}</strong></Link><span className="team-meta">{team.status !== 'active' ? team.status : leaderboardPeriod === 'all_time' ? 'All-time achievement' : 'Recent activity'}</span></div><div className="team-directory-stats"><span><strong>{leaderboardPeriod === 'all_time' ? team.accepted_outcome_reviews : team.attributed_validations}</strong>{leaderboardPeriod === 'all_time' ? 'Accepted outcomes' : 'Validations'}</span>{leaderboardPeriod === '90d' && <span><strong>{team.validations_per_active_contributor.toFixed(1)}</strong>Per active contributor</span>}</div></li>)}</ol>}
     </section>}
     <div className="team-directory-tools">
       <label className="team-search"><span className="team-sr-only">Search teams</span><input type="search" placeholder={view === 'mine' ? 'Find one of your teams…' : 'Search teams…'} value={query} onChange={event => setQuery(event.target.value)} /></label>

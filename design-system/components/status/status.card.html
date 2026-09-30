@@ -1,0 +1,42 @@
+<!-- @dsCard group="Components" viewport="700x200" name="Status & severity" subtitle="SeverityBadge, StatusChip, LifecycleChip, DecisionChip, CweTag" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><style>body{padding:16px;background:#fff}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script></head><body><div id="root"></div>
+<script type="text/babel">
+
+const M = {"critical":["var(--sev-critical-bg)","var(--sev-critical-fg)","Critical"],"high":["var(--sev-high-bg)","var(--sev-high-fg)","High"],"medium":["var(--sev-medium-bg)","var(--sev-medium-fg)","Medium"],"low":["var(--sev-low-bg)","var(--sev-low-fg)","Low"]};
+function SeverityBadge({ severity, label }) {
+  const [bg, fg, text] = M[severity];
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 100, background: bg, color: fg, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label || text}</span>;
+}
+
+const M = {"needs":["var(--status-needs-bg)","var(--status-needs-fg)","Needs review"],"trusted":["var(--status-trusted-bg)","var(--status-trusted-fg)","Trusted"],"accepted":["var(--status-accepted-bg)","var(--status-accepted-fg)","Accepted"],"withdrawn":["var(--status-withdrawn-bg)","var(--status-withdrawn-fg)","Withdrawn"],"rejected":["var(--status-rejected-bg)","var(--status-rejected-fg)","Rejected"]};
+function StatusChip({ status, label }) {
+  const [bg, fg, text] = M[status];
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 100, background: bg, color: fg, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label || text}</span>;
+}
+
+const M = {"needs-review":["var(--status-needs-bg)","var(--status-needs-fg)","Needs Review"],"trusted":["var(--status-trusted-bg)","var(--status-trusted-fg)","Trusted"],"maintainer-review":["var(--blue-soft)","var(--blue-dark)","Maintainer Review"],"changes-requested":["var(--sev-high-bg)","var(--sev-high-fg)","Changes Requested"],"maintainer-accepted":["var(--green-soft)","var(--green-ink)","Maintainer Accepted"],"maintainer-declined":["var(--gray-200)","var(--gray-600)","Maintainer Declined"],"submitted-upstream":["var(--blue-soft)","var(--blue-dark)","Submitted Upstream"],"merged-upstream":["var(--status-accepted-bg)","var(--status-accepted-fg)","Merged Upstream"],"closed-without-merge":["var(--gray-200)","var(--gray-600)","Closed Without Merge"]};
+function LifecycleChip({ stage, label }) {
+  const [bg, fg, text] = M[stage];
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 100, background: bg, color: fg, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label || text}</span>;
+}
+
+const M = {"accept":["var(--dec-accept-bg)","var(--dec-accept-fg)","Accept"],"modify":["var(--dec-modify-bg)","var(--dec-modify-fg)","Modify"],"reject":["var(--dec-reject-bg)","var(--dec-reject-fg)","Reject"],"duplicate":["var(--dec-duplicate-bg)","var(--dec-duplicate-fg)","Duplicate"]};
+function DecisionChip({ decision, label }) {
+  const [bg, fg, text] = M[decision];
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 100, background: bg, color: fg, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label || text}</span>;
+}
+
+function CweTag({ id, name }) {
+  return <span style={{ display: 'inline-flex', gap: 6, alignItems: 'baseline', fontSize: 13, color: 'var(--ink-soft)' }}><span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{id}</span>{name && <span>{name}</span>}</span>;
+}
+
+function Demo(){return <div style={{display:'flex',flexDirection:'column',gap:12}}>
+<div style={{display:'flex',gap:8}}>{['critical','high','medium','low'].map(s=><SeverityBadge key={s} severity={s}/>)}<CweTag id="CWE-22" name="Path traversal"/></div>
+<div style={{display:'flex',gap:8}}>{['needs','trusted','accepted','withdrawn','rejected'].map(s=><StatusChip key={s} status={s}/>)}</div>
+<div style={{display:'flex',gap:8}}>{['accept','modify','reject','duplicate'].map(s=><DecisionChip key={s} decision={s}/>)}</div>
+<div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{['maintainer-review','changes-requested','maintainer-accepted','maintainer-declined','submitted-upstream','merged-upstream','closed-without-merge'].map(s=><LifecycleChip key={s} stage={s}/>)}</div></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>
