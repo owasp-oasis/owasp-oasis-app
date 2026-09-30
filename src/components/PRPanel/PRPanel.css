@@ -530,6 +530,20 @@
   font-size: 0.88rem;
 }
 
+.prp-error-retry {
+  display: block;
+  margin-top: 12px;
+  padding: 7px 12px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fff;
+  color: #991b1b;
+  font: 600 0.82rem var(--sans);
+  cursor: pointer;
+}
+
+.prp-error-retry:hover { background: #fff7f7; }
+
 /* ── Diffs Tab — file sub-tab bar ───────────────────────────── */
 .prp-file-tabs-bar {
   display: flex;

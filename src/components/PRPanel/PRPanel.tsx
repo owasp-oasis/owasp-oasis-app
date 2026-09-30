@@ -138,6 +138,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
   const [details, setDetails]     = useState<PRDetails | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError]   = useState<string | null>(null)
+  const [detailsRetry, setDetailsRetry] = useState(0)
 
   const bodyRef = useRef<HTMLDivElement>(null)
   const prevPrId = useRef<number | null>(null)
@@ -151,6 +152,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
       setCommentCount(null)
       setDetails(null)
       setDetailsError(null)
+      setDetailsRetry(0)
       setNudgeDismissed(false)
       if (bodyRef.current) bodyRef.current.scrollTop = 0
     }
@@ -167,7 +169,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
       .catch(err => { if (!controller.signal.aborted) setDetailsError(err.message) })
       .finally(() => { if (!controller.signal.aborted) setDetailsLoading(false) })
     return () => controller.abort()
-  }, [pr?.id])
+  }, [pr?.id, detailsRetry])
 
   // Record aggregate active-review time without sending a login or stable user
   // identifier. Hidden or idle tabs do not accrue active seconds.
@@ -343,6 +345,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
               body={details?.body ?? null}
               loading={detailsLoading}
               error={detailsError}
+              onRetry={() => setDetailsRetry(value => value + 1)}
             />
           )}
           {activeTab === 'changes' && (
@@ -361,6 +364,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
               details={summaryDetails}
               loading={detailsLoading}
               error={detailsError}
+              onRetry={() => setDetailsRetry(value => value + 1)}
             />
           )}
           {activeTab === 'workflow' && (

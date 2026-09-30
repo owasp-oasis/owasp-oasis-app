@@ -12,11 +12,12 @@ interface Props {
   details: PRDetails | null
   loading: boolean
   error: string | null
+  onRetry?: () => void
 }
 
-export default function SummaryTab({ details, loading, error }: Props) {
+export default function SummaryTab({ details, loading, error, onRetry }: Props) {
   if (loading) return <div className="prp-loading">Loading summary…</div>
-  if (error) return <div className="prp-error">{error}</div>
+  if (error) return <div className="prp-error" role="alert"><span>{error}</span>{onRetry && <button type="button" className="prp-error-retry" onClick={onRetry}>Retry</button>}</div>
   if (!details) return null
 
   const totalVotes = details.consensus_accept + details.consensus_modify + details.consensus_reject + details.consensus_duplicate
