@@ -71,9 +71,9 @@ interface Props {
   onVoteSuccess: (pr: PanelPR, decision: Decision) => void
 }
 
-const DONOR_LOGOS: Record<string, { src: string; alt: string }> = {
-  appsecai: { src: 'https://www.appsecai.io/hubfs/Logo.%20Blue.%20Horizontal.svg', alt: 'AppSecAI' },
-  'dryrun security': { src: 'https://cdn.prod.website-files.com/645932d9286e9c20dd8e0fca/688b80486034525524cedf86_DRS-Logo-icon-green-white-dark%20background.svg', alt: 'DryRun Security' },
+const DONOR_LOGOS: Record<string, { src: string; alt: string; wordmark: boolean }> = {
+  appsecai: { src: 'https://www.appsecai.io/hubfs/Logo.%20Blue.%20Horizontal.svg', alt: 'AppSecAI', wordmark: true },
+  'dryrun security': { src: 'https://cdn.prod.website-files.com/645932d9286e9c20dd8e0fca/688b80486034525524cedf86_DRS-Logo-icon-green-white-dark%20background.svg', alt: 'DryRun Security', wordmark: false },
 }
 
 const FIX_AUTOMATION_BY_AUTHOR: Record<string, string> = {
@@ -91,7 +91,7 @@ function fixAutomation(details: PRDetails): string | null {
 
 function DonorLogo({ tool }: { tool: string }) {
   const logo = DONOR_LOGOS[tool.trim().toLowerCase()]
-  const content = <>{logo && <img src={logo.src} alt={logo.alt} />}<span>{tool}</span></>
+  const content = <>{logo && <img src={logo.src} alt={logo.alt} />}{(!logo || !logo.wordmark) && <span>{tool}</span>}</>
   const url = getToolUrl(tool)
   return url
     ? <a className="prp-donor" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${tool} website`}>{content}</a>
