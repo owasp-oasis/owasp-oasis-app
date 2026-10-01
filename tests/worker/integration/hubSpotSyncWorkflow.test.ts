@@ -107,25 +107,18 @@ describe('bounded HubSpot synchronization', () => {
       fetcher: countedFetch,
     });
 
-    expect(HUBSPOT_SYNC_CHUNK_SIZE).toBe(15);
-    await expect(processChunk()).resolves.toEqual({
-      processed: 15, succeeded: 15, failed: 0, skipped: false,
-    });
-    expect(externalRequests).toBe(45);
-    expect(await countHubSpotQueueRemaining(env.DB, snapshot)).toBe(16);
-
-    externalRequests = 0;
-    await expect(processChunk()).resolves.toEqual({
-      processed: 15, succeeded: 15, failed: 0, skipped: false,
-    });
-    expect(externalRequests).toBe(45);
-    expect(await countHubSpotQueueRemaining(env.DB, snapshot)).toBe(1);
-
-    externalRequests = 0;
-    await expect(processChunk()).resolves.toEqual({
-      processed: 1, succeeded: 1, failed: 0, skipped: false,
-    });
-    expect(externalRequests).toBe(3);
-    expect(await countHubSpotQueueRemaining(env.DB, snapshot)).toBe(0);
+    expect(HUBSPOT_SYNC_CHUNK_SIZE).toBe(6);
+    let remaining = 31;
+    while (remaining > 0) {
+      externalRequests = 0;
+      const expected = Math.min(remaining, HUBSPOT_SYNC_CHUNK_SIZE);
+      await expect(processChunk()).resolves.toEqual({
+        processed: expected, succeeded: expected, failed: 0, skipped: false,
+      });
+      expect(externalRequests).toBe(expected * 3);
+      expect(externalRequests).toBeLessThan(50);
+      remaining -= expected;
+      expect(await countHubSpotQueueRemaining(env.DB, snapshot)).toBe(remaining);
+    }
   });
 });

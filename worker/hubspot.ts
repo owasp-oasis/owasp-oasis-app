@@ -1,6 +1,7 @@
 /** Durable, privacy-safe HubSpot contact synchronization. */
 
 import type { Env } from './types.js';
+import { deliverWelcomeEmail } from './welcomeEmail.js';
 
 const HUBSPOT_CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts';
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -14,6 +15,8 @@ export const HUBSPOT_SYNC_CRON = '15 * * * *';
 
 export interface HubSpotSubmission {
   source: 'registration' | 'application';
+  // Server-set only for new signups; historical queue entries are not backfilled.
+  welcome_environment?: string;
   email: string;
   name: string;
   github: string;
@@ -77,7 +80,12 @@ export function prepareHubSpotEnqueue(
       next_attempt_at, created_at, updated_at
     ) VALUES (?, ?, ?, 'pending', 0, ?, ?, ?)
     ON CONFLICT(source_type, source_key) DO UPDATE SET
-      payload_json = excluded.payload_json,
+      payload_json = CASE
+        WHEN json_extract(hubspot_sync_queue.payload_json, '$.welcome_environment') IS NOT NULL
+        THEN json_set(excluded.payload_json, '$.welcome_environment',
+          json_extract(hubspot_sync_queue.payload_json, '$.welcome_environment'))
+        ELSE excluded.payload_json
+      END,
       status = CASE
         WHEN hubspot_sync_queue.status = 'synced' THEN 'synced'
         ELSE 'pending'
@@ -277,7 +285,7 @@ export async function countHubSpotQueueRemaining(
 }
 
 function safeErrorCode(error: unknown): string {
-  if (error instanceof HubSpotSyncError) return error.code;
+  if (error instanceof HubSpotSyncError || (error instanceof Error && error.name === 'WelcomeEmailError')) return error.message;
   if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'timeout';
   return 'network_error';
 }
@@ -296,7 +304,7 @@ async function claimJob(db: D1Database, row: QueueRow, now: string, staleBefore:
 }
 
 export async function processHubSpotQueue(
-  env: Pick<Env, 'DB' | 'HUBSPOT_TOKEN' | 'HUBSPOT_PROPERTY_MAP'>,
+  env: Pick<Env, 'DB' | 'HUBSPOT_TOKEN' | 'HUBSPOT_PROPERTY_MAP'> & Partial<Env>,
   options: ProcessQueueOptions = {},
 ): Promise<{ processed: number; succeeded: number; failed: number; skipped: boolean }> {
   if (!env.DB || !env.HUBSPOT_TOKEN) {
@@ -314,7 +322,7 @@ export async function processHubSpotQueue(
     : new Date(options.eligibleAt ?? nowDate);
   const eligibleAt = toIso(eligibleDate);
   const staleBefore = new Date(eligibleDate.getTime() - CLAIM_TIMEOUT_MS).toISOString();
-  const limit = Math.max(1, Math.min(Number(options.limit) || 25, 100));
+  const limit = Math.max(1, Math.min(Number(options.limit) || 6, 6));
   const fetcher = options.fetcher ?? fetch;
   const maxQueueId = Number.isFinite(options.maxQueueId) ? Number(options.maxQueueId) : null;
   const statement = maxQueueId === null ? env.DB.prepare(`
@@ -345,6 +353,7 @@ export async function processHubSpotQueue(
     try {
       const submission = JSON.parse(row.payload_json) as HubSpotSubmission;
       await syncHubSpotContact(submission, env.HUBSPOT_TOKEN, env.HUBSPOT_PROPERTY_MAP ?? '', fetcher);
+      await deliverWelcomeEmail(submission, env, fetcher, nowDate);
       await env.DB.prepare(`
         UPDATE hubspot_sync_queue
            SET status = 'synced', synced_at = ?, locked_at = NULL,

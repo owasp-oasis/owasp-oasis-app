@@ -81,6 +81,7 @@ describe('POST /api/register', () => {
       });
       expect(JSON.parse(queued?.payload_json ?? '{}')).toMatchObject({
         source: 'registration',
+        welcome_environment: env.ENVIRONMENT,
         name: 'John Doe',
         email: 'john@oasis-test.internal',
         github: 'johndoe',

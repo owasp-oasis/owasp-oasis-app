@@ -7,7 +7,7 @@
     "dev": "wrangler dev --var ENVIRONMENT:development",
     "build:worker": "tsc -p tsconfig.worker.json",
     "build:frontend": "vite build",
-    "build": "tsc -b && npm run build:worker && npm run build:frontend",
+    "build": "npm run check:welcome-deployment && tsc -b && npm run build:worker && npm run build:frontend",
     "preview": "vite preview",
     "check": "npm test && npm run build",
     "migrate:preview": "wrangler d1 migrations apply oasis-db --remote --env=\"\"",
@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "test:unit": "vitest run tests/worker/unit",
     "test:int": "vitest run tests/worker/integration",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:welcome-deployment": "node scripts/check-welcome-deployment.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",

@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS hubspot_sync_queue (
 CREATE INDEX IF NOT EXISTS idx_hubspot_sync_pending
   ON hubspot_sync_queue(status, next_attempt_at);
 
+-- Durable receipt: successful delivery is checkpointed before CRM tracking.
+-- A sending/uncertain receipt is never automatically resent after an ambiguous outcome.
+CREATE TABLE IF NOT EXISTS welcome_email_deliveries (
+  email_hash TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'sending', 'sent', 'tracked', 'uncertain')),
+  sent_at TEXT,
+  tracked_at TEXT,
+  last_error TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (email_hash, environment)
+);
+
 -- ── Leaderboard tables (preview/production D1 — apply via wrangler d1 execute) ──────────────
 -- These tables are populated by the GitHub sync cron and /leaderboard-refresh endpoint.
 -- Run each CREATE on a fresh DB; use ALTER TABLE for existing DBs.

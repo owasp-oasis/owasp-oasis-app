@@ -72,6 +72,19 @@ CREATE TABLE IF NOT EXISTS hubspot_sync_queue (
 CREATE INDEX IF NOT EXISTS idx_hubspot_sync_pending
   ON hubspot_sync_queue(status, next_attempt_at);
 
+-- Durable receipt: successful delivery is checkpointed before CRM tracking.
+-- A sending/uncertain receipt is never automatically resent after an ambiguous outcome.
+CREATE TABLE IF NOT EXISTS welcome_email_deliveries (
+  email_hash TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'sending', 'sent', 'tracked', 'uncertain')),
+  sent_at TEXT,
+  tracked_at TEXT,
+  last_error TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (email_hash, environment)
+);
+
 -- Leaderboard tables
 CREATE TABLE IF NOT EXISTS repos (
   id              INTEGER PRIMARY KEY,
@@ -394,6 +407,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'sync_daily_budgets',
     'sync_pipeline_locks',
     'hubspot_sync_queue',
+    'welcome_email_deliveries',
     'user_votes',
     'user_preferences',
     'user_sessions',
