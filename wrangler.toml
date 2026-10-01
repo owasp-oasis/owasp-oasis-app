@@ -51,6 +51,12 @@ preview_id = "0f2cd5c4bcd04b109141035bb2d69d0a"
 [vars]
 ENVIRONMENT          = "preview"
 OAUTH_CALLBACK_URL   = "https://preview.owasp-oasis.org/api/auth/callback"
+WELCOME_EMAIL_FROM   = "OASIS <welcome@mail.owasp-oasis.org>"
+WELCOME_EMAIL_MODE   = "off"
+
+[[send_email]]
+name = "WELCOME_EMAIL"
+allowed_sender_addresses = ["welcome@mail.owasp-oasis.org"]
 
 # ── Cron triggers ──
 [triggers]
@@ -101,6 +107,12 @@ OAUTH_CALLBACK_URL = "https://www.owasp-oasis.org/api/auth/callback"
 # this value is not a credential. Keep it in versioned config so Wrangler
 # deployments do not remove a dashboard-only binding.
 CLOUDFLARE_ZONE_ID = "3f30ef2d154b36358a11b0db4744b5fb"
+WELCOME_EMAIL_FROM = "OASIS <welcome@mail.owasp-oasis.org>"
+WELCOME_EMAIL_MODE = "live"
+
+[[env.production.send_email]]
+name = "WELCOME_EMAIL"
+allowed_sender_addresses = ["welcome@mail.owasp-oasis.org"]
 
 [env.production.triggers]
 crons = ["0 */4 * * *", "15 * * * *", "45 3 * * *"]

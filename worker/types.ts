@@ -14,6 +14,10 @@ export interface Env {
   HUBSPOT_PROPERTY_MAP?: string;
   CLOUDFLARE_ANALYTICS_TOKEN?: string;
   CLOUDFLARE_ZONE_ID?: string;
+  WELCOME_EMAIL?: SendEmail;
+  WELCOME_EMAIL_FROM?: string;
+  WELCOME_EMAIL_MODE?: string;
+  WELCOME_EMAIL_TEST_RECIPIENT?: string;
   TOKEN_ENCRYPTION_KEY: string;
   ENVIRONMENT: string;
   OAUTH_CALLBACK_URL: string;

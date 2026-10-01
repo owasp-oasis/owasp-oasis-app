@@ -21,8 +21,8 @@ import {
   startSyncJob,
 } from './syncJobs.js';
 
-/** Three HubSpot calls per contact leaves five requests of headroom below 50. */
-export const HUBSPOT_SYNC_CHUNK_SIZE = 15;
+/** Up to five HubSpot requests plus one email send per signup; leave headroom below 50. */
+export const HUBSPOT_SYNC_CHUNK_SIZE = 6;
 const WORKFLOW_STEP_LIMIT = 2_000;
 const EXTERNAL_REQUEST_LIMIT = 50;
 const RETRY_LIMIT = 3;

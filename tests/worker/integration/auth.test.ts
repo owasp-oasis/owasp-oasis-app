@@ -165,6 +165,12 @@ describe('Authentication (OAuth)', () => {
         }),
       );
 
+      const queue = await env.DB.prepare('SELECT payload_json FROM hubspot_sync_queue WHERE source_key = ?')
+        .bind('test@oasis-test.internal').first<{ payload_json: string }>();
+      expect(JSON.parse(queue?.payload_json ?? '{}')).toMatchObject({
+        source: 'registration', welcome_environment: env.ENVIRONMENT,
+      });
+
       // Verify registration was created
       const regs = await env.DB.prepare('SELECT * FROM registrations WHERE email = ?')
         .bind('test@oasis-test.internal')
