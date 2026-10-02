@@ -39,6 +39,11 @@ describe('github.ts', () => {
       expect(parseDecision(body)).toBe('modify');
     });
 
+    it('parses Hardening as its own validation decision', () => {
+      const body = `Validation summary:\n\n| Decision | Hardening |\n| Confidence | Medium |`;
+      expect(parseDecision(body)).toBe('hardening');
+    });
+
     it('parses reject decision', () => {
       const body = `
 ## rejection summary: This fix is not suitable

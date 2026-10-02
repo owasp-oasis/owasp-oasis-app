@@ -5,7 +5,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import './VoteModal.css'
 
-export type Decision = 'accept' | 'modify' | 'reject' | 'duplicate'
+export type Decision = 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate'
 
 export interface VoteFormPR {
   id: number
@@ -25,6 +25,7 @@ interface Props {
 const DECISION_LABELS: Record<Decision, string> = {
   accept: 'Accept',
   modify: 'Modify',
+  hardening: 'Hardening',
   reject: 'Reject',
   duplicate: 'Duplicate',
 }
@@ -82,7 +83,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
       if (!parentPrNumber || parseInt(parentPrNumber, 10) < 1) {
         setError('Please enter a valid parent PR number.'); return
       }
-    } else if (decision !== 'reject') {
+    } else if (decision !== 'reject' && decision !== 'hardening') {
       if (!nextStepSelection) { setError('Please select a next step.'); return }
       if (nextStepSelection === 'other' && !nextStepOther.trim()) {
         setError('Please describe the next step.'); return
@@ -100,6 +101,9 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
         body.summary         = summary
         body.blocking_issues = blockingIssues
         body.to_reconsider   = toReconsider
+      } else if (decision === 'hardening') {
+        body.confidence = confidence
+        body.summary = summary
       } else {
         body.confidence = confidence
         body.summary    = summary
@@ -133,7 +137,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
       <div className="vm-field">
         <label className="vm-label">Decision</label>
         <div className="vm-decision-group">
-          {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => (
+          {(['accept', 'modify', 'hardening', 'reject', 'duplicate'] as Decision[]).map(d => (
             <button
               key={d}
               type="button"
@@ -149,9 +153,10 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
         </div>
       </div>
 
-      {/* Fields for Accept / Modify */}
-      {(decision === 'accept' || decision === 'modify') && (
+      {/* Fields for Accept / Modify / Hardening */}
+      {(decision === 'accept' || decision === 'modify' || decision === 'hardening') && (
         <>
+          {decision === 'hardening' && <p className="vm-hint">The finding is not demonstrated to be a vulnerability, but the proposed change provides a worthwhile security improvement.</p>}
           <div className="vm-field">
             <label className="vm-label">Confidence</label>
             <div className="vm-radio-group">
@@ -177,14 +182,14 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
               id="vf-summary"
               className="vm-textarea"
               rows={3}
-              placeholder="Brief summary of your assessment…"
+              placeholder={decision === 'hardening' ? 'Explain the worthwhile security improvement…' : 'Brief summary of your assessment…'}
               value={summary}
               onChange={e => setSummary(e.target.value)}
               required
               maxLength={2000}
             />
           </div>
-          <div className="vm-field">
+          {decision !== 'hardening' && <div className="vm-field">
             <label className="vm-label">
               Next step <span className="vm-required">*</span>
             </label>
@@ -214,7 +219,7 @@ export default function VoteForm({ pr, initialDecision, onClose, onSuccess, onDe
                 autoFocus
               />
             )}
-          </div>
+          </div>}
         </>
       )}
 

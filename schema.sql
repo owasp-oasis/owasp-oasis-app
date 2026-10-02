@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   consensus_modify        INTEGER DEFAULT 0,
   consensus_reject        INTEGER DEFAULT 0,
   consensus_duplicate     INTEGER DEFAULT 0,
+  consensus_hardening     INTEGER NOT NULL DEFAULT 0 CHECK (consensus_hardening >= 0),
   duplicate_of            INTEGER DEFAULT NULL,  -- FK → pull_requests.id (canonical root after chain resolution)
   closed_as_duplicate     INTEGER DEFAULT 0,     -- 1 if auto-closed because consensus + merged parent
   merged_upstream         INTEGER DEFAULT 0,
@@ -154,7 +155,7 @@ CREATE TABLE IF NOT EXISTS pr_comments (
   repo_name     TEXT    NOT NULL,
   pr_number     INTEGER NOT NULL,
   login         TEXT    NOT NULL,
-  decision      TEXT,                  -- 'accept'|'modify'|'reject'|'duplicate'|NULL
+  decision      TEXT,                  -- 'accept'|'modify'|'hardening'|'reject'|'duplicate'|NULL
   duplicate_of  INTEGER DEFAULT NULL,  -- cited parent PR id (pre-resolution, for chain walking)
   created_at    TEXT    NOT NULL,      -- ISO-8601: when the comment was posted
   pr_created_at TEXT    NOT NULL,      -- ISO-8601: when the PR was created (denorm, for bonus calc)

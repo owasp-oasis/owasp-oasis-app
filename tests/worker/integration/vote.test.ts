@@ -21,19 +21,23 @@ import {
 } from './helpers.js';
 
 describe('POST /api/vote', () => {
+  let postedGitHubComment: string | null = null;
+
   beforeAll(async () => {
     await applySchema(env);
   });
 
   beforeEach(() => {
+    postedGitHubComment = null;
     fetchMock.activate();
     fetchMock.disableNetConnect();
 
     // Mock GitHub comment POST
     fetchMock
       .when((req) => req.url.includes('/issues') && req.url.includes('/comments'))
-      .respondWith(
-        new Response(
+      .respondWith(async (req) => {
+        postedGitHubComment = String((await req.clone().json() as { body?: unknown }).body ?? '');
+        return new Response(
           JSON.stringify({
             id: 123456789,
             body: 'Mocked OASIS comment',
@@ -42,8 +46,8 @@ describe('POST /api/vote', () => {
           {
             headers: { 'Content-Type': 'application/json' },
           },
-        ),
-      );
+        );
+      });
   });
 
   afterEach(async () => {
@@ -165,6 +169,30 @@ describe('POST /api/vote', () => {
 
       expect(res.status).toBe(200);
     });
+
+    it('accepts and persists a Hardening vote with a separate count', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const res = await vote(1001, 'hardening', csrf, sessionCookie, tokenCookie, {
+        confidence: 'Low',
+        summary: 'Safer cryptographic defaults improve defense in depth.',
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, decision: 'hardening' });
+      expect(await env.DB.prepare('SELECT decision FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first()).toMatchObject({ decision: 'hardening' });
+      expect(await env.DB.prepare('SELECT consensus_accept, consensus_reject, consensus_hardening FROM pull_requests WHERE id = ?')
+        .bind(1001).first()).toMatchObject({ consensus_accept: 0, consensus_reject: 0, consensus_hardening: 1 });
+      expect(await env.DB.prepare('SELECT decision FROM pr_participants WHERE pr_id = ? AND login = ?')
+        .bind(1001, login).first()).toMatchObject({ decision: 'hardening' });
+      expect(postedGitHubComment).toContain('| Decision | Hardening |');
+      expect(postedGitHubComment).toContain('| Confidence | Low |');
+      expect(postedGitHubComment).toContain('Safer cryptographic defaults improve defense in depth.');
+      expect(postedGitHubComment).not.toContain('Next step');
+    });
   });
 
   describe('validation', () => {
@@ -197,6 +225,37 @@ describe('POST /api/vote', () => {
       });
 
       expect(res2.status).toBe(409);
+    });
+
+    it('does not allow an existing Accept vote to switch to Hardening', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      await insertTestPR(env);
+
+      expect((await vote(1001, 'accept', makeCsrf(), sessionCookie, tokenCookie)).status).toBe(200);
+      const secondVote = await vote(1001, 'hardening', makeCsrf(), sessionCookie, tokenCookie, {
+        confidence: 'High',
+        summary: 'A security improvement.',
+      });
+
+      expect(secondVote.status).toBe(409);
+      expect(await env.DB.prepare('SELECT decision FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first()).toMatchObject({ decision: 'accept' });
+      expect(await env.DB.prepare('SELECT consensus_accept, consensus_hardening FROM pull_requests WHERE id = ?')
+        .bind(1001).first()).toMatchObject({ consensus_accept: 1, consensus_hardening: 0 });
+    });
+
+    it('does not allow a Hardening vote to switch to another decision', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      await insertTestPR(env);
+
+      expect((await vote(1001, 'hardening', makeCsrf(), sessionCookie, tokenCookie)).status).toBe(200);
+      const secondVote = await vote(1001, 'accept', makeCsrf(), sessionCookie, tokenCookie);
+
+      expect(secondVote.status).toBe(409);
+      expect(await env.DB.prepare('SELECT decision FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first()).toMatchObject({ decision: 'hardening' });
+      expect(await env.DB.prepare('SELECT consensus_accept, consensus_hardening FROM pull_requests WHERE id = ?')
+        .bind(1001).first()).toMatchObject({ consensus_accept: 0, consensus_hardening: 1 });
     });
 
     it('rejects invalid decision value', async () => {

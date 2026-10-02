@@ -68,7 +68,7 @@ interface ShadowPRTask {
 interface ShadowParticipant {
   interactions: number;
   non_oasis_interactions: number;
-  decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null;
+  decision: 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate' | null;
   reactions_received: number;
 }
 
@@ -78,7 +78,7 @@ interface ShadowComment {
   repo_name: string;
   pr_number: number;
   login: string;
-  decision: 'accept' | 'modify' | 'reject' | 'duplicate';
+  decision: 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate';
   duplicate_of: number | null;
   created_at: string;
   pr_created_at: string;
@@ -314,17 +314,21 @@ async function collectShadowPR(
   let accept = 0;
   let modify = 0;
   let reject = 0;
+  let hardening = 0;
   const commentEntities: ShadowComment[] = [];
   const reactionEntities: ShadowReaction[] = [];
 
   for (const comment of comments) {
     const login = comment.user?.login;
     const decision = parseDecision(comment.body);
+    // Hardening represents a human judgment and cannot be assigned by a validator bot.
+    if (login && isValidatorBot(login) && decision === 'hardening') continue;
     if (login && isValidatorBot(login) && decision) {
       oasisComments += 1;
       if (decision === 'accept') accept += 1;
       if (decision === 'modify') modify += 1;
       if (decision === 'reject') reject += 1;
+      if (decision === 'hardening') hardening += 1;
       commentEntities.push({
         id: comment.id, pr_id: pr.id, repo_name: task.repo_name, pr_number: pr.number,
         login, decision, duplicate_of: decision === 'duplicate' ? parseDuplicateParent(comment.body) : null,
@@ -340,6 +344,7 @@ async function collectShadowPR(
           if (decision === 'accept') accept += 1;
           if (decision === 'modify') modify += 1;
           if (decision === 'reject') reject += 1;
+          if (decision === 'hardening') hardening += 1;
         }
         reactionEntities.push({
           comment_id: comment.id,
@@ -364,6 +369,7 @@ async function collectShadowPR(
     if (decision === 'accept') accept += 1;
     if (decision === 'modify') modify += 1;
     if (decision === 'reject') reject += 1;
+    if (decision === 'hardening') hardening += 1;
     commentEntities.push({
       id: comment.id, pr_id: pr.id, repo_name: task.repo_name, pr_number: pr.number,
       login, decision, duplicate_of: decision === 'duplicate' ? parseDuplicateParent(comment.body) : null,
@@ -380,6 +386,7 @@ async function collectShadowPR(
         if (decision === 'accept') accept += 1;
         if (decision === 'modify') modify += 1;
         if (decision === 'reject') reject += 1;
+        if (decision === 'hardening') hardening += 1;
       }
       reactionEntities.push({
         comment_id: comment.id,
@@ -436,6 +443,7 @@ async function collectShadowPR(
       consensus_accept: accept,
       consensus_modify: modify,
       consensus_reject: reject,
+      consensus_hardening: hardening,
       // The canonical writer currently preserves this field through the
       // duplicate projection rather than the PR ingestion call.
       consensus_duplicate: 0,
@@ -805,6 +813,7 @@ async function rebuildShadowDuplicates(env: Env, pipelineRunId: string): Promise
       Number(pr['consensus_accept'] ?? 0),
       Number(pr['consensus_modify'] ?? 0),
       Number(pr['consensus_reject'] ?? 0),
+      Number(pr['consensus_hardening'] ?? 0),
     );
     if (duplicateCount <= competing) {
       pr['duplicate_of'] = null;
@@ -1022,7 +1031,7 @@ async function rebuildShadowContributors(env: Env, pipelineRunId: string): Promi
 function canonicalEntityQueries(): Array<{ entityType: string; sql: string }> {
   return [
     { entityType: 'repository', sql: `SELECT CAST(id AS TEXT) AS entity_id, NULL AS source_updated_at, json_object('id',id,'name',name,'full_name',full_name,'description',description,'language',language,'stars',stars,'upstream_url',upstream_url,'active',active) AS payload_json FROM repos WHERE active = 1` },
-    { entityType: 'pull_request', sql: `SELECT CAST(pr.id AS TEXT) AS entity_id, pr.updated_at AS source_updated_at, json_object('id',pr.id,'repo_id',pr.repo_id,'repo_name',pr.repo_name,'number',pr.number,'title',pr.title,'state',pr.state,'author',pr.author,'html_url',pr.html_url,'comment_count',pr.comment_count,'oasis_comment_count',pr.oasis_comment_count,'non_oasis_comment_count',pr.non_oasis_comment_count,'participants',pr.participants,'consensus_accept',pr.consensus_accept,'consensus_modify',pr.consensus_modify,'consensus_reject',pr.consensus_reject,'consensus_duplicate',pr.consensus_duplicate,'duplicate_of',pr.duplicate_of,'closed_as_duplicate',pr.closed_as_duplicate,'merged_upstream',pr.merged_upstream,'head_sha',pr.head_sha,'merged_at',pr.merged_at,'created_at',pr.created_at,'updated_at',pr.updated_at,'detection_tool',pr.detection_tool,'deleted',pr.deleted) AS payload_json FROM pull_requests pr JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
+    { entityType: 'pull_request', sql: `SELECT CAST(pr.id AS TEXT) AS entity_id, pr.updated_at AS source_updated_at, json_object('id',pr.id,'repo_id',pr.repo_id,'repo_name',pr.repo_name,'number',pr.number,'title',pr.title,'state',pr.state,'author',pr.author,'html_url',pr.html_url,'comment_count',pr.comment_count,'oasis_comment_count',pr.oasis_comment_count,'non_oasis_comment_count',pr.non_oasis_comment_count,'participants',pr.participants,'consensus_accept',pr.consensus_accept,'consensus_modify',pr.consensus_modify,'consensus_reject',pr.consensus_reject,'consensus_duplicate',pr.consensus_duplicate,'consensus_hardening',pr.consensus_hardening,'duplicate_of',pr.duplicate_of,'closed_as_duplicate',pr.closed_as_duplicate,'merged_upstream',pr.merged_upstream,'head_sha',pr.head_sha,'merged_at',pr.merged_at,'created_at',pr.created_at,'updated_at',pr.updated_at,'detection_tool',pr.detection_tool,'deleted',pr.deleted) AS payload_json FROM pull_requests pr JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
     { entityType: 'comment', sql: `SELECT CAST(pc.id AS TEXT) AS entity_id, pc.created_at AS source_updated_at, json_object('id',pc.id,'pr_id',pc.pr_id,'repo_name',pc.repo_name,'pr_number',pc.pr_number,'login',pc.login,'decision',pc.decision,'duplicate_of',pc.duplicate_of,'created_at',pc.created_at,'pr_created_at',pc.pr_created_at) AS payload_json FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
     { entityType: 'reaction', sql: `SELECT CAST(cr.comment_id AS TEXT)||':'||cr.reactor||':'||cr.content AS entity_id, NULL AS source_updated_at, json_object('comment_id',cr.comment_id,'reactor',cr.reactor,'content',cr.content,'is_positive',cr.is_positive) AS payload_json FROM comment_reactions cr JOIN pr_comments pc ON pc.id = cr.comment_id JOIN pull_requests pr ON pr.id = pc.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },
     { entityType: 'participant', sql: `SELECT CAST(pp.pr_id AS TEXT)||':'||pp.login AS entity_id, NULL AS source_updated_at, json_object('pr_id',pp.pr_id,'repo_name',pp.repo_name,'pr_number',pp.pr_number,'login',pp.login,'interactions',pp.interactions,'non_oasis_interactions',pp.non_oasis_interactions,'decision',pp.decision,'reactions_received',pp.reactions_received) AS payload_json FROM pr_participants pp JOIN pull_requests pr ON pr.id = pp.pr_id JOIN repos r ON r.id = pr.repo_id WHERE pr.deleted = 0 AND r.active = 1` },

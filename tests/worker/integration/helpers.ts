@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   consensus_modify        INTEGER DEFAULT 0,
   consensus_reject        INTEGER DEFAULT 0,
   consensus_duplicate     INTEGER DEFAULT 0,
+  consensus_hardening     INTEGER NOT NULL DEFAULT 0 CHECK (consensus_hardening >= 0),
   duplicate_of            INTEGER DEFAULT NULL,
   closed_as_duplicate     INTEGER DEFAULT 0,
   merged_upstream         INTEGER DEFAULT 0,

@@ -2,7 +2,7 @@ type RequestMatcher = (request: Request) => boolean;
 
 interface MockRoute {
   matcher: RequestMatcher;
-  response: Response;
+  response: Response | ((request: Request) => Response | Promise<Response>);
 }
 
 const nativeFetch = globalThis.fetch;
@@ -18,7 +18,9 @@ export const fetchMock = {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const request = toRequest(input, init);
       const route = routes.find(candidate => candidate.matcher(request));
-      if (route) return route.response.clone();
+      if (route) return typeof route.response === 'function'
+        ? route.response(request)
+        : route.response.clone();
       if (networkDisabled) throw new Error(`Unmocked outbound request: ${request.method} ${request.url}`);
       return nativeFetch(input, init);
     };
@@ -34,7 +36,7 @@ export const fetchMock = {
     networkDisabled = true;
   },
 
-  when(matcher: RequestMatcher): { respondWith(response: Response): void } {
+  when(matcher: RequestMatcher): { respondWith(response: Response | ((request: Request) => Response | Promise<Response>)): void } {
     return {
       respondWith(response: Response): void {
         routes.push({ matcher, response });

@@ -26,11 +26,16 @@ interface PRRow {
   repo_name: string;
   number: number;
   state: string;
+  title: string;
+  author: string | null;
+  html_url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 async function getPRRow(env: Env, id: number): Promise<PRRow | null> {
   return env.DB.prepare(
-    'SELECT repo_name, number, state FROM pull_requests WHERE id = ?',
+    'SELECT repo_name, number, state, title, author, html_url, created_at, updated_at FROM pull_requests WHERE id = ?',
   ).bind(id).first<PRRow>();
 }
 
@@ -119,6 +124,30 @@ export async function handlePRDetails(request: Request, env: Env, id: number): P
       env.GITHUB_TOKEN,
     );
   } catch (err) {
+    if (env.ENVIRONMENT === 'development') {
+      const meta = parsePRMeta(pr.title, null);
+      return jsonOk({
+        id,
+        repo_name: pr.repo_name,
+        number: pr.number,
+        title: pr.title,
+        state: pr.state,
+        html_url: pr.html_url ?? `https://github.com/${ORG}/${pr.repo_name}/pull/${pr.number}`,
+        body: '',
+        user: {
+          login: pr.author ?? 'local-fixture',
+          avatar_url: `https://github.com/${pr.author ?? 'ghost'}.png?size=64`,
+        },
+        created_at: pr.created_at ?? '',
+        updated_at: pr.updated_at ?? '',
+        merged_at: null,
+        additions: 0,
+        deletions: 0,
+        changed_files: 0,
+        head_sha: '',
+        ...meta,
+      }, request);
+    }
     return jsonErr(`GitHub API error: ${(err as Error).message}`, 502, request);
   }
 
@@ -186,6 +215,40 @@ export async function handlePRComments(request: Request, env: Env, id: number): 
       env.GITHUB_TOKEN,
     );
   } catch (err) {
+    if (env.ENVIRONMENT === 'development') {
+      try {
+        const fixtures = await env.DB.prepare(`
+          SELECT id, login, body, created_at
+            FROM dev_preview_validation_comments
+           WHERE pr_id = ?
+           ORDER BY created_at DESC
+        `).bind(id).all<{
+          id: number;
+          login: string;
+          body: string;
+          created_at: string;
+        }>();
+
+        if (fixtures.results.length > 0) {
+          const reactions = { total_count: 0, '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 };
+          return jsonOk({
+            comments: fixtures.results.map(comment => ({
+              id: comment.id,
+              user: {
+                login: comment.login,
+                avatar_url: `https://github.com/${comment.login}.png?size=32`,
+              },
+              body: comment.body,
+              created_at: comment.created_at,
+              reactions,
+              oasis_decision: parseDecision(comment.body),
+            })),
+          }, request);
+        }
+      } catch {
+        // The local fixture table is intentionally absent from deployed schemas.
+      }
+    }
     return jsonErr(`GitHub API error: ${(err as Error).message}`, 502, request);
   }
 

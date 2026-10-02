@@ -14,6 +14,7 @@ interface PRDetails {
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
+  consensus_hardening: number
 }
 
 interface Props {
@@ -32,10 +33,11 @@ export default function SummaryTab({ details, loading, error }: Props) {
   const sev = details.cvss_severity ?? null
   const sevClass = sev && SEVERITY_ORDER.includes(sev) ? `prp-severity-badge--${sev}` : 'prp-severity-badge--low'
 
-  const totalVotes = details.consensus_accept + details.consensus_modify + details.consensus_reject
-  const acceptPct  = totalVotes > 0 ? (details.consensus_accept / totalVotes) * 100 : 0
-  const modifyPct  = totalVotes > 0 ? (details.consensus_modify / totalVotes) * 100 : 0
-  const rejectPct  = totalVotes > 0 ? (details.consensus_reject / totalVotes) * 100 : 0
+  const allDecisionVotes = details.consensus_accept + details.consensus_modify + details.consensus_hardening + details.consensus_reject
+  const acceptPct    = allDecisionVotes > 0 ? (details.consensus_accept / allDecisionVotes) * 100 : 0
+  const modifyPct    = allDecisionVotes > 0 ? (details.consensus_modify / allDecisionVotes) * 100 : 0
+  const hardeningPct = allDecisionVotes > 0 ? (details.consensus_hardening / allDecisionVotes) * 100 : 0
+  const rejectPct    = allDecisionVotes > 0 ? (details.consensus_reject / allDecisionVotes) * 100 : 0
 
   const hasVulnData = details.cwe_id || details.cve_id || details.cvss_severity || details.tldr
 
@@ -102,17 +104,19 @@ export default function SummaryTab({ details, loading, error }: Props) {
       {/* Consensus snapshot */}
       <div className="prp-consensus-card">
         <div className="prp-consensus-title">Consensus</div>
-        {totalVotes > 0 ? (
+        {allDecisionVotes > 0 ? (
           <>
-            <div className="prp-consensus-bar">
+            <div className="prp-consensus-bar" role="img" aria-label="Consensus vote distribution">
               <div className="prp-consensus-seg-accept" style={{ width: `${acceptPct}%` }} />
               <div className="prp-consensus-seg-modify" style={{ width: `${modifyPct}%` }} />
+              <div className="prp-consensus-seg-hardening" style={{ width: `${hardeningPct}%` }} />
               <div className="prp-consensus-seg-reject" style={{ width: `${rejectPct}%` }} />
             </div>
             <div className="prp-consensus-counts">
               <span className="consensus-accept">✓ {details.consensus_accept} accept</span>
               <span className="consensus-modify">~ {details.consensus_modify} modify</span>
               <span className="consensus-reject">✗ {details.consensus_reject} reject</span>
+              <span className="prp-consensus-hardening">🛡 {details.consensus_hardening} hardening</span>
             </div>
           </>
         ) : (

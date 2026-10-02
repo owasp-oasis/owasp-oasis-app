@@ -2,7 +2,7 @@
  * PRPanel — slide-out side panel for reviewing a PR.
  *
  * Tabs: PR info | Body | Changes | Comments | Summary
- * Vote bar: Accept / Modify / Reject (open PRs only)
+ * Vote bar: Accept / Modify / Hardening / Reject / Duplicate (open PRs only)
  * VoteForm drawer slides up from bottom when a decision is selected.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -27,6 +27,7 @@ export interface PanelPR {
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
+  consensus_hardening: number
 }
 
 /* ── Details shape returned by /api/pr-panel/:id/details ─────── */
@@ -213,6 +214,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
   const DECISION_LABELS: Record<Decision, string> = {
     accept: 'Accept',
     modify: 'Modify',
+    hardening: 'Hardening',
     reject: 'Reject',
     duplicate: 'Duplicate',
   }
@@ -233,6 +235,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
     consensus_accept: activePR.consensus_accept,
     consensus_modify: activePR.consensus_modify,
     consensus_reject: activePR.consensus_reject,
+    consensus_hardening: activePR.consensus_hardening,
   } : null
 
   return (
@@ -276,7 +279,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess }: Props) 
         {isOpen && user && (
           <div className="prp-vote-bar">
             <span className="prp-vote-label">Your vote:</span>
-            {(['accept', 'modify', 'reject', 'duplicate'] as Decision[]).map(d => {
+            {(['accept', 'modify', 'hardening', 'reject', 'duplicate'] as Decision[]).map(d => {
               const isVoted  = myVote === d
               const isOther  = !!myVote && myVote !== d
               const isActive = voteDecision === d && !myVote

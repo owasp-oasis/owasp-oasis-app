@@ -22,6 +22,7 @@ interface PR {
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
+  consensus_hardening: number
   merged_upstream: number
   updated_at: string
 }
@@ -32,6 +33,7 @@ const TRUST_MIN_ACCEPT_RATE  = 0.75
 const VOTE_LABEL: Record<Decision, string> = {
   accept: '✓ Accept',
   modify: '⚠ Modify',
+  hardening: '🛡 Hardening',
   reject: '✗ Reject',
   duplicate: '🔀 Duplicate',
 }
@@ -43,11 +45,12 @@ function getRowClass(pr: AugmentedPR, myVote: Decision | undefined): string {
   if (myVote) {
     classes.push(`pr-row-voted--${myVote}`)
 
-    const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_reject
+    const total = pr.consensus_accept + pr.consensus_modify + pr.consensus_hardening + pr.consensus_reject
     if (total > 1) {
       const counts: Record<Decision, number> = {
          accept: pr.consensus_accept,
          modify: pr.consensus_modify,
+         hardening: pr.consensus_hardening,
          reject: pr.consensus_reject,
          duplicate: 0,  // not included in consensus comparison in getRowClass
        }
@@ -180,15 +183,16 @@ function StatusKey() {
 }
 
 /** Compact stacked consensus bar + total count for use in the table cell. */
-function ConsensusMiniBar({ accept, modify, reject, oasisVotes, nonOasisVotes }: {
+function ConsensusMiniBar({ accept, modify, reject, hardening, oasisVotes, nonOasisVotes }: {
   accept: number
   modify: number
   reject: number
+  hardening: number
   oasisVotes: number
   nonOasisVotes: number
 }) {
   const total = accept + modify + reject
-  const tooltip = `Accept: ${accept} | Modify: ${modify} | Reject: ${reject}\nOASIS votes: ${oasisVotes} | Non-OASIS: ${nonOasisVotes}`
+  const tooltip = `Accept: ${accept} | Modify: ${modify} | Hardening: ${hardening} | Reject: ${reject}\nOASIS votes: ${oasisVotes} | Non-OASIS: ${nonOasisVotes}`
   return (
     <div className="consensus-mini-wrap" title={tooltip}>
       {total > 0 ? (
@@ -200,7 +204,8 @@ function ConsensusMiniBar({ accept, modify, reject, oasisVotes, nonOasisVotes }:
       ) : (
         <div className="consensus-bar consensus-bar--mini consensus-bar--empty" />
       )}
-      <span className="consensus-mini-count">{total} {total === 1 ? 'vote' : 'votes'}</span>
+      <span className="consensus-mini-count">{total + hardening} {total + hardening === 1 ? 'vote' : 'votes'}</span>
+      {hardening > 0 && <span className="consensus-hardening-count">· {hardening} hardening</span>}
     </div>
   )
 }
@@ -305,6 +310,7 @@ export default function PRsTab({
         consensus_accept: ((base?.consensus_accept ?? 0) + (decision === 'accept' ? 1 : 0)),
         consensus_modify: ((base?.consensus_modify ?? 0) + (decision === 'modify' ? 1 : 0)),
         consensus_reject: ((base?.consensus_reject ?? 0) + (decision === 'reject' ? 1 : 0)),
+        consensus_hardening: ((base?.consensus_hardening ?? 0) + (decision === 'hardening' ? 1 : 0)),
         oasis_comment_count: (base?.oasis_comment_count ?? 0) + 1,
         participants: (base?.participants ?? 0) + 1,
       })
@@ -376,6 +382,7 @@ export default function PRsTab({
           accept={row.consensus_accept}
           modify={row.consensus_modify}
           reject={row.consensus_reject}
+          hardening={row.consensus_hardening}
           oasisVotes={row.oasis_comment_count}
           nonOasisVotes={row.non_oasis_comment_count}
         />

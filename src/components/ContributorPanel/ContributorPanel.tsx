@@ -39,7 +39,7 @@ interface Contribution {
   pr_id: number;
   pr_number: number;
   repo_name: string;
-  decision: 'accept' | 'modify' | 'reject' | null;
+  decision: 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate' | null;
   commented_at: string;
   pr_created_at: string;
   pr_title: string;

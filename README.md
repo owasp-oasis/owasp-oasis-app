@@ -181,7 +181,7 @@ src/                       ← React SPA (frontend)
       CommentsTab.tsx      ← GitHub comments with reactions and OASIS decision badges
       PRTab.tsx            ← Link to open PR on GitHub
       renderMarkdown.tsx   ← Markdown renderer (remark + rehype + remark-gfm + mermaid)
-    VoteForm.tsx           ← Accept/Modify/Reject vote form (posts to /api/vote)
+    VoteForm.tsx           ← Accept/Modify/Hardening/Reject/Duplicate vote form (posts to /api/vote)
     VoteModal.tsx          ← Sign-in prompt modal for unauthenticated users
 
 schema.sql                 ← D1 database schema (apply once on fresh DB)
@@ -307,11 +307,11 @@ Validators can submit their OASIS validation decision directly from the leaderbo
 
 1. User clicks a PR row in the leaderboards → PR Panel slides open
 2. User clicks the "Vote" tab (sign-in modal shown if not authenticated)
-3. User selects **Accept**, **Modify**, or **Reject** and fills in the structured form
+3. User selects **Accept**, **Modify**, **Hardening**, **Reject**, or **Duplicate** and fills in the corresponding form
 4. `POST /api/vote` validates CSRF, session, rate limit, and body; then:
    - Posts a formatted OASIS comment to GitHub using the user's OAuth token (comment appears as them)
    - Upserts `pr_participants` for the PR
-   - Increments `consensus_accept/modify/reject` and `participants` on `pull_requests`
+   - Increments the selected decision's separate consensus count and `participants` on `pull_requests`
    - Upserts the `contributors` row for the user
    - Inserts a `user_votes` record
 5. The PR table shows a **My Vote** column reflecting the decision, with row highlight (green = agree with majority, red = disagree)
@@ -320,12 +320,17 @@ Validators can submit their OASIS validation decision directly from the leaderbo
 
 - One vote per user per PR (enforced in both D1 and the UI)
 - Voting only permitted on open PRs
-- Reject votes require a `summary` (reason); Accept/Modify require `confidence` (Low/Medium/High) and a `summary`
+- Reject votes require a `summary` (reason); Accept/Modify/Hardening require `confidence` (Low/Medium/High) and a `summary`
+- Hardening is a reviewer-selected security improvement when a finding has not been demonstrated to be a vulnerability; automated scanner and AI output never selects it
+- Hardening has its own consensus count and does not contribute to Accept, Modify, or Reject totals
 - All text fields capped at 2000 characters
 
 ### Comment format
 
 Accept/Modify votes post:
+
+Hardening votes use the same validation-summary template with Decision, Confidence, and Summary. The summary records the worthwhile security improvement; it does not declare the finding a confirmed vulnerability.
+
 ```
 Validation summary:
 
@@ -362,7 +367,7 @@ The **Pull Requests** table in the Workspace is the primary work queue for valid
 | Pull Request | Combined column: muted repo-name link (top) + PR number and full title below. Title truncated by CSS ellipsis — no JS slice. |
 | Status | OASIS status badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). Header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
 | My Vote | Shown only when logged in. Displays the user's vote with coloured badge. Row gets a coloured left-border inset shadow: green = Accept, amber = Modify, red = Reject. Also shows `pr-row-agree` (green tint) or `pr-row-disagree` (amber tint) bg overlay when the user's vote matches/diverges from the crowd plurality. |
-| Consensus | Compact stacked bar (Accept/Modify/Reject proportions) + total vote count. Tooltip shows breakdown including OASIS vs non-OASIS comment counts. |
+| Consensus | Compact stacked bar (Accept/Modify/Reject proportions) plus a separate Hardening count. Hardening does not enter the Accept/Modify/Reject proportions. Tooltip shows OASIS vs non-OASIS comment counts. |
 | Participants | Total unique participants. |
 | Last updated | Formatted date. |
 | ›  | Hover-only chevron signalling the row is clickable. |
@@ -401,7 +406,7 @@ All endpoints look up `repo_name` and PR `number` from D1 by the internal `id`, 
 | Summary | CWE ID and description, CVE/CAPEC/CVSS, severity, TL;DR, detection tool, consensus vote counts, participant count |
 | Body | Full PR description rendered as GitHub-flavoured markdown, including Mermaid diagrams and `<details>`/`<summary>` HTML |
 | Diffs | Per-file sub-tab bar (last 2 path segments as tab label, full path in tooltip, `+add −del` churn inline). Diff view dropdown (Split / Split+char / Unified / Unified+char) lives inside this tab. Column widths set via `<colgroup>` for correct sizing. |
-| Comments | GitHub issue comments with author avatar, OASIS decision badge (Accept/Modify/Reject), emoji reactions |
+| Comments | GitHub issue comments with author avatar, OASIS decision badge (including Hardening), emoji reactions |
 | PR | Direct link to open the PR on GitHub |
 
 ---
