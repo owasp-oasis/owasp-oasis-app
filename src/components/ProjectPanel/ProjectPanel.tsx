@@ -28,6 +28,7 @@ interface Repo {
   total_accept: number;
   total_modify: number;
   total_reject: number;
+  total_hardening: number;
 }
 
 interface PR {
@@ -44,6 +45,7 @@ interface PR {
   consensus_accept: number;
   consensus_modify: number;
   consensus_reject: number;
+  consensus_hardening: number;
   merged_upstream: number;
   updated_at: string;
 }
@@ -255,6 +257,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
             consensus_accept: selectedPR.consensus_accept,
             consensus_modify: selectedPR.consensus_modify,
             consensus_reject: selectedPR.consensus_reject,
+            consensus_hardening: selectedPR.consensus_hardening,
           }}
           myVotes={myVotes}
           onClose={() => setSelectedPR(null)}
@@ -375,6 +378,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
                       <span className="cl-accept">✓ {panelData.repo.total_accept} Accept</span>
                       <span className="cl-modify">~ {panelData.repo.total_modify} Modify</span>
                       <span className="cl-reject">✕ {panelData.repo.total_reject} Reject</span>
+                      <span className="consensus-hardening-count">🛡 {panelData.repo.total_hardening} Hardening</span>
                     </div>
                     <ConsensusBar
                       accept={panelData.repo.total_accept}

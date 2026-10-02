@@ -12,6 +12,8 @@ import { describe, it, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { fetchMock } from './fetchMock.js';
 import { SELF } from './testWorker.js';
+import { handlePRComments, handlePRDetails } from '../../../worker/handlers/prPanel.js';
+import type { Env } from '../../../worker/types.js';
 import {
   applySchema,
   cleanDB,
@@ -33,6 +35,7 @@ describe('PR Panel endpoints', () => {
 
   afterEach(async () => {
     fetchMock.deactivate();
+    await env.DB.prepare('DROP TABLE IF EXISTS dev_preview_validation_comments').run();
     await cleanDB(env);
   });
 
@@ -102,6 +105,28 @@ describe('PR Panel endpoints', () => {
       );
 
       expect(res.status).toBe(404);
+    });
+
+    it('uses seeded D1 details only for local development when GitHub is unavailable', async () => {
+      await insertTestRepo(env);
+      await insertTestPR(env);
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when((req) => req.url.includes('/pulls/'))
+        .respondWith(new Response('{}', { status: 401 }));
+
+      const request = new Request('http://localhost/api/pr-panel/1001/details');
+      const localResponse = await handlePRDetails(request, { ...env, ENVIRONMENT: 'development' } as Env, 1001);
+      const localBody = await localResponse.json() as { ok: boolean; title: string; consensus_hardening?: number };
+
+      expect(localResponse.status).toBe(200);
+      expect(localBody.ok).toBe(true);
+      expect(localBody.title).toBeTruthy();
+
+      const previewResponse = await handlePRDetails(request, { ...env, ENVIRONMENT: 'preview' } as Env, 1001);
+      expect(previewResponse.status).toBe(502);
     });
   });
 
@@ -206,6 +231,54 @@ describe('PR Panel endpoints', () => {
 
       const body = await res.json();
       expect(body.comments[0].body).toContain('validation summary');
+    });
+
+    it('renders a seeded Hardening comment only as a local development fallback', async () => {
+      await insertTestRepo(env);
+      await insertTestPR(env);
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS dev_preview_validation_comments (
+          id INTEGER PRIMARY KEY,
+          pr_id INTEGER NOT NULL,
+          login TEXT NOT NULL,
+          body TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      `).run();
+      const fixtureBody = [
+        'Validation summary:',
+        '',
+        '| | |',
+        '| :-- | :-- |',
+        '| Decision | Hardening |',
+        '| Confidence | Medium |',
+        '| Summary | Modernizing cryptographic guidance strengthens safer defaults as a worthwhile security improvement; this review does not claim that the existing approach is a demonstrated vulnerability. |',
+      ].join('\n');
+      await env.DB.prepare(`
+        INSERT INTO dev_preview_validation_comments (id, pr_id, login, body, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(110022, 1001, 'local-hardening-reviewer', fixtureBody, '2026-09-22T10:00:00.000Z').run();
+
+      fetchMock.deactivate();
+      fetchMock.activate();
+      fetchMock.disableNetConnect();
+      fetchMock
+        .when((req) => req.url.includes('/issues/') && req.url.includes('/comments'))
+        .respondWith(new Response('{}', { status: 401 }));
+
+      const request = new Request('http://localhost/api/pr-panel/1001/comments');
+      const localResponse = await handlePRComments(request, { ...env, ENVIRONMENT: 'development' } as Env, 1001);
+      const localBody = await localResponse.json() as { comments: Array<{ body: string; oasis_decision: string }> };
+
+      expect(localResponse.status).toBe(200);
+      expect(localBody.comments[0].oasis_decision).toBe('hardening');
+      expect(localBody.comments[0].body).toContain('| Decision | Hardening |');
+      expect(localBody.comments[0].body).toContain('| Confidence | Medium |');
+      expect(localBody.comments[0].body).toContain('| Summary |');
+      expect(localBody.comments[0].body).not.toContain('confirmed vulnerability');
+
+      const previewResponse = await handlePRComments(request, { ...env, ENVIRONMENT: 'preview' } as Env, 1001);
+      expect(previewResponse.status).toBe(502);
     });
 
     it('returns 404 for non-existent PR', async () => {

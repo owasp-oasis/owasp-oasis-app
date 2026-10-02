@@ -66,7 +66,7 @@ async function processPR(
     `/repos/${ORG}/${repoName}/issues/${pr.number}/comments`, token,
   );
 
-  let consensusAccept = 0, consensusModify = 0, consensusReject = 0, consensusDuplicate = 0;
+  let consensusAccept = 0, consensusModify = 0, consensusReject = 0, consensusDuplicate = 0, consensusHardening = 0;
   let oasisCommentCount = 0, nonOasisCommentCount = 0;
 
   // Collect granular comment/reaction data for insertion into pr_comments / comment_reactions
@@ -83,6 +83,8 @@ async function processPR(
     // pr_participants and contributors tracking — they are not human contributors.
     if (login && isValidatorBot(login)) {
       const decision = parseDecision(comment.body);
+      // Hardening represents a human judgment and cannot be assigned by a validator bot.
+      if (decision === 'hardening') continue;
       if (decision) {
         oasisCommentCount++;
         if (decision === 'accept') consensusAccept++;
@@ -146,6 +148,7 @@ async function processPR(
       if (decision === 'modify') consensusModify++;
       if (decision === 'reject') consensusReject++;
       if (decision === 'duplicate') consensusDuplicate++;
+      if (decision === 'hardening') consensusHardening++;
 
       // For duplicate votes, parse the parent PR ID
       const duplicateOf = decision === 'duplicate' ? parseDuplicateParent(comment.body) ?? undefined : undefined;
@@ -184,6 +187,7 @@ async function processPR(
               if (decision === 'modify') consensusModify++;
               if (decision === 'reject') consensusReject++;
               if (decision === 'duplicate') consensusDuplicate++;
+              if (decision === 'hardening') consensusHardening++;
             }
 
             // Track how many reactions this reactor has GIVEN (for reaction_score)
@@ -232,7 +236,7 @@ async function processPR(
   await upsertPR(
     db, pr, repoId, repoName, comments.length,
     oasisCommentCount, nonOasisCommentCount,
-    oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
+    oasisParticipantCount, consensusAccept, consensusModify, consensusReject, consensusHardening,
     mergedUpstream, detectionTool, syncStart,
   );
 
@@ -557,6 +561,10 @@ export async function rebuildReactionDerivedCounts(db: D1Database): Promise<void
              consensus_reject = (
                SELECT COUNT(*) + COALESCE(SUM((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id AND cr.content = '+1')), 0)
                  FROM pr_comments pc WHERE pc.pr_id = pull_requests.id AND pc.decision = 'reject'
+             ),
+             consensus_hardening = (
+               SELECT COUNT(*) + COALESCE(SUM((SELECT COUNT(*) FROM comment_reactions cr WHERE cr.comment_id = pc.id AND cr.content = '+1')), 0)
+                 FROM pr_comments pc WHERE pc.pr_id = pull_requests.id AND pc.decision = 'hardening'
              )
     `),
   ]);

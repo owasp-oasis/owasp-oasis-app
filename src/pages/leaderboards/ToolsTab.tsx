@@ -16,6 +16,7 @@ interface Tool {
   total_accept: number | null
   total_modify: number | null
   total_reject: number | null
+  total_hardening: number | null
   /** Only set on the Human Validators aggregate card */
   validator_count?: number | null
 }
@@ -166,6 +167,7 @@ function FixCard({ tool }: { tool: Tool }) {
   const accept = tool.total_accept ?? 0
   const modify = tool.total_modify ?? 0
   const reject = tool.total_reject ?? 0
+  const hardening = tool.total_hardening ?? 0
 
   return (
     <div
@@ -206,6 +208,7 @@ function FixCard({ tool }: { tool: Tool }) {
           <span className="cl-accept">✅ {accept} Accept</span>
           <span className="cl-modify">⚠️ {modify} Modify</span>
           <span className="cl-reject">👎 {reject} Reject</span>
+          <span className="consensus-hardening-count">🛡 {hardening} Hardening</span>
         </div>
       </div>
     </div>
@@ -216,6 +219,7 @@ function ValidateCard({ tool }: { tool: Tool }) {
   const accept = tool.total_accept ?? 0
   const modify = tool.total_modify ?? 0
   const reject = tool.total_reject ?? 0
+  const hardening = tool.total_hardening ?? 0
   const isHuman = tool.card_key === 'validate:humans'
 
   return (
@@ -254,13 +258,14 @@ function ValidateCard({ tool }: { tool: Tool }) {
           <span className="cl-accept">✅ {accept} Accept</span>
           <span className="cl-modify">⚠️ {modify} Modify</span>
           <span className="cl-reject">👎 {reject} Reject</span>
+          <span className="consensus-hardening-count">🛡 {hardening} Hardening</span>
         </div>
       </div>
 
       {isHuman && (
         <p className="tool-detect-note">
-          Human validators post OASIS-template comments with accept, modify, or
-          reject decisions. Their combined activity is shown here as an aggregate.
+          Human validators post OASIS-template comments with Accept, Modify,
+          Hardening, Reject, or Duplicate decisions. Their combined activity is shown here as an aggregate.
           Individual scores appear on the Contributors leaderboard.
         </p>
       )}

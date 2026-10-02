@@ -146,6 +146,16 @@ describe('Leaderboard endpoints', () => {
   });
 
   describe('GET /api/leaderboard/prs', () => {
+    it('returns Hardening consensus separately from Accept, Modify, and Reject', async () => {
+      await insertTestPR(env, { id: 1001 });
+      await env.DB.prepare('UPDATE pull_requests SET consensus_hardening = 3 WHERE id = ?').bind(1001).run();
+
+      const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 1001, consensus_accept: 0, consensus_modify: 0, consensus_reject: 0, consensus_hardening: 3 }),
+      ]));
+    });
     it('returns empty array on fresh DB', async () => {
       const res = await SELF.fetch(new Request('http://localhost/api/leaderboard/prs'));
 

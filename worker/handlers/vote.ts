@@ -53,8 +53,8 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   const decision = typeof body['decision'] === 'string' ? body['decision'].toLowerCase() : null;
 
   if (!prId || !Number.isInteger(prId) || prId < 1) return jsonErr('pr_id must be a positive integer', 400, request);
-  if (!decision || !['accept', 'modify', 'reject', 'duplicate'].includes(decision)) {
-    return jsonErr('decision must be accept, modify, reject, or duplicate', 400, request);
+  if (!decision || !['accept', 'modify', 'hardening', 'reject', 'duplicate'].includes(decision)) {
+    return jsonErr('decision must be accept, modify, hardening, reject, or duplicate', 400, request);
   }
 
   const confidence     = typeof body['confidence'] === 'string' ? body['confidence'].trim() : '';
@@ -136,7 +136,10 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   }
 
   // 7. Build OASIS comment body matching comment_templates.md
-  const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : decision === 'reject' ? 'Reject' : 'Duplicate';
+  const decisionLabel = decision === 'accept' ? 'Accept'
+    : decision === 'modify' ? 'Modify'
+      : decision === 'hardening' ? 'Hardening'
+        : decision === 'reject' ? 'Reject' : 'Duplicate';
    let commentBody: string;
   if (decision === 'duplicate') {
     commentBody = [
@@ -168,7 +171,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       `| Decision | ${decisionLabel} |`,
       `| Confidence | ${confidence} |`,
       `| Summary | ${summary || '—'} |`,
-      `| Next step | ${nextStep || '—'} |`,
+      ...(decision === 'hardening' ? [] : [`| Next step | ${nextStep || '—'} |`]),
     ].join('\n');
   }
 
@@ -203,7 +206,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 9. Write to D1 — all writes non-fatal individually so partial success is logged
   const now = new Date().toISOString();
-  const decisionKey = decision as 'accept' | 'modify' | 'reject' | 'duplicate';
+  const decisionKey = decision as 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate';
 
   // Upsert pr_participants
   try {
@@ -238,9 +241,11 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       ? 'consensus_accept'
       : decisionKey === 'modify'
         ? 'consensus_modify'
-        : decisionKey === 'reject'
-          ? 'consensus_reject'
-          : 'consensus_duplicate';
+        : decisionKey === 'hardening'
+          ? 'consensus_hardening'
+          : decisionKey === 'reject'
+            ? 'consensus_reject'
+            : 'consensus_duplicate';
 
     // Atomically increment consensus + participant count via subquery (avoids TOCTOU race)
     // For duplicate votes, also check if consensus has been reached and set duplicate_of if needed
@@ -257,16 +262,17 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
     // For duplicate votes: check if consensus has been reached
     if (decisionKey === 'duplicate') {
       const counts = await env.DB.prepare(
-        `SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate
+        `SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate, consensus_hardening
          FROM pull_requests WHERE id = ?`,
       ).bind(pr.id).first<{
         consensus_accept: number;
         consensus_modify: number;
         consensus_reject: number;
         consensus_duplicate: number;
+        consensus_hardening: number;
       }>();
 
-      if (counts && counts.consensus_duplicate > Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject)) {
+      if (counts && counts.consensus_duplicate > Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject, counts.consensus_hardening)) {
         // Consensus reached on duplicate — find the most-cited parent PR among duplicate votes
         const parentCounts = await env.DB.prepare(
           `SELECT parent_pr_id, COUNT(*) as vote_count

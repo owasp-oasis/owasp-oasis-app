@@ -115,7 +115,7 @@ export async function ghFetchAll<T = unknown>(path: string, token: string): Prom
 }
 
 /* ─── PARSERS ────────────────────────────────────────────────── */
-export function parseDecision(body: string | null): 'accept' | 'modify' | 'reject' | 'duplicate' | null {
+export function parseDecision(body: string | null): 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate' | null {
   if (!body) return null;
   const lower = body.toLowerCase();
   if (!lower.includes('validation summary:') && !lower.includes('rejection summary:') && !lower.includes('duplicate report:')) return null;
@@ -127,6 +127,7 @@ export function parseDecision(body: string | null): 'accept' | 'modify' | 'rejec
       if (l.includes('decision')) {
         if (l.includes('accept')) return 'accept';
         if (l.includes('modify')) return 'modify';
+        if (l.includes('hardening')) return 'hardening';
         if (l.includes('reject')) return 'reject';
       }
     }

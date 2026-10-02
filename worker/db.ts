@@ -177,6 +177,7 @@ export async function upsertPR(
   consensusAccept: number,
   consensusModify: number,
   consensusReject: number,
+  consensusHardening: number,
   mergedUpstream: number,
   detectionTool: string | null,
   syncStart: string,
@@ -192,14 +193,14 @@ export async function upsertPR(
     INSERT OR REPLACE INTO pull_requests
       (id, repo_id, repo_name, number, title, state, author, html_url, comment_count,
        oasis_comment_count, non_oasis_comment_count,
-       participants, consensus_accept, consensus_modify, consensus_reject,
+       participants, consensus_accept, consensus_modify, consensus_reject, consensus_hardening,
        duplicate_of, closed_as_duplicate, merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     pr.id, repoId, repoName, pr.number, pr.title, state,
     pr.user?.login ?? null, pr.html_url, commentCount,
     oasisCommentCount, nonOasisCommentCount,
-    oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
+    oasisParticipantCount, consensusAccept, consensusModify, consensusReject, consensusHardening,
     existing?.duplicate_of ?? null, existing?.closed_as_duplicate ?? 0,
     mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
     pr.created_at, pr.updated_at, detectionTool, syncStart,
@@ -427,17 +428,18 @@ export async function rebuildDuplicates(
 
     // Get duplicate vote counts
     const counts = await db.prepare(`
-      SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate
+      SELECT consensus_accept, consensus_modify, consensus_reject, consensus_duplicate, consensus_hardening
       FROM pull_requests WHERE id = ?
     `).bind(pr.id).first<{
       consensus_accept: number;
       consensus_modify: number;
       consensus_reject: number;
       consensus_duplicate: number;
+      consensus_hardening: number;
     }>();
 
     // If consensus not reached on duplicate, skip
-    if (!counts || counts.consensus_duplicate <= Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject)) {
+    if (!counts || counts.consensus_duplicate <= Math.max(counts.consensus_accept, counts.consensus_modify, counts.consensus_reject, counts.consensus_hardening)) {
       // Clear duplicate_of if consensus lost
       await db.prepare('UPDATE pull_requests SET duplicate_of = NULL WHERE id = ?').bind(pr.id).run();
       continue;

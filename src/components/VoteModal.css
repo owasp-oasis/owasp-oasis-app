@@ -108,6 +108,13 @@
   letter-spacing: 0.04em;
 }
 
+.vm-hint {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .vm-required {
   color: #e53e3e;
   margin-left: 2px;
@@ -155,6 +162,15 @@
   background: #fef9c3;
   border-color: #b8860b;
   color: #713f12;
+}
+
+/* Hardening */
+.vm-decision-btn--hardening { color: #6d28d9; }
+.vm-decision-btn--hardening:hover { background: #f5f3ff; border-color: #6d28d9; }
+.vm-decision-btn--hardening.vm-decision-btn--active {
+  background: #ede9fe;
+  border-color: #6d28d9;
+  color: #4c1d95;
 }
 
 /* Reject */
@@ -296,6 +312,8 @@
 .vm-btn-submit--accept:hover:not(:disabled) { background: #15803d; }
 .vm-btn-submit--modify { background: #d97706; }
 .vm-btn-submit--modify:hover:not(:disabled) { background: #b45309; }
+.vm-btn-submit--hardening { background: #6d28d9; }
+.vm-btn-submit--hardening:hover:not(:disabled) { background: #5b21b6; }
 .vm-btn-submit--reject { background: #dc2626; }
 .vm-btn-submit--reject:hover:not(:disabled) { background: #b91c1c; }
 .vm-btn-submit--duplicate { background: #7c3aed; }

@@ -51,7 +51,8 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
            (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_accept,
            (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_modify,
            (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_reject,
-           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate
+           (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate,
+           (SELECT COALESCE(SUM(p.consensus_hardening), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_hardening
     FROM repos r
     WHERE r.active = 1 AND EXISTS (
       SELECT 1 FROM pull_requests current_pr
@@ -88,13 +89,14 @@ export async function handleRepoDetail(env: Env, req: Request, repoId: number): 
              (SELECT COALESCE(SUM(p.consensus_accept), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_accept,
              (SELECT COALESCE(SUM(p.consensus_modify), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_modify,
              (SELECT COALESCE(SUM(p.consensus_reject), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_reject,
-             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate
+             (SELECT COALESCE(SUM(p.consensus_duplicate), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_duplicate,
+             (SELECT COALESCE(SUM(p.consensus_hardening), 0) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_hardening
       FROM repos r WHERE r.id = ? AND r.active = 1
     `).bind(repoId).first<Record<string, unknown>>(),
     env.DB.prepare(`
       SELECT id, number, title, state, author, html_url,
              comment_count, oasis_comment_count, non_oasis_comment_count,
-             participants, consensus_accept, consensus_modify, consensus_reject,
+             participants, consensus_accept, consensus_modify, consensus_reject, consensus_hardening,
              merged_upstream, updated_at
       FROM pull_requests WHERE repo_id = ? AND deleted = 0
       ORDER BY updated_at DESC
@@ -114,7 +116,8 @@ export async function handleRepoDetail(env: Env, req: Request, repoId: number): 
            COUNT(*) AS comment_count,
            SUM(CASE WHEN p.decision='accept' THEN 1 ELSE 0 END) AS accepts,
            SUM(CASE WHEN p.decision='modify' THEN 1 ELSE 0 END) AS modifies,
-           SUM(CASE WHEN p.decision='reject' THEN 1 ELSE 0 END) AS rejects
+           SUM(CASE WHEN p.decision='reject' THEN 1 ELSE 0 END) AS rejects,
+           SUM(CASE WHEN p.decision='hardening' THEN 1 ELSE 0 END) AS hardenings
     FROM pr_comments p
     JOIN pull_requests pr ON pr.id = p.pr_id
     LEFT JOIN contributors c ON c.login = p.login
@@ -136,7 +139,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
   const { sort, dir, q } = parseQuery(url);
   const VALID = new Set(['repo_name','number','title','state','comment_count',
     'oasis_comment_count','non_oasis_comment_count','participants',
-    'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
+    'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','consensus_hardening','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const rows = await env.DB.prepare(`
     SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url,
@@ -144,7 +147,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,
            participants,
-           consensus_accept, consensus_modify, consensus_reject, consensus_duplicate,
+           consensus_accept, consensus_modify, consensus_reject, consensus_duplicate, consensus_hardening,
            duplicate_of, closed_as_duplicate,
            merged_upstream, merged_at, created_at, updated_at
     FROM pull_requests p JOIN repos r ON r.id = p.repo_id
@@ -272,7 +275,7 @@ export async function handleContributorDetail(env: Env, req: Request, login: str
     pr_number: number;
     repo_name: string;
     comment_login: string;
-    decision: 'accept' | 'modify' | 'reject' | null;
+    decision: 'accept' | 'modify' | 'hardening' | 'reject' | 'duplicate' | null;
     commented_at: string;
     pr_created_at: string;
     pr_title: string;
@@ -408,7 +411,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
            COUNT(DISTINCT repo_id) AS projects_worked,
            SUM(COALESCE(oasis_comment_count, 0)) AS total_comments,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
-           SUM(consensus_reject) AS total_reject
+           SUM(consensus_reject) AS total_reject, SUM(consensus_hardening) AS total_hardening
     FROM pull_requests WHERE author IS NOT NULL AND deleted = 0 GROUP BY author ORDER BY total_prs DESC
   `).all<{
     author: string;
@@ -419,12 +422,13 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
     total_accept: number | null;
     total_modify: number | null;
     total_reject: number | null;
+    total_hardening: number | null;
   }>();
 
   const fixToolMap = new Map<string, {
     login: string; name: string; total_prs: number;
     accepted_upstream: number; projects_worked: number; interactions: number;
-    total_accept: number; total_modify: number; total_reject: number;
+    total_accept: number; total_modify: number; total_reject: number; total_hardening: number;
   }>();
 
   for (const r of fixRows.results) {
@@ -439,12 +443,14 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       existing.total_accept      += r.total_accept ?? 0;
       existing.total_modify      += r.total_modify ?? 0;
       existing.total_reject      += r.total_reject ?? 0;
+      existing.total_hardening   += r.total_hardening ?? 0;
     } else {
       fixToolMap.set(toolName, {
         login: r.author, name: toolName, total_prs: r.total_prs,
         accepted_upstream: r.accepted_upstream ?? 0, projects_worked: r.projects_worked ?? 0,
         interactions: r.total_comments ?? 0, total_accept: r.total_accept ?? 0,
         total_modify: r.total_modify ?? 0, total_reject: r.total_reject ?? 0,
+        total_hardening: r.total_hardening ?? 0,
       });
     }
   }
@@ -455,7 +461,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
            COUNT(*) AS vulnerabilities, COUNT(DISTINCT repo_id) AS projects_worked,
            SUM(merged_upstream) AS accepted_upstream,
            SUM(consensus_accept) AS total_accept, SUM(consensus_modify) AS total_modify,
-           SUM(consensus_reject) AS total_reject
+           SUM(consensus_reject) AS total_reject, SUM(consensus_hardening) AS total_hardening
     FROM (
       SELECT
         CASE
@@ -465,7 +471,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
           THEN 'Bandit'
           ELSE detection_tool
         END AS detection_tool,
-        repo_id, merged_upstream, consensus_accept, consensus_modify, consensus_reject
+        repo_id, merged_upstream, consensus_accept, consensus_modify, consensus_reject, consensus_hardening
       FROM pull_requests
       WHERE detection_tool IS NOT NULL AND deleted = 0
     ) canonical_detections
@@ -479,6 +485,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
     total_accept: number | null;
     total_modify: number | null;
     total_reject: number | null;
+    total_hardening: number | null;
   }>();
 
   // ── Validate tools: bots that post OASIS-template validation comments ──
@@ -487,7 +494,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
 
   const validateBotMap = new Map<string, {
     login: string; name: string; interactions: number;
-    projects_worked: number; total_accept: number; total_modify: number; total_reject: number;
+    projects_worked: number; total_accept: number; total_modify: number; total_reject: number; total_hardening: number;
   }>();
 
   if (validatorBotLogins.length > 0) {
@@ -500,7 +507,8 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
           COUNT(DISTINCT pr.repo_id)                                       AS projects_worked,
           SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END)         AS total_accept,
           SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END)         AS total_modify,
-          SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END)         AS total_reject
+          SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END)         AS total_reject,
+          SUM(CASE WHEN pc.decision = 'hardening' THEN 1 ELSE 0 END)      AS total_hardening
         FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id
         WHERE pc.login = ?
       `).bind(botLogin).first<{
@@ -509,6 +517,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
         total_accept: number | null;
         total_modify: number | null;
         total_reject: number | null;
+        total_hardening: number | null;
       }>();
 
       if (!botRows || botRows.total_comments === 0) continue;
@@ -520,6 +529,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
         existing.total_accept      += botRows.total_accept ?? 0;
         existing.total_modify      += botRows.total_modify ?? 0;
         existing.total_reject      += botRows.total_reject ?? 0;
+        existing.total_hardening   += botRows.total_hardening ?? 0;
       } else {
         validateBotMap.set(toolName, {
           login: botLogin, name: toolName,
@@ -528,6 +538,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
           total_accept:    botRows.total_accept  ?? 0,
           total_modify:    botRows.total_modify  ?? 0,
           total_reject:    botRows.total_reject  ?? 0,
+          total_hardening: botRows.total_hardening ?? 0,
         });
       }
     }
@@ -545,7 +556,8 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
          COUNT(DISTINCT pr.repo_id)                            AS projects_worked,
          SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
          SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
-         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject,
+         SUM(CASE WHEN pc.decision = 'hardening' THEN 1 ELSE 0 END) AS total_hardening
        FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id
        WHERE pc.login NOT IN (${botPlaceholders})`
     : `SELECT
@@ -554,7 +566,8 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
          COUNT(DISTINCT pr.repo_id)                            AS projects_worked,
          SUM(CASE WHEN pc.decision = 'accept' THEN 1 ELSE 0 END) AS total_accept,
          SUM(CASE WHEN pc.decision = 'modify' THEN 1 ELSE 0 END) AS total_modify,
-         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject
+         SUM(CASE WHEN pc.decision = 'reject' THEN 1 ELSE 0 END) AS total_reject,
+         SUM(CASE WHEN pc.decision = 'hardening' THEN 1 ELSE 0 END) AS total_hardening
        FROM pr_comments pc JOIN pull_requests pr ON pr.id = pc.pr_id`;
 
   const humanStmt = allBotLogins.length > 0
@@ -568,6 +581,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
     total_accept: number | null;
     total_modify: number | null;
     total_reject: number | null;
+    total_hardening: number | null;
   }>();
 
   // ── Assemble result list (order: detect → fix → validate) ────
@@ -581,6 +595,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       accepted_upstream: d.accepted_upstream ?? 0, projects_worked: d.projects_worked,
       interactions: null, total_accept: d.total_accept ?? 0,
       total_modify: d.total_modify ?? 0, total_reject: d.total_reject ?? 0,
+      total_hardening: d.total_hardening ?? 0,
       validator_count: null,
     });
   }
@@ -593,7 +608,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       total_prs: fix.total_prs, vulnerabilities: fix.total_prs,
       accepted_upstream: fix.accepted_upstream, projects_worked: fix.projects_worked,
       interactions: fix.interactions, total_accept: fix.total_accept,
-      total_modify: fix.total_modify, total_reject: fix.total_reject,
+      total_modify: fix.total_modify, total_reject: fix.total_reject, total_hardening: fix.total_hardening,
       validator_count: null,
     });
   }
@@ -606,7 +621,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       total_prs: null, vulnerabilities: null,
       accepted_upstream: 0, projects_worked: v.projects_worked,
       interactions: v.interactions, total_accept: v.total_accept,
-      total_modify: v.total_modify, total_reject: v.total_reject,
+      total_modify: v.total_modify, total_reject: v.total_reject, total_hardening: v.total_hardening,
       validator_count: null,
     });
   }
@@ -619,6 +634,7 @@ export async function handleTools(env: Env, req: Request, url: URL): Promise<Res
       accepted_upstream: 0, projects_worked: humanRows.projects_worked,
       interactions: humanRows.total_comments, total_accept: humanRows.total_accept ?? 0,
       total_modify: humanRows.total_modify ?? 0, total_reject: humanRows.total_reject ?? 0,
+      total_hardening: humanRows.total_hardening ?? 0,
       validator_count: humanRows.validator_count,
     });
   }

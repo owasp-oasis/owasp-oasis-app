@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
-import { runSyncOneCommentReaction, seedCommentReactionWorkItems } from '../../../worker/sync.js';
+import { rebuildReactionDerivedCounts, runSyncOneCommentReaction, seedCommentReactionWorkItems } from '../../../worker/sync.js';
 import { startBoundedLegacySync } from '../../../worker/canonicalSync.js';
 import {
   clearPRReviewProjection,
@@ -158,6 +158,23 @@ describe('bounded canonical synchronization work', () => {
       { github_login: 'legacy-reviewer', comment_id: 3006, voted_at: commentTime },
       { github_login: 'ui-reviewer', comment_id: 3005, voted_at: uiVoteTime },
     ]);
+  });
+
+  it('rebuilds Hardening consensus separately from Accept and Reject', async () => {
+    await insertTestRepo(env, { id: 108, name: 'hardening-consensus' });
+    await insertTestPR(env, { id: 2008, repo_id: 108, repo_name: 'hardening-consensus', number: 14 });
+    const now = new Date().toISOString();
+    await env.DB.prepare(`INSERT INTO pr_comments
+      (id, pr_id, repo_name, pr_number, login, decision, created_at, pr_created_at)
+      VALUES (3009, 2008, 'hardening-consensus', 14, 'reviewer', 'hardening', ?, ?)`
+    ).bind(now, now).run();
+
+    await rebuildReactionDerivedCounts(env.DB);
+
+    expect(await env.DB.prepare(`SELECT consensus_accept, consensus_modify, consensus_reject, consensus_hardening
+      FROM pull_requests WHERE id = 2008`).first()).toMatchObject({
+      consensus_accept: 0, consensus_modify: 0, consensus_reject: 0, consensus_hardening: 1,
+    });
   });
 
   it('removes current participant rows that have no review source', async () => {

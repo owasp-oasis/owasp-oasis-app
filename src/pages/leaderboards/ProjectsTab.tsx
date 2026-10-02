@@ -44,9 +44,10 @@ function LangBadge({
   )
 }
 
-function ConsensusBar({ accept, modify, reject }: { accept: number; modify: number; reject: number }) {
+function ConsensusBar({ accept, modify, reject, hardening }: { accept: number; modify: number; reject: number; hardening: number }) {
   const total = accept + modify + reject
-  if (total === 0) return <span className="no-consensus">No votes yet</span>
+  if (total === 0 && hardening === 0) return <span className="no-consensus">No votes yet</span>
+  if (total === 0) return <span className="consensus-hardening-count">{hardening} Hardening</span>
   return (
     <div className="consensus-bar" title={`Accept: ${accept} | Modify: ${modify} | Reject: ${reject}`}>
       {accept > 0 && <div className="cb-accept" style={{ flex: accept }} />}
@@ -176,11 +177,13 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                   <span className="cl-accept">✓ {repo.total_accept} Accept</span>
                   <span className="cl-modify">~ {repo.total_modify} Modify</span>
                   <span className="cl-reject">✕ {repo.total_reject} Reject</span>
+                  <span className="consensus-hardening-count">🛡 {repo.total_hardening} Hardening</span>
                 </button>
                 <ConsensusBar
                   accept={repo.total_accept}
                   modify={repo.total_modify}
                   reject={repo.total_reject}
+                  hardening={repo.total_hardening}
                 />
               </div>
             </button>

@@ -323,6 +323,7 @@ INSERT OR IGNORE INTO pr_comments (id, pr_id, repo_name, pr_number, login, decis
   (110019, 10010, 'owasp-testing-guide', 10, 'bob-reviewer',    'accept',    '2026-09-06T10:00:00.000Z', '2026-09-05T08:00:00.000Z'),
   (110020, 10010, 'owasp-testing-guide', 10, 'carol-security',  'modify',    '2026-09-07T11:00:00.000Z', '2026-09-05T08:00:00.000Z'),
   (110021, 10010, 'owasp-testing-guide', 10, 'dave-coder',      'modify',    '2026-09-08T12:00:00.000Z', '2026-09-05T08:00:00.000Z'),
+  (110022, 10010, 'owasp-testing-guide', 10, 'local-hardening-reviewer', 'hardening', '2026-09-22T10:00:00.000Z', '2026-09-05T08:00:00.000Z'),
   -- owasp-wstg PR 1
   (120001, 20001, 'owasp-wstg', 1,  'alice-dev',       'accept',    '2026-08-06T10:00:00.000Z', '2026-08-05T09:00:00.000Z'),
   (120002, 20001, 'owasp-wstg', 1,  'frank-analyst',   'accept',    '2026-08-07T11:00:00.000Z', '2026-08-05T09:00:00.000Z'),
@@ -369,6 +370,28 @@ INSERT OR IGNORE INTO pr_comments (id, pr_id, repo_name, pr_number, login, decis
   (150002, 50001, 'owasp-mstg', 1, 'frank-analyst',  'modify',      '2026-08-22T11:00:00.000Z', '2026-08-20T09:00:00.000Z'),
   -- owasp-mstg PR 2
   (150003, 50002, 'owasp-mstg', 2, 'henry-hacker',   'accept',      '2026-09-02T10:00:00.000Z', '2026-09-01T10:00:00.000Z');
+
+-- Local-only Markdown payload for the seeded Hardening comment shown when the
+-- development preview cannot reach GitHub. This table is not part of schema.sql.
+CREATE TABLE IF NOT EXISTS dev_preview_validation_comments (
+  id INTEGER PRIMARY KEY,
+  pr_id INTEGER NOT NULL,
+  login TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT OR REPLACE INTO dev_preview_validation_comments (id, pr_id, login, body, created_at)
+VALUES (
+  110022,
+  10010,
+  'local-hardening-reviewer',
+  'Validation summary:' || char(10) || char(10) ||
+  '| | |' || char(10) || '| :-- | :-- |' || char(10) ||
+  '| Decision | Hardening |' || char(10) ||
+  '| Confidence | Medium |' || char(10) ||
+  '| Summary | Modernizing cryptographic guidance strengthens safer defaults as a worthwhile security improvement; this review does not claim that the existing approach is a demonstrated vulnerability. |',
+  '2026-09-22T10:00:00.000Z'
+);
 
 -- ── Comment reactions (17) ─────────────────────────────────────────────────────
 INSERT OR IGNORE INTO comment_reactions (comment_id, reactor, content, is_positive) VALUES
@@ -516,6 +539,7 @@ INSERT OR IGNORE INTO user_votes (github_login, pr_id, repo_name, pr_number, dec
   ('bob-reviewer',    10010,'owasp-testing-guide',10, 'accept',   110019,'2026-09-06T10:00:00.000Z'),
   ('carol-security',  10010,'owasp-testing-guide',10, 'modify',   110020,'2026-09-07T11:00:00.000Z'),
   ('dave-coder',      10010,'owasp-testing-guide',10, 'modify',   110021,'2026-09-08T12:00:00.000Z'),
+  ('local-hardening-reviewer', 10010,'owasp-testing-guide',10, 'hardening',110022,'2026-09-22T10:00:00.000Z'),
   ('alice-dev',       20001,'owasp-wstg',1, 'accept',  120001,'2026-08-06T10:00:00.000Z'),
   ('frank-analyst',   20001,'owasp-wstg',1, 'accept',  120002,'2026-08-07T11:00:00.000Z'),
   ('henry-hacker',    20001,'owasp-wstg',1, 'modify',  120003,'2026-08-08T12:00:00.000Z'),
@@ -546,6 +570,11 @@ INSERT OR IGNORE INTO user_votes (github_login, pr_id, repo_name, pr_number, dec
   ('alice-dev',       50001,'owasp-mstg',1, 'accept',  150001,'2026-08-21T10:00:00.000Z'),
   ('frank-analyst',   50001,'owasp-mstg',1, 'modify',  150002,'2026-08-22T11:00:00.000Z'),
   ('henry-hacker',    50002,'owasp-mstg',2, 'accept',  150003,'2026-09-02T10:00:00.000Z');
+
+UPDATE pull_requests
+   SET consensus_hardening = (SELECT COUNT(*) FROM user_votes WHERE pr_id = 10010 AND decision = 'hardening'),
+       participants = (SELECT COUNT(DISTINCT github_login) FROM user_votes WHERE pr_id = 10010)
+ WHERE id = 10010;
 
 -- ── Validation requests (open PRs) ─────────────────────────────────────────────
 INSERT OR IGNORE INTO validation_requests (pr_id, requested_at, request_source, status, badge_eligible, created_at, updated_at) VALUES
