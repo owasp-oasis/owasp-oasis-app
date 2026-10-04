@@ -5,41 +5,68 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
+concurrency:
+  group: registrations-sheet-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     name: Export registrations to Google Sheets
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Fetch registrations from Cloudflare Worker
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
         run: |
+          set -euo pipefail
           echo "Fetching registrations..."
-          curl -s \
-            -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
-            "https://www.owasp-oasis.org/api/admin/registrations" \
-            -o /tmp/registrations.json
+          for attempt in 1 2 3; do
+            if curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -H "X-Admin-Secret: ${ADMIN_SECRET}" \
+              "https://www.owasp-oasis.org/api/admin/registrations" \
+              -o /tmp/registrations.json; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Registration fetch failed after ${attempt} attempts" >&2
+              exit 1
+            fi
+            echo "Registration fetch failed; retrying (attempt $((attempt + 1))/3)..." >&2
+            sleep $((attempt * 2))
+          done
 
-          echo "Response:"
-          cat /tmp/registrations.json
-
-          COUNT=$(cat /tmp/registrations.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('registrations', [])))")
+          jq -e '(.registrations | type == "array") and (.registrations | length > 0)' \
+            /tmp/registrations.json >/dev/null
+          COUNT=$(jq '.registrations | length' /tmp/registrations.json)
           echo "Total registrations: $COUNT"
 
       - name: Push to Google Sheets
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+          GOOGLE_SHEETS_WEBHOOK: ${{ secrets.GOOGLE_SHEETS_WEBHOOK }}
         run: |
+          set -euo pipefail
           echo "Syncing to Google Sheets..."
-          RESPONSE=$(curl -s -o /tmp/sheets_response.json -w "%{http_code}" \
+          set +e
+          RESPONSE=$(curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 10 --max-time 30 \
+            -o /tmp/sheets_response.json -w "%{http_code}" \
             -H "Content-Type: application/json" \
             -d @/tmp/registrations.json \
-            -L \
-            --max-time 30 \
-            "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}?secret=${{ secrets.ADMIN_SECRET }}")
+            -L "${GOOGLE_SHEETS_WEBHOOK}?secret=${ADMIN_SECRET}")
+          CURL_STATUS=$?
+          set -e
 
           echo "HTTP Status: $RESPONSE"
-          cat /tmp/sheets_response.json
-
-          if [ "$RESPONSE" != "200" ]; then
-            echo "❌ Sync failed with HTTP $RESPONSE"
+          if [ "$CURL_STATUS" -ne 0 ] || [ "$RESPONSE" != "200" ] || ! jq -e --argjson count "$COUNT" \
+            '.ok == true and .count == $count' /tmp/sheets_response.json >/dev/null; then
+            echo "❌ Sync failed (curl status $CURL_STATUS, HTTP $RESPONSE)"
+            jq -c 'with_entries(select(.key == "ok" or .key == "count" or .key == "error"))' \
+              /tmp/sheets_response.json 2>/dev/null || true
             exit 1
           fi
           echo "✅ Sync successful"

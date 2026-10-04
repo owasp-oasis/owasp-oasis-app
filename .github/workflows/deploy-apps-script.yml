@@ -1,0 +1,36 @@
+name: Deploy Google Sheets Apps Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/**'
+      - 'scripts/check-sheets-script.mjs'
+      - 'scripts/deploy-apps-script.mjs'
+      - '.github/workflows/deploy-apps-script.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Publish source-controlled Apps Script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOOGLE_APPS_SCRIPT_ID: ${{ vars.GOOGLE_APPS_SCRIPT_ID }}
+      GOOGLE_APPS_SCRIPT_DEPLOYMENT_ID: ${{ vars.GOOGLE_APPS_SCRIPT_DEPLOYMENT_ID }}
+      GOOGLE_APPS_SCRIPT_CLIENT_ID: ${{ secrets.GOOGLE_APPS_SCRIPT_CLIENT_ID }}
+      GOOGLE_APPS_SCRIPT_CLIENT_SECRET: ${{ secrets.GOOGLE_APPS_SCRIPT_CLIENT_SECRET }}
+      GOOGLE_APPS_SCRIPT_REFRESH_TOKEN: ${{ secrets.GOOGLE_APPS_SCRIPT_REFRESH_TOKEN }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate Apps Script source
+        run: npm run check:sheets-script
+
+      - name: Update Apps Script web app
+        run: node scripts/deploy-apps-script.mjs
