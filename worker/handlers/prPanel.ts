@@ -261,8 +261,7 @@ export async function handlePRCommentCreate(request: Request, env: Env, id: numb
 
   if (ghRes.status === 403) return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
   if (!ghRes.ok) {
-    const errorText = await ghRes.text().catch(() => 'unknown error');
-    return jsonErr(`GitHub API error ${ghRes.status}: ${errorText}`, 502, request);
+    return jsonErr('Failed to post comment to GitHub', 502, request);
   }
 
   const ghComment = await ghRes.json() as GHComment;
