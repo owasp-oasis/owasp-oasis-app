@@ -1,0 +1,6 @@
+import React from 'react';
+const M = {"needs-review":["var(--status-needs-bg)","var(--status-needs-fg)","Needs Review"],"trusted":["var(--status-trusted-bg)","var(--status-trusted-fg)","Trusted"],"maintainer-review":["var(--blue-soft)","var(--blue-dark)","Maintainer Review"],"changes-requested":["var(--sev-high-bg)","var(--sev-high-fg)","Changes Requested"],"maintainer-accepted":["var(--green-soft)","var(--green-ink)","Maintainer Accepted"],"maintainer-declined":["var(--gray-200)","var(--gray-600)","Maintainer Declined"],"submitted-upstream":["var(--blue-soft)","var(--blue-dark)","Submitted Upstream"],"merged-upstream":["var(--status-accepted-bg)","var(--status-accepted-fg)","Merged Upstream"],"closed-without-merge":["var(--gray-200)","var(--gray-600)","Closed Without Merge"]};
+export function LifecycleChip({ stage, label }) {
+  const [bg, fg, text] = M[stage];
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 100, background: bg, color: fg, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label || text}</span>;
+}

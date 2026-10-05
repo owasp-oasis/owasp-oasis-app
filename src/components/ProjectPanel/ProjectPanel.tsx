@@ -28,6 +28,7 @@ interface Repo {
   total_accept: number;
   total_modify: number;
   total_reject: number;
+  accepted_outcomes?: number;
 }
 
 interface PR {

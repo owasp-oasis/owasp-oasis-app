@@ -110,3 +110,39 @@
 .sync-parity-differences { margin-top: 1rem; }
 .sync-parity-differences > summary { cursor: pointer; font-weight: 700; }
 .sync-parity-differences .sync-history-table { margin-top: .75rem; }
+
+/* Workspace v3 keeps sync status focused on health and recent history. The
+   detailed operations console remains available in the component for the run
+   detail route and can be restored when that workflow gets a v3 treatment. */
+.sync-status-page > .sync-status-hero { display: none; }
+.sync-status-page:has(.sync-v3-summary) .sync-page-actions { justify-content: flex-end; margin-bottom: 16px; }
+.sync-status-page:has(.sync-v3-summary) .sync-page-actions .sync-back-link,
+.sync-status-page:has(.sync-v3-summary) .sync-page-actions > button { display: none; }
+.sync-legacy-content { display: none; }
+.sync-v3-summary { max-width: 920px; margin: 0 auto; }
+.sync-v3-health { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); box-shadow: 0 8px 28px rgba(11, 79, 138, .07); }
+.sync-v3-health-dot { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; background: var(--gray-400); }
+.sync-v3-health-dot--succeeded { background: var(--green); }
+.sync-v3-health-dot--queued, .sync-v3-health-dot--running { background: var(--blue); }
+.sync-v3-health-dot--failed { background: #d64545; }
+.sync-v3-health h2 { margin: 0; font: 700 16px/1.2 var(--sans); }
+.sync-v3-health p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.sync-v3-health button { margin-left: auto; border: 1px solid var(--blue); border-radius: 7px; padding: 8px 13px; background: var(--blue); color: var(--white); font: 700 12px var(--sans); cursor: pointer; }
+.sync-v3-health button:disabled { cursor: wait; opacity: .6; }
+.sync-v3-history { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); overflow: hidden; }
+.sync-v3-history-head, .sync-v3-history-row { display: grid; grid-template-columns: 110px minmax(180px, 1fr) 150px 90px; align-items: center; gap: 14px; padding: 11px 16px; }
+.sync-v3-history-head { background: var(--gray-100); color: var(--muted); font: 700 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.sync-v3-history-row { border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 13px; }
+.sync-v3-history-row:hover { background: var(--gray-100); text-decoration: none; }
+.sync-v3-history-row time, .sync-v3-history-row > span:last-child { color: var(--muted); }
+.sync-v3-result { font: 700 10px var(--mono); letter-spacing: .04em; }
+.sync-v3-result--succeeded { color: var(--green); }
+.sync-v3-result--failed, .sync-v3-result--interrupted { color: #d64545; }
+.sync-v3-result--partial, .sync-v3-result--deferred, .sync-v3-result--skipped { color: #a56a00; }
+
+@media (max-width: 680px) {
+  .sync-v3-health { align-items: flex-start; flex-wrap: wrap; }
+  .sync-v3-health button { margin-left: 24px; }
+  .sync-v3-history-head, .sync-v3-history-row { grid-template-columns: 90px minmax(120px, 1fr) 92px; gap: 8px; padding: 10px 12px; }
+  .sync-v3-history-head span:last-child, .sync-v3-history-row > span:last-child { display: none; }
+}

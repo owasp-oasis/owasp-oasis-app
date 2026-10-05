@@ -1,207 +1,38 @@
-import { useState } from 'react'
-import SortableTable from '../../components/SortableTable'
-import type { Column } from '../../components/SortableTable'
-import ColHeader from '../../components/ColHeader'
-import ContributorPanel from '../../components/ContributorPanel/ContributorPanel'
+import { useEffect, useState } from 'react'
 import ContributorAvatar from '../../components/ContributorAvatar'
+import { useAuth } from '../../context/AuthContext'
+import { useWorkspaceData } from './useWorkspaceData'
 
-interface Contributor {
-  login: string
-  avatar_url: string | null
-  prs_worked: number
-  total_interactions: number
-  non_oasis_interactions: number
-  reactions_received: number
-  reactions_given: number
-  accepts: number
-  modifies: number
-  rejects: number
-  base_reputation: number
-  modified_reputation: number
-  rank_90d: number | null
-  rank_90d_oldest_activity: string | null
-  avg_per_pr: number
-}
+interface Contributor { login: string; avatar_url: string | null; prs_worked: number; accepts: number; modifies: number; rejects: number; base_reputation: number; modified_reputation: number; rank_90d: number | null }
+interface Detail extends Contributor { comment_score: number; peer_score: number; reaction_score: number; trust_score: number }
+interface DetailResponse { contributor?: Detail; public_badges?: Array<{ team_name: string; badge_key: string; qualifying_count?: number }> }
+const initials = (login: string) => login.slice(0, 2).toUpperCase()
 
-function fmtRep(v: unknown): string {
-  const n = Math.floor(Number(v));
-  if (n >= 10_000_000) return `${Math.floor(n / 1_000_000)}m`;
-  if (n >= 10_000)     return `${Math.floor(n / 1_000)}k`;
-  return String(n);
-}
-
-const columns: Column<Contributor>[] = [
-  {
-    key: 'login',
-    label: 'Contributor',
-    render: (v, row) => (
-      <div className="contributor-cell">
-        <ContributorAvatar
-          login={String(v)}
-          src={row.avatar_url}
-          className="contributor-avatar"
-          size={28}
-        />
-        <span className="contributor-login">{String(v)}</span>
-      </div>
-    ),
-  },
-  {
-    key: 'prs_worked',
-    label: <ColHeader icon="📋" label="PRs worked on" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-  },
-  {
-    key: 'accepts',
-    label: <ColHeader icon="✅" label="Accept votes" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="consensus-accept">{String(v)}</span>,
-  },
-  {
-    key: 'modifies',
-    label: <ColHeader icon="⚠️" label="Modify votes" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="consensus-modify">{String(v)}</span>,
-  },
-  {
-    key: 'rejects',
-    label: <ColHeader icon="👎" label="Reject votes" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="consensus-reject">{String(v)}</span>,
-  },
-  // ── Scoring columns ──────────────────────────────────────────
-  {
-    key: 'base_reputation',
-    label: <ColHeader icon="⚙️" label="Base reputation (comment + peer + reaction + trust)" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="col-banded">{fmtRep(v)}</span>,
-  },
-  {
-    key: 'modified_reputation',
-    label: <ColHeader icon="🏆" label="Modified reputation (base × bonus multiplier)" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="reputation-score col-banded">{fmtRep(v)}</span>,
-  },
-  {
-    key: 'rank_90d',
-    label: <ColHeader icon="📅" label="90-Day rank" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) =>
-      v == null
-        ? <span className="col-banded muted">—</span>
-        : <span className="col-banded">#{String(v)}</span>,
-  },
-  // ── Activity columns ─────────────────────────────────────────
-  {
-    key: 'total_interactions',
-    label: <ColHeader icon="🗳" label="OASIS comment count" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="col-banded">{String(v)}</span>,
-  },
-  {
-    key: 'reactions_received',
-    label: <ColHeader icon="⭐" label="Reactions received on your comments" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="col-banded">{String(v)}</span>,
-  },
-  {
-    key: 'reactions_given',
-    label: <ColHeader icon="👍" label="Reactions you gave on others' comments" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="col-banded">{String(v)}</span>,
-  },
-  {
-    key: 'avg_per_pr',
-    label: <ColHeader icon="📊" label="Average interactions per PR" />,
-    sortable: true,
-    searchable: false,
-    align: 'right',
-    render: (v) => <span className="col-banded">{Number(v).toFixed(1)}</span>,
-  },
-]
-
-interface Props { data: Contributor[]; loading: boolean }
-
-export default function ContributorsTab({ data, loading }: Props) {
-  const [showFormula, setShowFormula] = useState(false)
-  const [activeLogin, setActiveLogin] = useState<string | null>(null)
-
+export default function ContributorsTab({ data, loading }: { data: Contributor[]; loading: boolean }) {
+  const { user } = useAuth()
+  const [activeLogin, setActiveLogin] = useState<string | null>(data[0]?.login ?? null)
+  useEffect(() => {
+    if (!activeLogin && data[0]?.login) setActiveLogin(data[0].login)
+  }, [activeLogin, data])
+  const detail = useWorkspaceData<DetailResponse>(activeLogin ? '/api/contributors/' + encodeURIComponent(activeLogin) : null, {})
   if (loading) return <div className="tab-loading">Loading contributors…</div>
-
-  return (
-    <>
-      {/* Reputation info bar */}
-      <div className="rep-info-bar">
-        <span className="rep-info-summary">
-          <strong>Modified Reputation</strong> = (comment + peer + reaction + trust) × bonus multiplier.
-          Click any row to see full score breakdown.
-        </span>
-        <button
-          className="rep-info-toggle"
-          onClick={() => setShowFormula(f => !f)}
-          aria-expanded={showFormula}
-        >
-          ⓘ {showFormula ? 'Hide formula' : 'Show formula'}
-        </button>
-      </div>
-
-      {showFormula && (
-        <div className="rep-formula-card">
-          <h4>Reputation Formula</h4>
-          <code className="rep-formula">
-            base = comment_score + peer_score + reaction_score + trust_score{'\n'}
-            modified = base × (1 + early_mover + early_bird + influencer bonuses)
-          </code>
-          <ul>
-            <li><strong>comment_score</strong> — 1 point per OASIS-template comment posted</li>
-            <li><strong>peer_score</strong> — reactions received on your comments: +0.35 (positive), −0.25 (negative)</li>
-            <li><strong>reaction_score</strong> — reactions you gave on others' comments: min(count, 5) × 0.25</li>
-            <li><strong>trust_score</strong> — 10 × PRs where you voted Accept and the PR merged upstream</li>
-            <li><strong>early_mover_bonus</strong> — up to +0.20 for being among the first to comment on a PR</li>
-            <li><strong>early_bird_bonus</strong> — +0.25 if commented within 24h of PR creation; +0.10 within 96h</li>
-            <li><strong>influencer_bonus</strong> — +0.10 most total reactions / +0.20 most positive / −0.50 most negative on a PR</li>
-          </ul>
-          <p className="rep-formula-note">Click any row to open the full score breakdown panel.</p>
-        </div>
-      )}
-
-      <SortableTable
-        columns={columns}
-        data={data}
-        defaultSort="modified_reputation"
-        defaultDir="desc"
-        rowKey="login"
-        searchPlaceholder="Filter by username…"
-        emptyMessage="No contributor data yet. Sync will populate this shortly."
-        onRowClick={(row) => setActiveLogin(row.login)}
-        activeRowKey={activeLogin ?? undefined}
-      />
-
-      {/* Contributor detail slide-out panel */}
-      <ContributorPanel
-        login={activeLogin}
-        onClose={() => setActiveLogin(null)}
-      />
-    </>
-  )
+  if (!data.length) return <div className="tab-empty">No validator data yet. Sync will populate this shortly.</div>
+  const maxRep = Math.max(...data.map(row => Number(row.modified_reputation) || 0), 1)
+  const selected = detail.data.contributor ?? data.find(row => row.login === activeLogin) ?? data[0]
+  return <div className="validator-layout">
+    <section className="validator-table" aria-label="Validators">
+      <div className="validator-table-head"><span>Rank</span><span>Validator</span><span>Reputation</span><span>90-day</span><span>Fixes</span><span>A / M / R</span></div>
+      {data.map((row, index) => <button type="button" key={row.login} className={'validator-row' + (row.login === selected.login ? ' is-selected' : '')} onClick={() => setActiveLogin(row.login)}>
+        <span className="validator-rank">#{index + 1}</span><span className="validator-person"><ContributorAvatar login={row.login} src={row.avatar_url} size={28} /><strong>{row.login}</strong>{user?.login === row.login && <small>YOU</small>}</span>
+        <span className="validator-reputation"><b>{Number(row.modified_reputation).toFixed(1)}</b><i><em style={{ width: `${Math.min(100, Number(row.modified_reputation) / maxRep * 100)}%` }} /></i></span><span className="validator-mono">#{row.rank_90d ?? '—'}</span><span className="validator-mono">{row.prs_worked}</span><span className="validator-votes"><b>{row.accepts}</b> / <i>{row.modifies}</i> / <em>{row.rejects}</em></span>
+      </button>)}
+    </section>
+    <aside className="validator-profile">
+      <div className="validator-profile-head"><span className="validator-profile-avatar">{initials(selected.login)}</span><div><strong>{selected.login}</strong><small>Rank #{data.findIndex(row => row.login === selected.login) + 1} · 90-day #{selected.rank_90d ?? '—'}</small></div></div>
+      <div><span className="ws-eyebrow">Modified reputation</span><strong className="validator-score">{Number(selected.modified_reputation).toFixed(1)}</strong><small>Base {Number(selected.base_reputation).toFixed(1)} × bonus multiplier</small></div>
+      {detail.loading ? <p className="validator-muted">Loading score details…</p> : <div className="validator-parts">{[['Comment score', detail.data.contributor?.comment_score ?? 0], ['Peer score', detail.data.contributor?.peer_score ?? 0], ['Reaction score', detail.data.contributor?.reaction_score ?? 0], ['Trust score', detail.data.contributor?.trust_score ?? 0]].map(([label, value]) => <div key={String(label)}><span>{label}<b>{Number(value).toFixed(1)}</b></span><i><em style={{ width: `${Math.min(100, Number(value) / Math.max(1, Number(selected.modified_reputation)) * 100)}%` }} /></i></div>)}</div>}
+      {!!detail.data.public_badges?.length && <section className="validator-badges"><h4>Team badges</h4><small>Shared by the member and Team admin</small>{detail.data.public_badges.map((badge, index) => <div key={`${badge.team_name}-${index}`}><span>★</span><strong>{badge.team_name}<small>{badge.badge_key === 'contributor_milestone' ? `Team contributor · ${badge.qualifying_count ?? 0} attributed validations` : 'Team member'}</small></strong></div>)}</section>}
+      <p className="validator-footnote">Base = comment + peer + reaction + trust. Trust earns 10 points for each Accept vote on a fix merged upstream.</p>
+    </aside>
+  </div>
 }

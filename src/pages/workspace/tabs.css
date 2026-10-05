@@ -18,6 +18,8 @@
   line-height: 1.6;
 }
 
+.maintainer-v3{max-width:1100px;display:flex;flex-direction:column;gap:14px}.maintainer-v3>p{font-size:14px;line-height:1.6;color:var(--gray-600);max-width:70ch}.maintainer-list{background:var(--white);border:1px solid var(--line);border-radius:8px;overflow:hidden}.maintainer-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px 28px;padding:16px 20px;border-bottom:1px solid var(--gray-200)}.maintainer-row:last-child{border-bottom:0}.maintainer-person{display:flex;align-items:center;gap:12px;flex:1 1 220px;min-width:0}.maintainer-person>span{width:36px;height:36px;flex:none;border-radius:50%;background:var(--green-soft);color:var(--dec-accept-fg);display:grid;place-items:center;font-size:12px;font-weight:700}.maintainer-person div{display:flex;flex-direction:column;gap:2px;min-width:0}.maintainer-person strong{font-size:15px}.maintainer-person small{font:12px var(--mono);color:var(--blue)}.maintainer-merge{display:flex;flex-direction:column;gap:6px;flex:2 1 240px;min-width:200px}.maintainer-merge>div{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px}.maintainer-merge>div b{font-size:15px}.maintainer-merge>div>strong{font:700 13px var(--mono);color:var(--dec-accept-fg)}.maintainer-merge>i{display:flex;gap:3px;height:8px}.maintainer-merge em{flex:1;border-radius:2px;background:var(--gray-200)}.maintainer-merge em.is-merged{background:var(--green)}.maintainer-response{display:flex;flex-direction:column;gap:4px;flex:0 0 130px}.maintainer-response>span{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.maintainer-response>strong{display:flex;align-items:center;gap:7px;font-size:15px}.maintainer-response>strong>i,.maintainer-legend b{width:8px;height:8px;border-radius:50%;background:var(--green)}.maintainer-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.maintainer-legend span{display:flex;align-items:center;gap:6px}.maintainer-legend i{width:12px;height:8px;border-radius:2px;background:var(--gray-200)}.maintainer-legend i.is-merged{background:var(--green)}.maintainer-legend b{width:8px;height:8px}.maintainer-legend b.is-mid{background:#e0a800}.maintainer-legend b.is-late{background:#d64545}
+
 /* ── Consensus colors ─────────────────────────────────────────── */
 .consensus-accept { color: #1a7a2e; font-weight: 600; }
 .consensus-modify { color: #b8860b; font-weight: 600; }
@@ -566,14 +568,14 @@ tr:hover .row-chevron {
 .projects-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  gap: 16px;
 }
 
 .project-card {
   background: var(--white);
   border: 1px solid var(--gray-200);
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 8px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -594,8 +596,7 @@ tr:hover .row-chevron {
 }
 
 .project-card-name a {
-  font-size: 1.05rem;
-  font-weight: 700;
+  font:600 15px var(--mono);
   color: var(--blue-dark);
 }
 
@@ -623,9 +624,9 @@ tr:hover .row-chevron {
 }
 
 .project-card-desc {
-  font-size: 0.85rem;
+  font-size: 14px;
   color: var(--gray-600);
-  line-height: 1.5;
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -633,8 +634,9 @@ tr:hover .row-chevron {
 }
 
 .project-card-stats {
-  display: flex;
-  gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 8px;
 }
 
 .stat {
@@ -644,14 +646,14 @@ tr:hover .row-chevron {
 }
 
 .stat-value {
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: var(--blue-dark);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
   line-height: 1;
 }
 
 .stat-label {
-  font-size: 0.72rem;
+  font:10px var(--mono);
   color: var(--gray-400);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -660,15 +662,18 @@ tr:hover .row-chevron {
 .project-card-consensus {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .consensus-labels {
-  display: flex;
-  gap: 12px;
-  font-size: 0.78rem;
+  display: block;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 13px;
   font-weight: 600;
-  flex-wrap: wrap;
 }
 
 .cl-accept { color: #1a7a2e; }
@@ -692,6 +697,9 @@ tr:hover .row-chevron {
   color: var(--gray-400);
   font-style: italic;
 }
+
+/* Workspace v3 validator leaderboard */
+.validator-layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}.validator-table{flex:999 1 560px;min-width:0;background:var(--white);border:1px solid var(--line);border-radius:8px;overflow:auto}.validator-table-head,.validator-row{display:grid;grid-template-columns:48px minmax(160px,1fr) 180px 72px 72px 110px;gap:12px;align-items:center;min-width:680px}.validator-table-head{padding:10px 18px;background:var(--gray-100);border-bottom:1px solid var(--line);font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--gray-600)}.validator-row{width:100%;padding:10px 18px;border:0;border-bottom:1px solid var(--gray-200);background:var(--white);text-align:left;color:var(--ink);cursor:pointer}.validator-row:hover{background:var(--gray-100)}.validator-row.is-selected{background:var(--blue-soft)}.validator-rank,.validator-mono,.validator-votes{font:13px var(--mono)}.validator-rank{font-weight:700;color:var(--blue-dark)}.validator-person{display:flex;align-items:center;gap:10px;min-width:0}.validator-person strong{font-size:14px}.validator-person small{font:700 10px var(--mono);color:var(--blue-dark);background:var(--blue-soft);padding:1px 7px;border-radius:100px}.validator-reputation{display:flex;align-items:center;gap:8px}.validator-reputation b{font:600 13px var(--mono);width:44px}.validator-reputation i,.validator-parts i{height:5px;border-radius:3px;background:var(--gray-200);overflow:hidden;display:block;flex:1}.validator-reputation em,.validator-parts em{display:block;height:100%;background:var(--blue)}.validator-votes b{color:var(--green-dark)}.validator-votes i{color:var(--amber-dark);font-style:normal}.validator-votes em{color:var(--red);font-style:normal}.validator-profile{flex:1 1 280px;position:sticky;top:152px;display:flex;flex-direction:column;gap:16px;padding:22px;background:var(--white);border:1px solid var(--line);border-radius:8px}.validator-profile-head{display:flex;align-items:center;gap:12px}.validator-profile-head>div{display:flex;flex-direction:column;gap:2px}.validator-profile-head strong{font-size:16px}.validator-profile-head small,.validator-profile>div>small,.validator-muted{font-size:12px;color:var(--muted)}.validator-profile-avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--blue-dark);color:var(--white);font-weight:700}.validator-score{display:block;font-size:34px;line-height:1.1;margin:2px 0}.validator-parts{display:flex;flex-direction:column;gap:8px}.validator-parts>div{display:flex;flex-direction:column;gap:4px}.validator-parts>div>span{display:flex;justify-content:space-between;font-size:13px}.validator-parts b{font:600 13px var(--mono)}.validator-badges{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}.validator-badges h4{font-size:13px}.validator-badges>small{font-size:11px;color:var(--muted);margin-top:-5px}.validator-badges>div{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(13,158,82,.3);border-radius:8px;background:#f5faf7}.validator-badges>div>span{width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--green-soft);color:var(--green);font-size:13px}.validator-badges strong{display:flex;flex-direction:column;font-size:13px}.validator-badges strong small{font-size:12px;color:var(--muted);font-weight:400}.validator-footnote{font-size:12px;line-height:1.6;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 
 /* ── Tools sections ───────────────────────────────────────────── */
 .tools-section {
@@ -1064,3 +1072,8 @@ tr:hover .row-chevron {
 .stat-clickable:active {
   transform: scale(0.98);
 }
+
+/* Validator vote colors use the shared decision tokens. */
+.validator-votes b { color: var(--dec-accept-fg); }
+.validator-votes i { color: var(--dec-modify-fg); font-style: normal; }
+.validator-votes em { color: var(--dec-reject-fg); font-style: normal; }

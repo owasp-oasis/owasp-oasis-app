@@ -1,0 +1,38 @@
+:root {
+  --serif: "DM Serif Display", Georgia, serif;
+  --sans: "Geist", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", "Courier New", monospace;
+  --font: var(--sans);
+
+  /* Marketing site scale */
+  --fs-hero: clamp(38px, 4vw, 48px);         /* home headline, lh 1.08 */
+  --fs-section: clamp(34px, 4.3vw, 56px);    /* home h2, lh 1.03 */
+  --fs-page-hero: clamp(2rem, 5vw, 3rem);    /* inner page h1 */
+  --fs-lede: clamp(18px, 2vw, 21px);         /* lh 1.55 */
+  --fs-intro: 17px;
+  --fs-card-title: 19px;
+  --fs-card-body: 14.5px;
+
+  /* Application (Workspace) scale */
+  --fs-app-display: 34px;   /* screen title, serif */
+  --fs-app-hero: 28px;      /* banner headline, serif */
+  --fs-h3: 18px;
+  --fs-h4: 17px;
+  --fs-lg: 16px;
+  --fs-md: 15px;
+  --fs-body: 14px;          /* default Workspace body */
+  --fs-sm: 13px;            /* table cells, meta */
+  --fs-code: 12.5px;
+  --fs-xs: 12px;
+  --fs-label: 11px;         /* mono uppercase labels */
+  --fs-micro: 10px;         /* mono chips, stat labels */
+
+  --lh-tight: 1.1;
+  --lh-heading: 1.2;
+  --lh-snug: 1.5;
+  --lh-body: 1.7;
+
+  --tracking-eyebrow: .14em;
+  --tracking-label: .08em;
+  --tracking-badge: .04em;
+}

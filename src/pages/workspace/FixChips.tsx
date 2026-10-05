@@ -1,0 +1,4 @@
+import { finding, fixStatus, lifecycle, type CandidateFix } from './fixModel'
+import type { PanelPR } from '../../components/PRPanel/PRPanel'
+export function SeverityChip({ title }: { title: string }) { const { severity } = finding({ title }); return <span className={'ws-chip ws-severity--' + severity}>{severity === 'unknown' ? 'Severity unknown' : severity}</span> }
+export function FixChips({ pr }: { pr: PanelPR & Partial<CandidateFix> }) { const status = fixStatus(pr); const stage = lifecycle(pr); return <><SeverityChip title={pr.title} /><span className={'ws-chip ws-status--' + status.toLowerCase().replace(' ', '-')}>{status}</span>{stage && <span className={'ws-chip ws-lifecycle' + (['Closed Without Merge','Maintainer Declined'].includes(stage) ? ' is-neutral' : '')}>{stage}</span>}</> }

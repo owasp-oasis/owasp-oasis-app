@@ -169,6 +169,13 @@ export default function WorkflowTab({ prId, isAdmin }: Props) {
         )}
       </section>
 
+      {!isAdmin && (
+        <section className="prp-workflow-section prp-workflow-readonly">
+          <h3>Maintainer controls</h3>
+          <p className="prp-no-data">Approval, upstream submission, and merge status are maintainer actions. An OASIS admin must accept this candidate before an upstream pull request can be created.</p>
+        </section>
+      )}
+
       {isAdmin && (
         <section className="prp-workflow-section prp-workflow-controls">
           <h3>Maintainer controls <span>Admin-authorized for now</span></h3>

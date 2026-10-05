@@ -344,21 +344,14 @@ function shortName(filename: string): string {
 }
 
 /* ── Main component ─────────────────────────────────────────── */
-export default function ChangesTab({ prId }: Props) {
+export default function ChangesTab({ prId, diffView: defaultView = 'split' }: Props) {
   const [files, setFiles]         = useState<FileEntry[] | null>(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<string | null>(null)
 
-  // Diff view controls — managed internally, persisted to localStorage
-  const [diffView, setDiffView] = useState<DiffView>(() => {
-    try {
-      const stored = localStorage.getItem('prp-diff-view')
-      return (stored as DiffView) ?? 'split'
-    } catch {
-      return 'split'
-    }
-  })
+  // The account preference supplies the default; the current review can override it.
+  const [diffView, setDiffView] = useState<DiffView>(defaultView)
   const [charDiff, setCharDiff] = useState(() => {
     try {
       return localStorage.getItem('prp-char-diff') === 'true'

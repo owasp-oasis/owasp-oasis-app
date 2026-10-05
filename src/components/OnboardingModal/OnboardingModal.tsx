@@ -100,7 +100,7 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
 
     onClose()
     const query = params.toString()
-    navigate(`/workspace/pull-requests${query ? `?${query}` : ''}`)
+    navigate(`/workspace/fixes${query ? `?${query}` : ''}`)
   }
 
   if (!isOpen || !user) return null

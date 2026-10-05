@@ -1,3 +1,4 @@
+import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
  * React SPA served via ASSETS binding; API routes handled by worker.
@@ -43,7 +44,7 @@ import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
-import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handlePRDetails, handlePRFiles, handlePRComments, handlePRCommentCreate, handlePRReact } from './handlers/prPanel.js';
 import {
   handleCreateTeam,
   handleMyTeams,
@@ -153,6 +154,7 @@ export default {
        if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
 
        /* ── User Preferences ───────────────────────────────────────── */
+       if ((method === 'GET' || method === 'PUT') && url.pathname === '/api/preferences/workspace') return await handleWorkspacePreferences(request, env);
        if (method === 'GET'  && url.pathname === '/api/preferences/mine') return await handleGetPreferences(request, env);
        if (method === 'PUT'  && url.pathname === '/api/preferences/mine') return await handlePutPreferences(request, env);
 
@@ -189,6 +191,7 @@ export default {
         if (method === 'GET'  && action === 'details')  return await handlePRDetails(request, env, prId);
         if (method === 'GET'  && action === 'files')    return await handlePRFiles(request, env, prId);
         if (method === 'GET'  && action === 'comments') return await handlePRComments(request, env, prId);
+        if (method === 'POST' && action === 'comments') return await handlePRCommentCreate(request, env, prId);
         if (method === 'POST' && action === 'react')    return await handlePRReact(request, env, prId);
         return jsonErr('Method not allowed for this PR panel action', 405, request);
       }
