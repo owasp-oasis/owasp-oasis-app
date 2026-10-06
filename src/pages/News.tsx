@@ -37,19 +37,6 @@ const articles: Article[] = [
 
 const upcomingEvents: Event[] = [
   {
-    date: '2026-09-25',
-    day: '25–26',
-    month: 'SEP',
-    dateLabel: 'September 25–26, 2026',
-    venue: 'B-Sides Orlando',
-    kind: 'Speaking',
-    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
-    time: 'Talk time to be announced · Sep 25–26',
-    location: 'Full Sail University · Winter Park, FL',
-    details: 'Chris Holt presents the OASIS project at B-Sides Orlando.',
-    href: 'https://bsidesorlando.org/',
-  },
-  {
     date: '2026-10-08',
     day: '8',
     month: 'OCT',
