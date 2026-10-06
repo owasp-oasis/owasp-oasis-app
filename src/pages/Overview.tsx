@@ -111,23 +111,31 @@ const principles = [
 
 const roles = [
   {
-    title: 'Project Owners',
-    body: 'Set intake criteria, maintain reviewer credibility records, decide which candidates are adopted, and manage maintainer communication and escalation.',
+    title: 'Evangelists & Advocates',
+    label: 'For communicators',
+    body: 'Carry OASIS to chapters, villages, and conferences. Recruit validators and bring credible repositories into the queue.',
+    also: 'Also: chapter liaisons, ecosystem ambassadors',
     color: 'green',
   },
   {
-    title: 'Validators',
-    body: 'Review candidate fixes for real-world validity, correctness, safety, repository fit, and evidence strong enough for upstream submission.',
+    title: 'Triage & Repo Scouts',
+    label: 'For analysts',
+    body: 'Screen incoming candidates, flag duplicates, and target repositories where acceptance is plausible.',
+    also: 'Also: intake curators, severity taggers',
     color: 'blue',
   },
   {
-    title: 'Maintainer Liaisons',
-    body: 'Prepare and refresh upstream pull requests, answer maintainer questions, and track acceptance, requested changes, or rejection.',
+    title: 'Testers & Mentors',
+    label: 'For engineers and teachers',
+    body: 'Build reproductions and regression evidence. Write the playbook and coach new validators.',
+    also: 'Also: docs writers, onboarding mentors',
     color: 'purple',
   },
   {
-    title: 'Automation Operators',
-    body: 'Run selected scanning and fix-generation tools, then package their outputs as reviewable candidate fixes for the OASIS workflow.',
+    title: 'Tooling & Metrics',
+    label: 'For builders and data people',
+    body: 'Maintain the workflow automation and scoring files. Track acceptance rate, time to decision, and reviewer accuracy.',
+    also: 'Also: metrics stewards, disclosure coordinator',
     color: 'green',
   },
 ]
@@ -309,16 +317,16 @@ export default function Overview() {
           <div className="roles-header">
             <h2>Roles</h2>
             <p>
-              OASIS brings distinct contributors together in a GitHub-centered
-              workflow, with clear responsibilities from candidate generation
-              through upstream submission.
+              Every skill has a role to play.
             </p>
           </div>
           <div className="roles-grid">
             {roles.map(role => (
               <article key={role.title} className={`role-card role-card--${role.color}`}>
                 <h3>{role.title}</h3>
+                <span className="role-card-label">{role.label}</span>
                 <p>{role.body}</p>
+                <span className="role-card-also">{role.also}</span>
               </article>
             ))}
           </div>
