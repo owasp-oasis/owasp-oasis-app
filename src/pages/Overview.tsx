@@ -112,58 +112,42 @@ const principles = [
 const roles = [
   {
     title: 'Project Owners',
-    label: 'For governance leads',
-    body: 'Set intake criteria, maintain reviewer credibility records, decide which candidates are adopted, and manage maintainer communication and escalation.',
-    also: 'Also: project leads, governance stewards',
+    body: 'Have a project of particular interest to you. Step in and manage its success.',
     color: 'green',
   },
   {
     title: 'Validators',
-    label: 'For security reviewers',
     body: 'Review candidate fixes for real-world validity, correctness, safety, repository fit, and evidence strong enough for upstream submission.',
-    also: 'Also: vulnerability analysts, domain experts',
     color: 'blue',
   },
   {
     title: 'Maintainer Liaisons',
-    label: 'For upstream coordinators',
-    body: 'Prepare and refresh upstream pull requests, answer maintainer questions, and track acceptance, requested changes, or rejection.',
-    also: 'Also: project advocates, disclosure coordinators',
+    body: 'Evangelize the benefits of OASIS to maintainers. Help onboard them for existing OASIS repos and projects. Facilitate adoption.',
     color: 'purple',
   },
   {
-    title: 'Automation Operators',
-    label: 'For tooling operators',
+    title: 'Fix Automation Operators',
     body: 'Run selected scanning and fix-generation tools, then package their outputs as reviewable candidate fixes for the OASIS workflow.',
-    also: 'Also: tool contributors, workflow maintainers',
     color: 'green',
   },
   {
     title: 'Evangelists & Advocates',
-    label: 'For communicators',
-    body: 'Carry OASIS to chapters, villages, and conferences. Recruit validators and bring credible repositories into the queue.',
-    also: 'Also: chapter liaisons, ecosystem ambassadors',
+    body: 'Be an advocate and expert for OASIS at conferences. Bring more people into the OASIS community.',
     color: 'green',
   },
   {
-    title: 'Triage & Repo Scouts',
-    label: 'For analysts',
+    title: 'Repo Scouts',
     body: 'Screen incoming candidates, flag duplicates, and target repositories where acceptance is plausible.',
-    also: 'Also: intake curators, severity taggers',
     color: 'blue',
   },
   {
-    title: 'Testers & Mentors',
-    label: 'For engineers and teachers',
-    body: 'Build reproductions and regression evidence. Write the playbook and coach new validators.',
-    also: 'Also: docs writers, onboarding mentors',
+    title: 'Application Security Mentors',
+    body: 'Help others learn application security foundations. Run collaborative remediation sessions, OASIS Office Hours, and more.',
     color: 'purple',
   },
   {
     title: 'Tooling & Metrics',
-    label: 'For builders and data people',
-    body: 'Maintain the workflow automation and scoring files. Track acceptance rate, time to decision, and reviewer accuracy.',
-    also: 'Also: metrics stewards, disclosure coordinator',
+    body: 'Find and integrate new tools that improve OASIS speed, scale, and efficacy. Make them available to Fix Automation Operators and Project Owners for new and existing projects.',
     color: 'green',
   },
 ]
@@ -345,16 +329,14 @@ export default function Overview() {
           <div className="roles-header">
             <h2>Roles</h2>
             <p>
-              Every skill has a role to play.
+              Everyone has many roles to play. Choose one!
             </p>
           </div>
           <div className="roles-grid">
             {roles.map(role => (
               <article key={role.title} className={`role-card role-card--${role.color}`}>
                 <h3>{role.title}</h3>
-                <span className="role-card-label">{role.label}</span>
                 <p>{role.body}</p>
-                <span className="role-card-also">{role.also}</span>
               </article>
             ))}
           </div>
