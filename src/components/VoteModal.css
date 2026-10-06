@@ -100,6 +100,17 @@
   gap: 8px;
 }
 
+.vm-assessment {
+  padding: 16px;
+  border: 1px solid var(--ws-border, #d9dee7);
+  border-radius: 12px;
+  background: var(--ws-surface-subtle, #f7f8fa);
+}
+.vm-assessment h3 { margin: 0 0 6px; font-size: 14px; font-weight: 650; }
+.vm-assessment h3 span { color: var(--ws-text-muted, #667085); font-size: 12px; font-weight: 500; }
+.vm-assessment-intro { margin: 0 0 16px; color: var(--ws-text-muted, #667085); font-size: 13px; line-height: 1.45; }
+.vm-assessment .vm-field:last-child { margin-bottom: 0; }
+
 .vm-label {
   font-size: 0.82rem;
   font-weight: 700;

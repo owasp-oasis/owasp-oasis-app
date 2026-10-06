@@ -22,7 +22,7 @@ import {
 import {
   ORG, META_REPOS,
   ghFetch, ghFetchAll,
-  parseDecision, parseDuplicateParent, parseDetectionTool, isAutomatedAccount, isValidatorBot, reactionPolarity,
+  parseDecision, parseDuplicateParent, parseValidationAssessment, parseDetectionTool, isAutomatedAccount, isValidatorBot, reactionPolarity,
   isHeadMergedUpstream, parseGitHubUrl,
   type GitHubRepo, type GitHubPR, type GitHubComment, type GitHubReaction,
 } from './github.js';
@@ -91,6 +91,7 @@ async function processPR(
         if (decision === 'duplicate') consensusDuplicate++;
         
         const duplicateOf = decision === 'duplicate' ? parseDuplicateParent(comment.body) ?? undefined : undefined;
+        const assessment = parseValidationAssessment(comment.body);
         commentRows.push({
           id: comment.id,
           prId: pr.id,
@@ -99,6 +100,10 @@ async function processPR(
           login,
           decision,
           duplicateOf,
+          vulnerabilityAssessment: assessment.vulnerability_assessment,
+          introducedVulnerability: assessment.introduced_vulnerability,
+          securityIssueAddressed: assessment.security_issue_addressed,
+          breaksCodebase: assessment.breaks_codebase,
           createdAt: comment.created_at,
           prCreatedAt: pr.created_at,
         });
@@ -149,6 +154,7 @@ async function processPR(
 
       // For duplicate votes, parse the parent PR ID
       const duplicateOf = decision === 'duplicate' ? parseDuplicateParent(comment.body) ?? undefined : undefined;
+      const assessment = parseValidationAssessment(comment.body);
 
       // Store per-comment record for bonus computation and contribution history
       commentRows.push({
@@ -159,6 +165,10 @@ async function processPR(
         login,
         decision,
         duplicateOf,
+        vulnerabilityAssessment: assessment.vulnerability_assessment,
+        introducedVulnerability: assessment.introduced_vulnerability,
+        securityIssueAddressed: assessment.security_issue_addressed,
+        breaksCodebase: assessment.breaks_codebase,
         createdAt: comment.created_at,
         prCreatedAt: pr.created_at,
       });

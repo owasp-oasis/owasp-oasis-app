@@ -103,9 +103,20 @@ export interface CommentData {
   prNumber: number;
   login: string;         // author of the comment
   decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null;
+  vulnerabilityAssessment?: 'yes' | 'no' | 'hardening' | 'not_enough_information' | 'duplicate' | null;
+  introducedVulnerability?: 'yes' | 'no' | 'unknown' | null;
+  securityIssueAddressed?: 'yes' | 'no' | 'needs_modification' | 'not_enough_information' | null;
+  breaksCodebase?: 'yes' | 'no' | 'unknown' | null;
   duplicateOf?: number;  // cited parent PR id (for duplicate decisions; optional)
   createdAt: string;     // ISO-8601
   prCreatedAt: string;   // ISO-8601, denorm from pull_requests.created_at
+}
+
+export interface ValidationAssessment {
+  vulnerability_assessment: 'yes' | 'no' | 'hardening' | 'not_enough_information' | 'duplicate' | null;
+  introduced_vulnerability: 'yes' | 'no' | 'unknown' | null;
+  security_issue_addressed: 'yes' | 'no' | 'needs_modification' | 'not_enough_information' | null;
+  breaks_codebase: 'yes' | 'no' | 'unknown' | null;
 }
 
 /**

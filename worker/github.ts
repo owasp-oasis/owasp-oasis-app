@@ -1,6 +1,7 @@
 /**
  * GitHub API client, comment/PR body parsers, and bot detection.
  */
+import type { ValidationAssessment } from './types.js';
 
 /* ─── CONSTANTS ──────────────────────────────────────────────── */
 export const ORG        = 'owasp-oasis';
@@ -132,6 +133,41 @@ export function parseDecision(body: string | null): 'accept' | 'modify' | 'rejec
     }
   }
   return null;
+}
+
+/** Parse only the structured assessment rows emitted by OASIS validation comments. */
+export function parseValidationAssessment(body: string | null): ValidationAssessment {
+  const result: ValidationAssessment = {
+    vulnerability_assessment: null,
+    introduced_vulnerability: null,
+    security_issue_addressed: null,
+    breaks_codebase: null,
+  };
+  if (!body) return result;
+
+  const definitions = [
+    ['Vulnerability assessment', 'vulnerability_assessment', {
+      yes: 'yes', no: 'no', hardening: 'hardening', duplicate: 'duplicate',
+      'not enough information': 'not_enough_information',
+    }],
+    ['Introduces new vulnerability', 'introduced_vulnerability', { yes: 'yes', no: 'no', unknown: 'unknown' }],
+    ['Addresses the security issue', 'security_issue_addressed', {
+      yes: 'yes', no: 'no', 'needs modification': 'needs_modification',
+      'modify / needs modification': 'needs_modification',
+      'not enough information': 'not_enough_information',
+    }],
+    ['Breaks the codebase', 'breaks_codebase', { yes: 'yes', no: 'no', unknown: 'unknown' }],
+  ] as const;
+
+  for (const [label, key, allowed] of definitions) {
+    const line = body.split('\n').find(candidate => {
+      const parts = candidate.match(/^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$/);
+      return parts?.[1]?.trim().toLowerCase() === label.toLowerCase();
+    });
+    const value = line?.match(/^\|\s*[^|]+?\s*\|\s*([^|]+?)\s*\|\s*$/)?.[1]?.trim().toLowerCase();
+    if (value && value in allowed) result[key] = allowed[value as keyof typeof allowed] as never;
+  }
+  return result;
 }
 
 /**

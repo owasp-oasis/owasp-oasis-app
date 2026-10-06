@@ -115,6 +115,14 @@ npm run dev
 
 Opens `http://localhost:8787`. The worker and React SPA both run locally via Miniflare (Cloudflare's local runtime). The D1 database runs as a local SQLite file — it will not have production data.
 
+For a fresh local D1, run `npm run db:seed` to load the final schema
+snapshot, mark the migrations represented by that snapshot as applied, and
+load development fixtures. For an existing local D1, run
+`npm run db:migrate:local` to apply pending forward-only migrations. When a
+migration is added, update `seeds/dev-migration-ledger.sql` with the final
+snapshot so fresh local databases can apply only later migrations.
+
+
 ### Build commands
 
 | Command | What it does |
@@ -323,6 +331,7 @@ Validators can submit their OASIS validation decision directly from the workspac
 - One vote per user per PR (enforced in both D1 and the UI)
 - Voting only permitted on open PRs
 - Reject votes require a `summary` (reason); Accept/Modify require `confidence` (Low/Medium/High) and a `summary`
+- Accept, Modify, and Reject may include optional answers about vulnerability validity, security regressions, remediation, and functional regressions. Hardening is one vulnerability-classification answer, never a final vote. Reject's required Summary and optional Blocking issues / To reconsider fields explain why the proposal should not proceed. Duplicate keeps its parent-PR workflow and has no assessment questions.
 - All text fields capped at 2000 characters
 
 ### Comment format
@@ -337,7 +346,13 @@ Validation summary:
 | Confidence | High |
 | Summary | ... |
 | Next step | ... |
+| ... | ... |
 ```
+
+When supplied, validation comments also include a **Security assessment** table
+with only the questions the reviewer answered. Unanswered questions remain
+absent from the comment and NULL in D1; they are not converted to an unknown
+answer.
 
 Reject votes post:
 ```

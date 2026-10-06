@@ -77,6 +77,29 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   const blockingIssues = typeof body['blocking_issues'] === 'string' ? body['blocking_issues'].trim() : '';
   const toReconsider   = typeof body['to_reconsider'] === 'string' ? body['to_reconsider'].trim() : '';
   const notes          = typeof body['notes'] === 'string' ? body['notes'].trim() : '';
+  const assessmentRules = {
+    vulnerability_assessment: ['yes', 'no', 'hardening', 'not_enough_information', 'duplicate'],
+    introduced_vulnerability: ['yes', 'no', 'unknown'],
+    security_issue_addressed: ['yes', 'no', 'needs_modification', 'not_enough_information'],
+    breaks_codebase: ['yes', 'no', 'unknown'],
+  } as const;
+  const assessment: Record<keyof typeof assessmentRules, string | null> = {
+    vulnerability_assessment: null,
+    introduced_vulnerability: null,
+    security_issue_addressed: null,
+    breaks_codebase: null,
+  };
+  for (const [field, values] of Object.entries(assessmentRules) as [keyof typeof assessmentRules, readonly string[]][]) {
+    const answer = body[field];
+    if (answer === undefined || answer === null) continue;
+    if (typeof answer !== 'string' || !values.includes(answer)) {
+      return jsonErr(`${field} must be one of: ${values.join(', ')}`, 400, request);
+    }
+    assessment[field] = answer;
+  }
+  if (decision === 'duplicate' && Object.values(assessment).some(answer => answer !== null)) {
+    return jsonErr('Assessment answers are available for Accept, Modify, and Reject decisions', 400, request);
+  }
   let parentPrNumber: number | null = null;
   let parentPrId: number | null = null;
   let resolvedParentId: number | null = null;
@@ -151,7 +174,22 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 7. Build OASIS comment body matching comment_templates.md
   const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : decision === 'reject' ? 'Reject' : 'Duplicate';
-   let commentBody: string;
+  const answerLabels: Record<string, string> = {
+    yes: 'Yes', no: 'No', hardening: 'Hardening', not_enough_information: 'Not enough information',
+    duplicate: 'Duplicate', unknown: 'Unknown', needs_modification: 'Needs modification',
+  };
+  const assessmentRows: [string, string | null][] = [
+    ['Vulnerability assessment', assessment.vulnerability_assessment],
+    ['Introduces new vulnerability', assessment.introduced_vulnerability],
+    ['Addresses the security issue', assessment.security_issue_addressed],
+    ['Breaks the codebase', assessment.breaks_codebase],
+  ];
+  const assessmentSection = assessmentRows.some(([, answer]) => answer !== null)
+    ? ['', 'Security assessment:', '', '| Question | Answer |', '| :-- | :-- |',
+      ...assessmentRows.filter((row): row is [string, string] => row[1] !== null)
+        .map(([label, answer]) => `| ${label} | ${answerLabels[answer]} |`)]
+    : [];
+  let commentBody: string;
   if (decision === 'duplicate') {
     commentBody = [
       'Duplicate report:',
@@ -172,6 +210,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       `| Reason | ${summary || '—'} |`,
       `| Blocking issues | ${blockingIssues || '—'} |`,
       `| To reconsider | ${toReconsider || '—'} |`,
+      ...assessmentSection,
     ].join('\n');
   } else {
     commentBody = [
@@ -183,6 +222,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       `| Confidence | ${confidence} |`,
       `| Summary | ${summary || '—'} |`,
       `| Next step | ${nextStep || '—'} |`,
+      ...assessmentSection,
     ].join('\n');
   }
 
@@ -368,9 +408,15 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   let voteRecorded = false;
   try {
     await env.DB.prepare(
-      `INSERT INTO user_votes (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now).run();
+      `INSERT INTO user_votes
+         (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at,
+          vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now,
+      assessment.vulnerability_assessment, assessment.introduced_vulnerability,
+      assessment.security_issue_addressed, assessment.breaks_codebase,
+    ).run();
     await env.DB.prepare(`
       UPDATE validation_requests
       SET status = 'responded', updated_at = ?

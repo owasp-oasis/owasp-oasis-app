@@ -21,17 +21,23 @@ import {
 } from './helpers.js';
 
 describe('POST /api/vote', () => {
+  let postedCommentBody: Promise<string> | null = null;
   beforeAll(async () => {
     await applySchema(env);
   });
 
   beforeEach(() => {
+    postedCommentBody = null;
     fetchMock.activate();
     fetchMock.disableNetConnect();
 
     // Mock GitHub comment POST
     fetchMock
-      .when((req) => req.url.includes('/issues') && req.url.includes('/comments'))
+      .when((req) => {
+        if (!req.url.includes('/issues') || !req.url.includes('/comments')) return false;
+        postedCommentBody = req.clone().text();
+        return true;
+      })
       .respondWith(
         new Response(
           JSON.stringify({
@@ -125,6 +131,45 @@ describe('POST /api/vote', () => {
       expect(body.ok).toBe(true);
     });
 
+    it('stores optional assessment answers and includes them in the GitHub validation comment', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, {
+        vulnerability_assessment: 'hardening',
+        introduced_vulnerability: 'no',
+        security_issue_addressed: 'needs_modification',
+        breaks_codebase: null,
+      });
+
+      expect(res.status).toBe(200);
+      const stored = await env.DB.prepare(`SELECT decision, vulnerability_assessment, introduced_vulnerability,
+        security_issue_addressed, breaks_codebase FROM user_votes WHERE github_login = ? AND pr_id = ?`)
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toMatchObject({
+        decision: 'accept', vulnerability_assessment: 'hardening', introduced_vulnerability: 'no',
+        security_issue_addressed: 'needs_modification', breaks_codebase: null,
+      });
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(requestBody.body).toContain('| Decision | Accept |');
+      expect(requestBody.body).toContain('| Vulnerability assessment | Hardening |');
+      expect(requestBody.body).toContain('| Introduces new vulnerability | No |');
+      expect(requestBody.body).toContain('| Addresses the security issue | Needs modification |');
+      expect(requestBody.body).not.toContain('Breaks the codebase');
+    });
+
+    it('leaves unanswered assessment questions NULL', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+      expect((await vote(1001, 'accept', csrf, sessionCookie, tokenCookie)).status).toBe(200);
+      const stored = await env.DB.prepare(`SELECT vulnerability_assessment, introduced_vulnerability,
+        security_issue_addressed, breaks_codebase FROM user_votes WHERE github_login = ? AND pr_id = ?`)
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toEqual({ vulnerability_assessment: null, introduced_vulnerability: null, security_issue_addressed: null, breaks_codebase: null });
+    });
+
     it('accepts modify vote with required fields', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const csrf = makeCsrf();
@@ -139,17 +184,22 @@ describe('POST /api/vote', () => {
       expect(res.status).toBe(200);
     });
 
-    it('accepts reject vote', async () => {
-      const { sessionCookie, tokenCookie } = await createTestSession(env);
+    it('accepts reject vote with an independent security issue assessment', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
       const csrf = makeCsrf();
 
       await insertTestPR(env);
 
       const res = await vote(1001, 'reject', csrf, sessionCookie, tokenCookie, {
         summary: 'Not suitable',
+        vulnerability_assessment: 'yes',
+        security_issue_addressed: 'no',
       });
 
       expect(res.status).toBe(200);
+      const stored = await env.DB.prepare('SELECT vulnerability_assessment, security_issue_addressed FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toEqual({ vulnerability_assessment: 'yes', security_issue_addressed: 'no' });
     });
 
     it('accepts duplicate vote with parent PR', async () => {
@@ -187,6 +237,19 @@ describe('POST /api/vote', () => {
   });
 
   describe('validation', () => {
+    it.each([
+      ['vulnerability_assessment', 'maybe'],
+      ['introduced_vulnerability', 'hardening'],
+      ['security_issue_addressed', 'unknown'],
+      ['breaks_codebase', 'not_sure'],
+    ])('rejects unsupported assessment answer %s', async (field, value) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, { [field]: value });
+      expect(res.status).toBe(400);
+    });
+
     it('rejects vote on closed PR', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const csrf = makeCsrf();
