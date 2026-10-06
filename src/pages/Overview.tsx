@@ -109,6 +109,29 @@ const principles = [
   },
 ]
 
+const roles = [
+  {
+    title: 'Project Owners',
+    body: 'Set intake criteria, maintain reviewer credibility records, decide which candidates are adopted, and manage maintainer communication and escalation.',
+    color: 'green',
+  },
+  {
+    title: 'Validators',
+    body: 'Review candidate fixes for real-world validity, correctness, safety, repository fit, and evidence strong enough for upstream submission.',
+    color: 'blue',
+  },
+  {
+    title: 'Maintainer Liaisons',
+    body: 'Prepare and refresh upstream pull requests, answer maintainer questions, and track acceptance, requested changes, or rejection.',
+    color: 'purple',
+  },
+  {
+    title: 'Automation Operators',
+    body: 'Run selected scanning and fix-generation tools, then package their outputs as reviewable candidate fixes for the OASIS workflow.',
+    color: 'green',
+  },
+]
+
 export default function Overview() {
   const [openPrinciple, setOpenPrinciple] = useState<string | null>(null)
 
@@ -275,6 +298,28 @@ export default function Overview() {
                 </div>
                 <p>{step.body}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Roles */}
+      <section className="section overview-roles">
+        <div className="container">
+          <div className="roles-header">
+            <h2>Roles</h2>
+            <p>
+              OASIS brings distinct contributors together in a GitHub-centered
+              workflow, with clear responsibilities from candidate generation
+              through upstream submission.
+            </p>
+          </div>
+          <div className="roles-grid">
+            {roles.map(role => (
+              <article key={role.title} className={`role-card role-card--${role.color}`}>
+                <h3>{role.title}</h3>
+                <p>{role.body}</p>
+              </article>
             ))}
           </div>
         </div>
