@@ -44,7 +44,7 @@ describe('durable signup welcome delivery', () => {
 
   it('welcomes an existing CRM contact and checkpoints acceptance before tracking', async () => {
     const h = harness();
-    await enqueueHubSpotSync(env.DB, signup);
+    await enqueueHubSpotSync(env.DB, signup, now);
     expect(await processHubSpotQueue(h.bindings, { fetcher: h.fetcher, now })).toMatchObject({ succeeded: 1 });
     expect(h.messages).toHaveLength(1);
     expect(h.messages[0]).toMatchObject({ to: signup.email, subject: 'Welcome to the OASIS community' });
@@ -57,7 +57,7 @@ describe('durable signup welcome delivery', () => {
 
   it('retries explicit rejection through the queue after contact creation or lookup', async () => {
     const h = harness({ sendError: Object.assign(new Error('safe test'), { code: 'E_RATE_LIMIT_EXCEEDED' }) });
-    await enqueueHubSpotSync(env.DB, signup);
+    await enqueueHubSpotSync(env.DB, signup, now);
     expect(await processHubSpotQueue(h.bindings, { fetcher: h.fetcher, now })).toMatchObject({ failed: 1 });
     expect(await receipt()).toMatchObject({ status: 'pending', sent_at: null });
     h.options.sendError = undefined;
@@ -69,7 +69,7 @@ describe('durable signup welcome delivery', () => {
 
   it('retries a tracking failure without resending', async () => {
     const h = harness({ trackingStatus: 500 });
-    await enqueueHubSpotSync(env.DB, signup);
+    await enqueueHubSpotSync(env.DB, signup, now);
     expect(await processHubSpotQueue(h.bindings, { fetcher: h.fetcher, now })).toMatchObject({ failed: 1 });
     expect(await receipt()).toMatchObject({ status: 'sent' });
     h.options.trackingStatus = 200;
@@ -132,8 +132,8 @@ describe('durable signup welcome delivery', () => {
   });
 
   it('retains welcome eligibility when duplicate form submissions update a pending job', async () => {
-    await enqueueHubSpotSync(env.DB, signup);
-    await enqueueHubSpotSync(env.DB, { ...signup, welcome_environment: undefined });
+    await enqueueHubSpotSync(env.DB, signup, now);
+    await enqueueHubSpotSync(env.DB, { ...signup, welcome_environment: undefined }, now);
     const row = await env.DB.prepare('SELECT payload_json FROM hubspot_sync_queue').first<{ payload_json: string }>();
     expect(JSON.parse(row!.payload_json).welcome_environment).toBe('production');
   });
@@ -141,7 +141,7 @@ describe('durable signup welcome delivery', () => {
   it('leaves a missing email binding retryable rather than declaring the signup fully synced', async () => {
     const h = harness();
     h.bindings.WELCOME_EMAIL = undefined;
-    await enqueueHubSpotSync(env.DB, signup);
+    await enqueueHubSpotSync(env.DB, signup, now);
     expect(await processHubSpotQueue(h.bindings, { fetcher: h.fetcher, now })).toMatchObject({ failed: 1 });
     const row = await env.DB.prepare('SELECT status, last_error FROM hubspot_sync_queue').first();
     expect(row).toMatchObject({ status: 'pending', last_error: 'welcome_configuration_missing' });
