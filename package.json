@@ -17,6 +17,7 @@
     "deploy": "npm run migrate:production && wrangler deploy --env production",
     "db:seed": "wrangler d1 execute oasis-db --local --file schema.sql && wrangler d1 migrations apply oasis-db --local && wrangler d1 execute oasis-db --local --file seeds/dev.sql",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/worker/unit",
     "test:int": "vitest run tests/worker/integration",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260911.1",
+    "@playwright/test": "^1.63.0",
     "@types/diff": "^7.0.2",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.14",
