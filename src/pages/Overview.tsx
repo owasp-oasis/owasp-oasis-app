@@ -111,6 +111,34 @@ const principles = [
 
 const roles = [
   {
+    title: 'Project Owners',
+    label: 'For governance leads',
+    body: 'Set intake criteria, maintain reviewer credibility records, decide which candidates are adopted, and manage maintainer communication and escalation.',
+    also: 'Also: project leads, governance stewards',
+    color: 'green',
+  },
+  {
+    title: 'Validators',
+    label: 'For security reviewers',
+    body: 'Review candidate fixes for real-world validity, correctness, safety, repository fit, and evidence strong enough for upstream submission.',
+    also: 'Also: vulnerability analysts, domain experts',
+    color: 'blue',
+  },
+  {
+    title: 'Maintainer Liaisons',
+    label: 'For upstream coordinators',
+    body: 'Prepare and refresh upstream pull requests, answer maintainer questions, and track acceptance, requested changes, or rejection.',
+    also: 'Also: project advocates, disclosure coordinators',
+    color: 'purple',
+  },
+  {
+    title: 'Automation Operators',
+    label: 'For tooling operators',
+    body: 'Run selected scanning and fix-generation tools, then package their outputs as reviewable candidate fixes for the OASIS workflow.',
+    also: 'Also: tool contributors, workflow maintainers',
+    color: 'green',
+  },
+  {
     title: 'Evangelists & Advocates',
     label: 'For communicators',
     body: 'Carry OASIS to chapters, villages, and conferences. Recruit validators and bring credible repositories into the queue.',
