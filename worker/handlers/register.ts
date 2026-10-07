@@ -66,7 +66,7 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
         env.DB.prepare(
           `INSERT INTO registrations (name, email, github, role, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
         ).bind(nameRes.val, emailRes.val, ghRes.val, roleRes.val, await hashString(ip), submittedAt),
-        prepareHubSpotEnqueue(env.DB, submission, new Date(submittedAt)),
+        prepareHubSpotEnqueue(env.DB, { ...submission, welcome_environment: env.ENVIRONMENT }, new Date(submittedAt)),
       ]);
       scheduleHubSpotSync(ctx, env);
     } catch (err) {

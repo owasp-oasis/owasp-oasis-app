@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown, Settings2, Activity, LogOut, Shield, ChartNoAxesCombined } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import './Nav.css'
-const links = [ ['/', 'Home'], ['/about', 'About'], ['/overview', 'Overview'], ['/workspace', 'Workspace'], ['/support', 'Support'], ['/sponsors', 'Sponsors'], ['/news', 'News & Events'] ]
+const links = [ ['/', 'Home'], ['/overview', 'Overview'], ['/workspace', 'Workspace'], ['/support', 'Support'], ['/sponsors', 'Sponsors'], ['/news', 'News & Events'], ['/about', 'About'] ]
 export default function Nav(_props: { onOpenOnboarding?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)

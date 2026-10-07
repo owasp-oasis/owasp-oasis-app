@@ -1,7 +1,17 @@
 import RegisterForm from '../components/RegisterForm'
 import './Sponsors.css'
 
-const foundingSponsors = [
+type Sponsor = {
+  name: string
+  type: string
+  contribution: string
+  siteUrl: string
+  logoUrl: string
+  logoDark: boolean
+  logoWide?: boolean
+}
+
+const foundingSponsors: Sponsor[] = [
   {
     name: 'AppSecAI',
     type: 'Founding Sponsor',
@@ -28,6 +38,18 @@ const foundingSponsors = [
   },
 ]
 
+const communitySponsors: Sponsor[] = [
+  {
+    name: 'Galah Cyber',
+    type: 'Community Sponsor',
+    contribution: 'The entire Galah Cyber team is dedicating time every week to running OASIS and validating vulnerabilities. They will run office hours, onboarding sessions, and collaborative validation meetups in the Australian time zone and, if we’re lucky, beyond. We are excited to have them as part of the community.',
+    siteUrl: 'https://www.galahcyber.com.au?utm_source=project-oasis',
+    logoUrl: '/logo/galah-cyber.svg',
+    logoDark: false,
+    logoWide: true,
+  },
+]
+
 const tiers = [
   {
     name: 'Community Sponsor',
@@ -43,6 +65,37 @@ const tiers = [
   },
 ]
 
+function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
+  return (
+    <div className="sponsor-card">
+      <a
+        href={sponsor.siteUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`sponsor-logo-wrap${sponsor.logoDark ? ' sponsor-logo-wrap--dark' : ''}${sponsor.logoWide ? ' sponsor-logo-wrap--wide' : ''}`}
+        aria-label={`Visit ${sponsor.name}`}
+      >
+        <img
+          src={sponsor.logoUrl}
+          alt={`${sponsor.name} logo`}
+          className="sponsor-logo"
+        />
+      </a>
+      <div className="sponsor-info">
+        <div className="sponsor-name-row">
+          <h3>
+            <a href={sponsor.siteUrl} target="_blank" rel="noopener noreferrer">
+              {sponsor.name}
+            </a>
+          </h3>
+          <span className="badge badge-blue">{sponsor.type}</span>
+        </div>
+        <p>{sponsor.contribution}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function Sponsors() {
   return (
     <div className="sponsors">
@@ -51,7 +104,7 @@ export default function Sponsors() {
           <h1>Sponsors</h1>
           <p>
             OASIS is community-powered and open to corporate participation.
-            Sponsorship is strictly resource-based &mdash; it does not influence
+            Sponsorship is strictly resource-based. It does not influence
             project governance, fix selection, or validation outcomes.
           </p>
         </div>
@@ -83,39 +136,12 @@ export default function Sponsors() {
           <p className="sponsors-section-sub">
             These organizations believed in OASIS from the start and provide the
             tool licenses and operational resources that make the project possible.
-            Vendor neutrality is not just a principle &mdash; it&rsquo;s what makes OASIS
+            Vendor neutrality is not just a principle. It is what makes OASIS
             credible to open-source maintainers and the broader community.
           </p>
 
           <div className="sponsor-cards">
-            {foundingSponsors.map(s => (
-              <div key={s.name} className="sponsor-card">
-                <a
-                  href={s.siteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`sponsor-logo-wrap${s.logoDark ? ' sponsor-logo-wrap--dark' : ''}`}
-                  aria-label={`Visit ${s.name}`}
-                >
-                  <img
-                    src={s.logoUrl}
-                    alt={`${s.name} logo`}
-                    className="sponsor-logo"
-                  />
-                </a>
-                <div className="sponsor-info">
-                  <div className="sponsor-name-row">
-                    <h3>
-                      <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">
-                        {s.name}
-                      </a>
-                    </h3>
-                    <span className="badge badge-blue">{s.type}</span>
-                  </div>
-                  <p>{s.contribution}</p>
-                </div>
-              </div>
-            ))}
+            {foundingSponsors.map(sponsor => <SponsorCard key={sponsor.name} sponsor={sponsor} />)}
           </div>
 
            {/* Future sponsor slot */}
@@ -128,6 +154,62 @@ export default function Sponsors() {
         </div>
       </section>
 
+      {/* Community sponsors */}
+      <section className="section community-sponsors-section">
+        <div className="container">
+          <h2 className="sponsors-section-title">Community Sponsors</h2>
+          <p className="sponsors-section-sub">
+            Community sponsors help sustain OASIS with resources that keep its
+            open-source security work accessible to everyone.
+          </p>
+
+          <div className="community-sponsor-callout">
+            <div>
+              <span className="badge badge-green">Open to the community</span>
+              <h3>Help strengthen open-source security</h3>
+              <p>
+                Community sponsors receive recognition on this page while
+                supporting project operations, contributor programs, and shared
+                validation infrastructure.
+              </p>
+            </div>
+            <a href="#sponsor-interest" className="btn btn-secondary">
+              Become a community sponsor &rarr;
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Community sponsors */}
+      <section className="section community-sponsors-section">
+        <div className="container">
+          <h2 className="sponsors-section-title">Community Sponsors</h2>
+          <p className="sponsors-section-sub">
+            Community sponsors help sustain OASIS with resources that keep its
+            open-source security work accessible to everyone.
+          </p>
+
+          <div className="sponsor-cards community-sponsor-cards">
+            {communitySponsors.map(sponsor => <SponsorCard key={sponsor.name} sponsor={sponsor} />)}
+          </div>
+
+          <div className="community-sponsor-callout">
+            <div>
+              <span className="badge badge-green">Open to the community</span>
+              <h3>Help strengthen open-source security</h3>
+              <p>
+                Community sponsors receive recognition on this page while
+                supporting project operations, contributor programs, and shared
+                validation infrastructure.
+              </p>
+            </div>
+            <a href="#sponsor-interest" className="btn btn-secondary">
+              Become a community sponsor &rarr;
+            </a>
+          </div>
+        </div>
+      </section>
+
        {/* Interest form */}
        <section className="section sponsors-form-section" id="sponsor-interest">
          <div className="container sponsors-form-inner">
@@ -135,7 +217,7 @@ export default function Sponsors() {
              <h2>Interested in supporting OASIS?</h2>
              <p>
                Join our mailing list and the OASIS team will be in touch. All we
-               need is your email — you'll receive occasional updates about partnership opportunities.
+               need is your email. You'll receive occasional updates about partnership opportunities.
              </p>
             <p>
               Corporate sponsorship does not influence OASIS governance, fix
@@ -146,7 +228,7 @@ export default function Sponsors() {
           <div className="sponsors-form-wrap">
             <RegisterForm
               type="sponsor"
-              successMessage="Thanks — we'll be in touch about how your organization can support OASIS."
+              successMessage="Thanks. We'll be in touch about how your organization can support OASIS."
             />
           </div>
         </div>

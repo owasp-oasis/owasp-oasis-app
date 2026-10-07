@@ -179,6 +179,55 @@ After setting the analytics token and deploying migrations through `0011_histori
 
 Set `HUBSPOT_PROPERTY_MAP` as a plain environment variable, not a secret. It is a JSON object whose supported keys are `github`, `role`, `source`, `organization`, and `submitted_at`, with values equal to HubSpot custom-property internal names. The integration always sends contact email; it adds first and last name only when creating a contact, and only sends configured custom properties when updating one.
 
+### Signup welcome email
+
+Welcome delivery is part of the versioned Worker build. Production must retain
+`WELCOME_EMAIL`, `WELCOME_EMAIL_FROM`, and `WELCOME_EMAIL_MODE = "live"`.
+`npm run build` runs `check:welcome-deployment` before compilation, and CI runs
+the delivery regression tests through `npm run check`. Do not deploy local,
+uncommitted email changes: a later Git build would overwrite them.
+
+New form and GitHub OAuth registrations enqueue a server-owned environment marker
+with the contact job. Existing HubSpot contacts are eligible unless their
+`welcome_email_sent_date` is already set. Historical queue entries are not
+backfilled. The retained application API does not send this signup message.
+Background processing begins immediately; the production hourly Workflow retries
+pending jobs with capped exponential backoff.
+
+Migration `0016_welcome_email_deliveries.sql` adds receipts keyed by an email hash
+and environment. Provider acceptance is stored before updating HubSpot. Tracking
+failures retry without resending, and explicit provider rejection remains pending.
+Ambiguous transport outcomes or interruption during sending require reconciliation
+against Cloudflare Email Service activity before an operator retries; they are
+never blindly resent. `sent` means provider acceptance, not verified inbox delivery.
+The HubSpot date uses America/Los_Angeles. Safe queue error codes and receipt
+statuses support aggregate diagnosis without exposing recipients in logs.
+
+For staging, build the candidate and run `scripts/prepare-welcome-staging.mjs`
+with a dedicated staging D1 ID, staging KV ID, and one approved test recipient.
+It produces a local, git-ignored config for `wrangler versions upload`; that
+command uploads a version but does not route production traffic to it. The
+candidate inherits the production Worker's secrets while using isolated D1/KV
+and test-only email eligibility. Test mode can send one canary to a previously
+welcomed test contact; receipt deduplication still prevents repeated sends.
+Preview URLs must be enabled temporarily for this test and restored afterward.
+Never run `wrangler deploy` with that generated staging config.
+
+Apply the full `schema.sql` only to the empty staging database, upload the candidate,
+and submit the test signup through its version preview URL. Verify the email,
+`tracked` receipt, successful queue state, and that repeating signup produces no
+second send. Also verify a different recipient produces no email. Test the real
+email logo URL and inspect HubSpot tracking before promotion. Shared preview
+stays `off`; when it contains unrelated work, stage the exact production candidate
+as an isolated version and document this narrower promotion path in its PR.
+
+Promote only the tested email changes through a PR into `main`; Cloudflare Git
+integration builds, applies pending migrations, and deploys production. Verify
+the active production version includes the email binding and live configuration.
+For a regression, roll back the Worker version; the additive receipt table can
+remain. Do not delete successful receipts or backfill historic registrations
+without a separately reviewed, deduplicated recovery plan.
+
 The OAuth App must be configured separately per environment:
 
 - **Preview**: callback URL `https://preview.owasp-oasis.org/api/auth/callback`
