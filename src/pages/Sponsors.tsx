@@ -167,6 +167,13 @@ export default function Sponsors() {
             {communitySponsors.map(sponsor => <SponsorCard key={sponsor.name} sponsor={sponsor} />)}
           </div>
 
+          <div className="sponsor-slots">
+            <a href="#sponsor-interest" className="sponsor-slot-placeholder">
+              <span>Your organization here</span>
+              <span className="sponsor-slot-cta">Become a sponsor &rarr;</span>
+            </a>
+          </div>
+
           <div className="community-sponsor-callout">
             <div>
               <span className="badge badge-green">Open to the community</span>
