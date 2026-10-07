@@ -21,6 +21,7 @@ interface Event {
   time: string
   location: string
   details: string
+  cancelled?: boolean
   href?: string
 }
 
@@ -37,29 +38,17 @@ const articles: Article[] = [
 
 const upcomingEvents: Event[] = [
   {
-    date: '2026-09-25',
-    day: '25–26',
-    month: 'SEP',
-    dateLabel: 'September 25–26, 2026',
-    venue: 'B-Sides Orlando',
-    kind: 'Speaking',
-    title: 'The OASIS Project: A Movement for Crowd-Sourced Fix Automation',
-    time: 'Talk time to be announced · Sep 25–26',
-    location: 'Full Sail University · Winter Park, FL',
-    details: 'Chris Holt presents the OASIS project at B-Sides Orlando.',
-    href: 'https://bsidesorlando.org/',
-  },
-  {
     date: '2026-10-08',
     day: '8',
     month: 'OCT',
     dateLabel: 'October 8, 2026',
     venue: 'Online · Zoom Webinar',
     kind: 'Webinar',
+    cancelled: true,
     title: 'The Future of AppSec, Open Source, and Your Role in the Age of AI',
-    time: '1:00 PM ET · 11:00 AM MT · Thu, October 8',
+    time: 'Cancelled · New date to be announced',
     location: 'Online · Zoom Webinar',
-    details: 'Founding members AppSecAI, DryRun Security, and Intigriti discuss why they built OASIS together.',
+    details: 'This webinar has been cancelled and will be rescheduled. A new date will be announced soon.',
   },
   {
     date: '2026-10-06',
@@ -102,7 +91,7 @@ export default function News() {
 
           <div className="event-grid">
             {upcomingEvents.map(event => (
-              <article key={event.date} className="event-card">
+              <article key={event.date} className={`event-card${event.cancelled ? ' event-card--cancelled' : ''}`}>
                 <div className="event-date" aria-label={event.dateLabel}>
                   <time dateTime={event.date}>
                     <span className="event-date-month">{event.month}</span>
@@ -112,6 +101,7 @@ export default function News() {
                 <div className="event-card-content">
                   <div className="event-card-meta">
                     <span className="badge badge-green">{event.kind}</span>
+                    {event.cancelled && <span className="badge badge-cancelled">Cancelled</span>}
                     <span>{event.venue}</span>
                   </div>
                   <h2 className="event-card-title">{event.title}</h2>

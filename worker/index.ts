@@ -149,7 +149,7 @@ export default {
 
        /* ── Auth (GitHub OAuth) ────────────────────────────────────── */
        if (method === 'GET'  && url.pathname === '/api/auth/login')    return await handleLogin(request, env);
-       if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env);
+       if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env, ctx);
        if (method === 'GET'  && url.pathname === '/api/auth/me')       return await handleMe(request, env);
        if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
 

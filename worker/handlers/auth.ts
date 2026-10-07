@@ -9,6 +9,7 @@
  */
 
 import type { Env } from '../types.js';
+import { prepareHubSpotEnqueue, scheduleHubSpotSync } from '../hubspot.js';
 import {
   generateCSRF,
   getCookieValue,
@@ -91,7 +92,7 @@ export async function handleLogin(_request: Request, env: Env): Promise<Response
 }
 
 /* ─── GET /api/auth/callback ─────────────────────────────────── */
-export async function handleCallback(request: Request, env: Env): Promise<Response> {
+export async function handleCallback(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const url   = new URL(request.url);
   const code  = url.searchParams.get('code');
   const state = url.searchParams.get('state');
@@ -193,10 +194,21 @@ export async function handleCallback(request: Request, env: Env): Promise<Respon
   try {
     // INSERT OR IGNORE if email is unique — don't overwrite form-registered users
     if (email) {
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO registrations (name, email, github, role, ip_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(login, email, login, 'validator', 'oauth', now.toISOString()).run();
+      const existing = await env.DB.prepare('SELECT 1 FROM registrations WHERE email = ?')
+        .bind(email).first();
+      if (!existing) {
+        await env.DB.batch([
+          env.DB.prepare(
+            `INSERT OR IGNORE INTO registrations (name, email, github, role, ip_hash, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          ).bind(login, email, login, 'validator', 'oauth', now.toISOString()),
+          prepareHubSpotEnqueue(env.DB, {
+            source: 'registration', email, name: login, github: login, role: 'validator',
+            organization: '', submitted_at: now.toISOString(), welcome_environment: env.ENVIRONMENT,
+          }, now),
+        ]);
+        if (ctx) scheduleHubSpotSync(ctx, env);
+      }
     } else {
       // If no email, insert with empty email and rely on github column for upgrade
       await env.DB.prepare(

@@ -109,6 +109,49 @@ const principles = [
   },
 ]
 
+const roles = [
+  {
+    title: 'Project Owners',
+    body: 'Have a project of particular interest to you. Step in and manage its success.',
+    color: 'green',
+  },
+  {
+    title: 'Validators',
+    body: 'Review candidate fixes for real-world validity, correctness, safety, repository fit, and evidence strong enough for upstream submission.',
+    color: 'blue',
+  },
+  {
+    title: 'Maintainer Liaisons',
+    body: 'Evangelize the benefits of OASIS to maintainers. Help onboard them for existing OASIS repos and projects. Facilitate adoption.',
+    color: 'purple',
+  },
+  {
+    title: 'Fix Automation Operators',
+    body: 'Run selected scanning and fix-generation tools, then package their outputs as reviewable candidate fixes for the OASIS workflow.',
+    color: 'green',
+  },
+  {
+    title: 'Evangelists & Advocates',
+    body: 'Be an advocate and expert for OASIS at conferences. Bring more people into the OASIS community.',
+    color: 'green',
+  },
+  {
+    title: 'Repo Scouts',
+    body: 'Screen incoming candidates, flag duplicates, and target repositories where acceptance is plausible.',
+    color: 'blue',
+  },
+  {
+    title: 'Application Security Mentors',
+    body: 'Help others learn application security foundations. Run collaborative remediation sessions, OASIS Office Hours, and more.',
+    color: 'purple',
+  },
+  {
+    title: 'Tooling & Metrics',
+    body: 'Find and integrate new tools that improve OASIS speed, scale, and efficacy. Make them available to Fix Automation Operators and Project Owners for new and existing projects.',
+    color: 'green',
+  },
+]
+
 export default function Overview() {
   const [openPrinciple, setOpenPrinciple] = useState<string | null>(null)
 
@@ -275,6 +318,26 @@ export default function Overview() {
                 </div>
                 <p>{step.body}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Roles */}
+      <section className="section overview-roles">
+        <div className="container">
+          <div className="roles-header">
+            <h2>Roles</h2>
+            <p>
+              Everyone has many roles to play. Choose one!
+            </p>
+          </div>
+          <div className="roles-grid">
+            {roles.map(role => (
+              <article key={role.title} className={`role-card role-card--${role.color}`}>
+                <h3>{role.title}</h3>
+                <p>{role.body}</p>
+              </article>
             ))}
           </div>
         </div>

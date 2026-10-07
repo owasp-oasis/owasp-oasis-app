@@ -42,6 +42,16 @@
   box-shadow: 0 8px 24px rgba(11, 79, 138, .06);
 }
 
+.event-card--cancelled {
+  border-left-color: #b45309;
+}
+
+.badge-cancelled {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+
 .event-date {
   display: flex;
   align-items: flex-start;
