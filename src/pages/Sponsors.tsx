@@ -163,32 +163,6 @@ export default function Sponsors() {
             open-source security work accessible to everyone.
           </p>
 
-          <div className="community-sponsor-callout">
-            <div>
-              <span className="badge badge-green">Open to the community</span>
-              <h3>Help strengthen open-source security</h3>
-              <p>
-                Community sponsors receive recognition on this page while
-                supporting project operations, contributor programs, and shared
-                validation infrastructure.
-              </p>
-            </div>
-            <a href="#sponsor-interest" className="btn btn-secondary">
-              Become a community sponsor &rarr;
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Community sponsors */}
-      <section className="section community-sponsors-section">
-        <div className="container">
-          <h2 className="sponsors-section-title">Community Sponsors</h2>
-          <p className="sponsors-section-sub">
-            Community sponsors help sustain OASIS with resources that keep its
-            open-source security work accessible to everyone.
-          </p>
-
           <div className="sponsor-cards community-sponsor-cards">
             {communitySponsors.map(sponsor => <SponsorCard key={sponsor.name} sponsor={sponsor} />)}
           </div>
