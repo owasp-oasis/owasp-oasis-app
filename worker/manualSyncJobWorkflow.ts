@@ -97,7 +97,7 @@ async function finishManualJob(
   });
   await env.DB.prepare('DELETE FROM sync_state WHERE key = ?')
     .bind(`manual_sync_cursor:${params.jobRunId}`).run();
-  await auditOutcome(env, params.auditActor, `${params.pipeline}:${params.jobKey}`, status);
+  await auditOutcome(env, params.auditActor, `canonical:${params.jobKey}`, status);
 }
 
 export async function initializeManualSyncJob(

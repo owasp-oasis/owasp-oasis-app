@@ -100,10 +100,10 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
   // Validate state (timing-safe comparison)
   const cookieState = getCookieValue(request, OAUTH_STATE_COOKIE);
   if (!code || !state || !cookieState) {
-    return redirectWithError('/workspace/pull-requests', 'OAuth state missing');
+    return redirectWithError('/workspace/fixes', 'OAuth state missing');
   }
   if (!timingSafeEqual(state, cookieState)) {
-    return redirectWithError('/workspace/pull-requests', 'OAuth state mismatch');
+    return redirectWithError('/workspace/fixes', 'OAuth state mismatch');
   }
 
   // Exchange code for access token
@@ -125,11 +125,11 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
     });
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
     if (!tokenData.access_token) {
-      return redirectWithError('/workspace/pull-requests', tokenData.error ?? 'Token exchange failed');
+      return redirectWithError('/workspace/fixes', tokenData.error ?? 'Token exchange failed');
     }
     accessToken = tokenData.access_token;
   } catch {
-    return redirectWithError('/workspace/pull-requests', 'Token exchange error');
+    return redirectWithError('/workspace/fixes', 'Token exchange error');
   }
 
   // Fetch GitHub user info
@@ -144,13 +144,13 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
     });
     const user = await userRes.json() as { id?: number; login?: string; avatar_url?: string };
     if (!Number.isSafeInteger(user.id) || !user.login) {
-      return redirectWithError('/workspace/pull-requests', 'Could not fetch GitHub user');
+      return redirectWithError('/workspace/fixes', 'Could not fetch GitHub user');
     }
     githubUserId = user.id as number;
     login     = user.login;
     avatarUrl = user.avatar_url ?? `https://github.com/${user.login}.png?size=64`;
   } catch {
-    return redirectWithError('/workspace/pull-requests', 'GitHub user fetch error');
+    return redirectWithError('/workspace/fixes', 'GitHub user fetch error');
   }
 
   // Fetch user emails to get primary verified email for mailing list registration
@@ -187,7 +187,7 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
        ) VALUES (?, ?, ?, ?, ?, ?)`,
     ).bind(sessionId, githubUserId, login, avatarUrl, now.toISOString(), expires.toISOString()).run();
   } catch {
-    return redirectWithError('/workspace/pull-requests', 'Session creation failed');
+    return redirectWithError('/workspace/fixes', 'Session creation failed');
   }
 
   // Auto-register the user as a validator in the registrations table (if not already registered)
@@ -233,13 +233,13 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
   try {
     encryptedToken = await encryptToken(env.TOKEN_ENCRYPTION_KEY, accessToken);
   } catch {
-    return redirectWithError('/workspace/pull-requests', 'Token encryption failed');
+    return redirectWithError('/workspace/fixes', 'Token encryption failed');
   }
 
   // Redirect to the Workspace with session and token cookies set.
   // IMPORTANT: Set-Cookie must be separate headers — joining with ', ' breaks cookie parsing.
   const callbackHeaders = new Headers({
-    Location: '/workspace/pull-requests',
+    Location: '/workspace/fixes',
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   });
   callbackHeaders.append('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);

@@ -25,7 +25,7 @@
   padding: 28px;
   display: flex;
   gap: 24px;
-  align-items: flex-start;
+  align-items: center;
   border-left: 4px solid var(--green);
 }
 
@@ -52,6 +52,17 @@
 .sponsor-logo-wrap--dark {
   background: #1a1a2e;
   border-color: #1a1a2e;
+}
+
+.sponsor-logo-wrap--wide {
+  width: 220px;
+  min-width: 220px;
+  background: var(--white);
+}
+
+.sponsor-logo-wrap--wide .sponsor-logo {
+  height: auto;
+  max-height: 52px;
 }
 
 .sponsor-logo {
@@ -133,6 +144,10 @@
 /* Community sponsors */
 .community-sponsors-section {
   background: var(--gray-100);
+}
+
+.community-sponsor-cards {
+  margin-bottom: 32px;
 }
 
 .community-sponsor-callout {
@@ -232,6 +247,13 @@
 @media (max-width: 768px) {
   .sponsor-card {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .sponsor-logo-wrap--wide {
+    width: 220px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .sponsors-form-inner {

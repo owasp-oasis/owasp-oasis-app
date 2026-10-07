@@ -250,11 +250,11 @@ wrangler d1 execute oasis-db --remote \
 wrangler d1 execute oasis-db --remote \
   --command="SELECT COUNT(*) as total FROM registrations"
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 
-# Check contributor leaderboard
+# Check contributors
 wrangler d1 execute oasis-db --remote \
   --command="SELECT login, prs_worked, total_interactions, reputation FROM contributors ORDER BY reputation DESC"
 
@@ -292,6 +292,7 @@ node export-db.js
 | `user_roles` | Temporary GitHub-ID-backed application role assignments |
 | `privileged_action_audit` | Append-only outcome log for role-protected server actions |
 | `user_votes` | One row per `(github_login, pr_id)` — records decision and resulting GitHub comment ID |
+| `validation_requests` | Availability clock and lifecycle used only for response recognition; historical backfill rows are not badge eligible |
 | `analytics_daily_routes` | Daily normalized route, page-view, navigation-duration, and response-class aggregates; no visitor identifiers |
 | `analytics_daily_cloudflare` | Daily estimated Cloudflare request, visit, response, bandwidth, and cache aggregates |
 | `analytics_collection_days` | Idempotent daily archive checkpoint and retry state |
@@ -302,15 +303,13 @@ node export-db.js
 
 ## GitHub sync
 
-The leaderboard is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
+The workspace is populated by syncing pull requests, comments, and reactions from the `owasp-oasis` GitHub org.
 
 ### Bounded Workflow rollout
 
 The production GitHub sync is implemented as a chain of bounded Workflow instances under the Workers Free 50-subrequest ceiling, which Cloudflare applies automatically. Do not add a Wrangler `[limits]` block while this Worker uses the Free plan: custom runtime limits are supported only by the paid Standard usage model and will make deployment fail. Repository/PR collection handles one PR per instance, reaction collection handles one validation comment per instance, and duplicate closing handles one PR (two GitHub writes) per instance. A D1 lease prevents overlapping canonical pipelines. The Workflow pauses before its tracked daily step allowance is exhausted and resumes after the UTC reset.
 
-Preview runs the read-only shadow Workflow daily at `02:30 UTC`. It shares the production D1 database but writes only shadow, parity, work-item, and observability tables. Production keeps the `0 */4 * * *` trigger installed. While D1 key `canonical_sync_enabled` remains at its default `0`, that trigger continues to run the existing legacy synchronizer. Enabling the key atomically switches subsequent triggers to the bounded canonical Workflow; disabling it returns subsequent triggers to legacy behavior.
-
-Before deploying the migration, record a D1 Time Travel bookmark:
+Production runs the canonical Workflow every four hours (`0 */4 * * *`). Before deploying a migration, record a D1 Time Travel bookmark:
 
 ```bash
 npx wrangler d1 time-travel info oasis-db --timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --json
@@ -325,17 +324,7 @@ curl --fail-with-body -sS -X POST \
   https://www.owasp-oasis.org/api/admin/sync/canonical/run
 ```
 
-Do not enable the production schedule until preview has recorded three consecutive matching parity runs and the canary result has been reviewed. The server rejects early activation even with a valid admin secret.
-
-```bash
-curl --fail-with-body -sS -X POST \
-  -H "Content-Type: application/json" \
-  -H "X-Admin-Secret: ${OASIS_ADMIN_SECRET}" \
-  --data '{"enabled":true}' \
-  https://www.owasp-oasis.org/api/admin/sync/canonical/schedule
-```
-
-Rollback is immediate and does not require a deploy: send the same request with `{"enabled":false}` so the next four-hour trigger uses the retained legacy synchronizer. If code rollback is also required, restore the previous Worker deployment only after disabling the schedule. Use the saved Time Travel bookmark only when canonical writes themselves must be reverted; restoring D1 also rolls back unrelated database writes after that bookmark and therefore requires explicit review.
+Use the saved Time Travel bookmark only when canonical writes themselves must be reverted; restoring D1 also rolls back unrelated database writes after that bookmark and therefore requires explicit review.
 
 Production also processes the HubSpot queue at `15 * * * *`. Form submissions are written to D1 together with their outbox job, so a temporary HubSpot failure cannot lose the contact. Failed jobs return to `pending` with capped exponential backoff; stale processing claims are recovered automatically. Logs contain batch counts and safe error codes, never contact payloads or API response bodies.
 
@@ -376,7 +365,7 @@ Allowed values are `admin`, `moderator`, `member`, and `guest`. Use an explicit 
 
 ### Retired sync entry points
 
-`GET /leaderboard-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
+`GET /workspace-refresh` and `GET /api/admin/full-sync` return `410`. They cannot mutate the shared cursor or overlap the canonical Workflow. The authenticated canary endpoint above is the only manual full-sync entry point.
 
 ### Sync state
 
@@ -402,13 +391,13 @@ wrangler d1 execute oasis-db --remote --env production \
 |---|---|
 | HTTPS redirect | HTTP → HTTPS enforced at Worker level |
 | Apex redirect | `owasp-oasis.com` → `www.owasp-oasis.com` |
-| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including leaderboard API |
+| Security headers | CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP, COEP — applied to all responses including workspace API |
 | CSRF protection | Double-submit cookie pattern with constant-time comparison (`GET /api/csrf` issues token) |
 | Rate limiting | 5 POST requests per IP per 60 seconds via KV; IP is SHA-256 hashed before use as key |
 | Input validation | Email (RFC 5322 + disposable domain blocklist), GitHub username format, max field lengths, HTML tag stripping, control character removal |
 | Body size limit | 8 KB maximum request body; enforced via `Content-Length` header and actual read |
 | SQL injection | Impossible — all queries use D1 parameterised bindings |
-| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all leaderboard tracking |
+| Bot/automated account filtering | GitHub logins matching `[bot]` suffix or known automation patterns are excluded from all workspace tracking |
 | OASIS/non-OASIS comment separation | Only comments matching the OASIS validation template affect reputation and consensus; plain comments are tracked separately and do not influence scores |
 | IP privacy | SHA-256 hashed before storage — raw IPs never persisted |
 | Error messages | Generic client-facing errors — no stack traces or internal details exposed |

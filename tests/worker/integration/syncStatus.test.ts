@@ -14,7 +14,6 @@ import {
   startSyncJob,
 } from '../../../worker/syncJobs.js';
 import type { Env } from '../../../worker/types.js';
-import { canonicalCutoverEligible } from '../../../worker/canonicalSync.js';
 
 describe('public sync status', () => {
   beforeAll(async () => applySchema(env));
@@ -45,8 +44,7 @@ describe('public sync status', () => {
     };
     const executableJobs = productionStatus.jobs;
     expect(executableJobs.length).toBeGreaterThan(0);
-    expect(executableJobs.find(job => job.key === 'legacy_workspace_sync')?.retryable).toBe(false);
-    expect(executableJobs.filter(job => job.key !== 'legacy_workspace_sync').every(job => job.retryable)).toBe(true);
+    expect(executableJobs.every(job => job.retryable)).toBe(true);
   });
 
   it('derives the primary status from every child in the latest Workspace pipeline', async () => {
@@ -98,83 +96,18 @@ describe('public sync status', () => {
     await expect(readOverallStatus()).resolves.toBe('succeeded');
   });
 
-  it('requires three consecutive matching parity runs before scheduled cutover', async () => {
-    await env.DB.prepare(`
-      INSERT INTO sync_parity_runs (
-        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
-        eligible_for_cutover, created_at
-      ) VALUES ('parity-2', ?, 'match', 2, 1, ?)
-    `).bind(new Date().toISOString(), new Date().toISOString()).run();
-    expect(await canonicalCutoverEligible(env.DB)).toBe(false);
-
-    await env.DB.prepare(`
-      INSERT INTO sync_parity_runs (
-        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
-        eligible_for_cutover, created_at
-      ) VALUES ('parity-3', ?, 'match', 3, 1, ?)
-    `).bind(new Date().toISOString(), new Date(Date.now() + 1_000).toISOString()).run();
-    expect(await canonicalCutoverEligible(env.DB)).toBe(true);
-
-    await env.DB.prepare(`
-      INSERT INTO sync_parity_runs (
-        pipeline_run_id, canonical_cutoff_at, status, consecutive_matches,
-        eligible_for_cutover, created_at
-      ) VALUES ('parity-pending', ?, 'pending', 0, 0, ?)
-    `).bind(new Date().toISOString(), new Date(Date.now() + 2_000).toISOString()).run();
-    expect(await canonicalCutoverEligible(env.DB)).toBe(true);
-  });
-
-  it('exposes only aggregate parity categories without entity identifiers', async () => {
-    const now = new Date().toISOString();
-    await env.DB.prepare(`
-      INSERT INTO sync_parity_runs (
-        pipeline_run_id, canonical_cutoff_at, status, comparable_entities,
-        matched_entities, difference_count, created_at
-      ) VALUES ('parity-diagnostics', ?, 'mismatch', 12, 9, 3, ?)
-    `).bind(now, now).run();
-    await env.DB.batch([
-      env.DB.prepare(`
-        INSERT INTO sync_parity_differences (
-          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
-        ) VALUES ('parity-diagnostics', 'pull_request', 'sensitive-pr-1', 'field_mismatch', '["state"]', ?)
-      `).bind(now),
-      env.DB.prepare(`
-        INSERT INTO sync_parity_differences (
-          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
-        ) VALUES ('parity-diagnostics', 'pull_request', 'sensitive-pr-2', 'field_mismatch', '["state"]', ?)
-      `).bind(now),
-      env.DB.prepare(`
-        INSERT INTO sync_parity_differences (
-          pipeline_run_id, entity_type, entity_id, difference_type, fields_json, created_at
-        ) VALUES ('parity-diagnostics', 'vote', 'sensitive-user:1', 'missing_in_shadow', '[]', ?)
-      `).bind(now),
-    ]);
-
-    const status = await getSyncStatus(env) as {
-      shadow: { difference_summary: Array<Record<string, unknown>> };
-    };
-    expect(status.shadow.difference_summary).toEqual([
-      { entity_type: 'pull_request', difference_type: 'field_mismatch', fields: ['state'], count: 2 },
-      { entity_type: 'vote', difference_type: 'missing_in_shadow', fields: [], count: 1 },
-    ]);
-    expect(JSON.stringify(status.shadow.difference_summary)).not.toContain('sensitive-pr');
-    expect(JSON.stringify(status.shadow.difference_summary)).not.toContain('sensitive-user');
-  });
-
   it('returns baseline health instead of 500 while the observability migration is pending', async () => {
-    await env.DB.prepare('DROP TABLE sync_parity_runs').run();
+    await env.DB.prepare('DROP TABLE sync_job_runs').run();
     try {
       const response = await SELF.fetch(new Request('http://localhost/api/sync/status'));
       expect(response.status).toBe(200);
       const body = await response.json() as {
         observability_ready: boolean;
         overall: { last_success_at: string };
-        shadow: null;
         jobs: Array<{ status: string }>;
       };
       expect(body.observability_ready).toBe(false);
       expect(body.overall.last_success_at).toBe('2020-01-01T00:00:00Z');
-      expect(body.shadow).toBeNull();
       expect(body.jobs.every(job => job.status === 'unknown')).toBe(true);
     } finally {
       await applySchema(env);
@@ -185,7 +118,7 @@ describe('public sync status', () => {
     const runId = await startSyncJob(env.DB, {
       jobKey: 'repository_inventory',
       trigger: 'scheduled',
-      mode: 'shadow',
+      mode: 'live',
     });
     await recordSyncJobEvent(env.DB, runId, {
       type: 'repository_checked',
@@ -211,7 +144,7 @@ describe('public sync status', () => {
       const id = await startSyncJob(env.DB, {
         jobKey: 'orphan_cleanup',
         trigger: 'scheduled',
-        mode: 'shadow',
+        mode: 'live',
       });
       await finishSyncJob(env.DB, id, 'failed', { errorCode: 'test_failure', error: `Failure ${index}` });
     }
@@ -222,12 +155,12 @@ describe('public sync status', () => {
     expect(row?.count).toBe(100);
   });
 
-  it('reuses and resets a shadow job record when a Workflow step retries', async () => {
-    const pipelineRunId = 'shadow-11111111-1111-4111-8111-111111111111';
+  it('reuses and resets a job record when a Workflow step retries', async () => {
+    const pipelineRunId = 'live-11111111-1111-4111-8111-111111111111';
     const options = {
       jobKey: 'repository_inventory',
       trigger: 'continuation' as const,
-      mode: 'shadow' as const,
+      mode: 'live' as const,
       pipelineRunId,
     };
     const firstId = await getOrStartSyncJob(env.DB, options);
@@ -261,7 +194,7 @@ describe('public sync status', () => {
       const id = await startSyncJob(env.DB, {
         jobKey: 'orphan_cleanup',
         trigger: 'scheduled',
-        mode: 'shadow',
+        mode: 'live',
       });
       await finishSyncJob(env.DB, id, 'failed', { errorCode: 'test_failure', error: `Failure ${index}` });
     }
@@ -279,7 +212,7 @@ describe('public sync status', () => {
     expect(body.incomplete_runs).toHaveLength(12);
     expect(body.incomplete_runs[0]).toEqual(expect.objectContaining({
       label: 'Orphan cleanup',
-      mode: 'shadow',
+      mode: 'live',
     }));
     expect(body.budget_history).toContainEqual(expect.objectContaining({ budget_key: 'workflow_steps', consumed: 12 }));
   });

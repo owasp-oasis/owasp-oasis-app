@@ -10,9 +10,10 @@ interface Props {
   body: string | null
   loading: boolean
   error: string | null
+  onRetry?: () => void
 }
 
-export default function BodyTab({ body, loading, error }: Props) {
+export default function BodyTab({ body, loading, error, onRetry }: Props) {
   // Dynamically load and run mermaid for any .prp-mermaid blocks in the DOM
   useEffect(() => {
     if (!body) return
@@ -31,7 +32,7 @@ export default function BodyTab({ body, loading, error }: Props) {
   }, [body])
 
   if (loading) return <div className="prp-loading">Loading PR body…</div>
-  if (error)   return <div className="prp-error">{error}</div>
+  if (error)   return <div className="prp-error" role="alert"><span>{error}</span>{onRetry && <button type="button" className="prp-error-retry" onClick={onRetry}>Retry</button>}</div>
   if (!body)   return <p className="prp-no-data">No description provided.</p>
 
   return <div className="prp-md">{renderMarkdown(body)}</div>

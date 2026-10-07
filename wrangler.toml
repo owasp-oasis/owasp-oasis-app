@@ -58,16 +58,6 @@ WELCOME_EMAIL_MODE   = "off"
 name = "WELCOME_EMAIL"
 allowed_sender_addresses = ["welcome@mail.owasp-oasis.org"]
 
-# ── Cron triggers ──
-[triggers]
-crons = ["30 2 * * *"]
-
-# Preview is strictly read-only with respect to canonical Workspace tables.
-[[workflows]]
-name       = "oasis-shadow-sync-preview"
-binding    = "SHADOW_SYNC_WORKFLOW"
-class_name = "ShadowSyncWorkflow"
-
 # ── Production environment ──
 [env.production]
 name = "owasp-oasis"
@@ -138,10 +128,3 @@ class_name = "HubSpotSyncWorkflow"
 name       = "oasis-manual-sync-jobs"
 binding    = "MANUAL_SYNC_JOB_WORKFLOW"
 class_name = "ManualSyncJobWorkflow"
-
-# Allows production administrators to launch the same read-only parity
-# validation that preview runs on its daily schedule.
-[[env.production.workflows]]
-name       = "oasis-shadow-sync-production"
-binding    = "SHADOW_SYNC_WORKFLOW"
-class_name = "ShadowSyncWorkflow"

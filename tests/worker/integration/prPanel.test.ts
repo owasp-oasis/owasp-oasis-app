@@ -217,6 +217,99 @@ describe('PR Panel endpoints', () => {
     });
   });
 
+  describe('POST /api/pr-panel/:id/comments', () => {
+    beforeEach(() => {
+      fetchMock
+        .when((req) => req.method === 'POST' && req.url.includes('/issues/') && req.url.includes('/comments'))
+        .respondWith(
+          new Response(
+            JSON.stringify({
+              id: 987654,
+              body: 'A useful follow-up question.',
+              user: { login: 'test-user', avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4' },
+              created_at: new Date().toISOString(),
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+    });
+
+    it('requires authentication and CSRF protection', async () => {
+      await insertTestRepo(env);
+      await insertTestPR(env);
+
+      const unauthenticated = await SELF.fetch(
+        new Request('http://localhost/api/pr-panel/1001/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body: 'Hello' }),
+        }),
+      );
+      expect(unauthenticated.status).toBe(403);
+
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const missingCsrf = await SELF.fetch(
+        new Request('http://localhost/api/pr-panel/1001/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: `${sessionCookie}; ${tokenCookie}` },
+          body: JSON.stringify({ body: 'Hello' }),
+        }),
+      );
+      expect(missingCsrf.status).toBe(403);
+    });
+
+    it('posts a plain comment to GitHub and returns it for the panel', async () => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestRepo(env);
+      await insertTestPR(env);
+
+      const res = await SELF.fetch(
+        new Request('http://localhost/api/pr-panel/1001/comments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrf,
+            Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
+          },
+          body: JSON.stringify({ body: 'A useful follow-up question.' }),
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        comment: {
+          id: 987654,
+          body: 'A useful follow-up question.',
+          oasis_decision: null,
+        },
+      });
+    });
+
+    it('rejects empty and overlong comments', async () => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestRepo(env);
+      await insertTestPR(env);
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrf,
+        Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
+      };
+
+      const empty = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/comments', {
+        method: 'POST', headers, body: JSON.stringify({ body: '   ' }),
+      }));
+      expect(empty.status).toBe(400);
+
+      const tooLong = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/comments', {
+        method: 'POST', headers, body: JSON.stringify({ body: 'x'.repeat(2001) }),
+      }));
+      expect(tooLong.status).toBe(400);
+    });
+  });
+
   describe('POST /api/pr-panel/:id/react', () => {
     beforeEach(() => {
       fetchMock

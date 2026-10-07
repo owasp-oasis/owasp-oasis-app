@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
+<script src="./image-slot.js"></script>
 </head>
 <body>
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#f7fbff;color:#07111f;font-family:"Geist",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -93,6 +94,10 @@ button{cursor:pointer}
       <button onClick="{{ go.maintainers }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:8px;background:{{ nav.maintainers.bg }};color:{{ nav.maintainers.fg }};font-weight:600;font-size:14px;text-align:left">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"></path><path d="m9 12 2 2 4-4"></path></svg>
         <span style="flex:1">Maintainers</span>
+      </button>
+      <button onClick="{{ go.teams }}" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:8px;background:{{ nav.teams.bg }};color:{{ nav.teams.fg }};font-weight:600;font-size:14px;text-align:left">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        <span style="flex:1">Teams</span>
       </button>
     </div>
     <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
@@ -184,7 +189,7 @@ button{cursor:pointer}
 
     <sc-if value="{{ isPRs }}" hint-placeholder-val="{{ false }}">
       <div style="padding:20px 28px 28px;display:flex;flex-direction:column;gap:16px;min-width:0">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="position:sticky;top:133px;z-index:19;background:#f7fbff;padding:4px 0;margin:0 -4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;align-items:center;height:38px;border:1px solid {{ prefChip.border }};border-radius:8px;background:{{ prefChip.bg }};overflow:hidden">
               <button onClick="{{ togglePrefs }}" title="Toggle preference filter" style="display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;border:0;background:transparent;color:{{ prefChip.fg }};font-size:13px;font-weight:600;white-space:nowrap">
@@ -217,7 +222,7 @@ button{cursor:pointer}
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;min-width:0">
 
           <sc-if value="{{ isSplit }}" hint-placeholder-val="{{ true }}">
-            <div style="flex:1 1 300px;min-width:0;background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow-x:hidden;max-height:calc(100vh - 170px);overflow-y:auto">
+            <div style="flex:1 1 300px;min-width:0;background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow-x:hidden;max-height:calc(100vh - 244px);overflow-y:auto">
               <sc-for list="{{ list }}" as="p" hint-placeholder-count="8">
                 <button onClick="{{ p.open }}" style="display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px 12px 12px;border:0;border-bottom:1px solid #e8edf5;border-left:3px solid {{ p.selBorder }};background:{{ p.selBg }};text-align:left">
                   <span style="display:flex;align-items:center;gap:8px">
@@ -286,6 +291,9 @@ button{cursor:pointer}
           <sc-if value="{{ drawerBackdrop }}" hint-placeholder-val="{{ false }}">
             <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;background:rgba(7,17,31,.32);z-index:40"></div>
           </sc-if>
+          <sc-if value="{{ isExpanded }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ toggleExpand }}" style="position:fixed;inset:0;background:rgba(7,17,31,.45);z-index:54"></div>
+          </sc-if>
 
           <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ true }}">
             <article style="{{ detailWrap }}">
@@ -325,10 +333,21 @@ button{cursor:pointer}
                 </div>
               </div>
 
-              <div style="display:flex;gap:4px;padding:0 20px;border-bottom:1px solid #e8edf5">
+              <div style="display:flex;align-items:center;gap:4px;padding:0 20px;border-bottom:1px solid #e8edf5">
                 <sc-for list="{{ detailTabs }}" as="t" hint-placeholder-count="3">
                   <button onClick="{{ t.pick }}" style="padding:12px 10px;border:0;border-bottom:2px solid {{ t.border }};background:none;color:{{ t.fg }};font-size:14px;font-weight:600;margin-bottom:-1px">{{ t.label }}</button>
                 </sc-for>
+                <span style="flex:1"></span>
+                <sc-if value="{{ isExpanded }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ toggleExpand }}" aria-label="Collapse" title="Collapse" style="display:flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 10px;margin-bottom:6px;border:1px solid rgba(15,111,207,.28);border-radius:6px;background:#fff;color:#243247;font-size:12px;font-weight:600">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"></path></svg>Collapse
+                  </button>
+                </sc-if>
+                <sc-if value="{{ canExpand }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ toggleExpand }}" aria-label="Expand" title="Expand view" style="display:flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 10px;margin-bottom:6px;border:1px solid rgba(15,111,207,.28);border-radius:6px;background:#fff;color:#243247;font-size:12px;font-weight:600">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>Expand
+                  </button>
+                </sc-if>
               </div>
 
               <div style="padding:20px 24px;display:flex;flex-direction:column;gap:18px;flex:1;overflow-y:auto">
@@ -485,6 +504,12 @@ button{cursor:pointer}
                     </div>
                     <sc-if value="{{ vote.showForm }}" hint-placeholder-val="{{ false }}">
                       <div style="display:flex;flex-direction:column;gap:12px">
+                        <sc-if value="{{ voteTeams.show }}" hint-placeholder-val="{{ false }}">
+                          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600">Credit this validation
+                            <select value="{{ voteTeams.value }}" onChange="{{ voteTeams.set }}" style="height:38px;padding:0 10px;border:1px solid rgba(15,111,207,.28);border-radius:8px;font-size:14px;font-weight:400;max-width:320px;background:#fff"><option value="">Personal only</option><sc-for list="{{ voteTeams.options }}" as="vt" hint-placeholder-count="2"><option value="{{ vt.id }}">{{ vt.name }}</option></sc-for></select>
+                            <span style="font-size:12px;font-weight:400;color:#61738b">Optional. Your validation remains your own work; this adds it to one Team’s public totals when you submit.</span>
+                          </label>
+                        </sc-if>
                         <sc-if value="{{ vote.showConfidence }}" hint-placeholder-val="{{ false }}">
                           <div style="display:flex;gap:16px;flex-wrap:wrap">
                             <div style="display:flex;flex-direction:column;gap:6px">
@@ -598,6 +623,17 @@ button{cursor:pointer}
               </div>
             </sc-for>
           </div>
+          <sc-if value="{{ selC.hasTeamBadges }}" hint-placeholder-val="{{ false }}">
+            <section aria-label="Team badges" style="display:flex;flex-direction:column;gap:8px;border-top:1px solid #e8edf5;padding-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h4 style="font-size:13px;font-weight:700">Team badges</h4><span style="font-size:11px;color:#61738b">Shared by the member and Team admin</span></div>
+              <sc-for list="{{ selC.teamBadges }}" as="tb" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(13,158,82,.3);border-radius:8px;background:#f5faf7">
+                  <span aria-hidden="true" style="width:26px;height:26px;flex:none;border-radius:50%;background:#e8f9ef;color:#0d9e52;display:grid;place-items:center;font-size:13px">★</span>
+                  <div style="display:flex;flex-direction:column;min-width:0"><strong style="font-size:13px">{{ tb.team }}</strong><span style="font-size:12px;color:#61738b">{{ tb.label }}</span></div>
+                </div>
+              </sc-for>
+            </section>
+          </sc-if>
           <p style="font-size:12px;line-height:1.6;color:#61738b;border-top:1px solid #e8edf5;padding-top:12px">Base = comment + peer + reaction + trust. Trust earns 10 points for each Accept vote on a fix merged upstream.</p>
         </aside>
       </div>
@@ -641,6 +677,451 @@ button{cursor:pointer}
           <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#e0a800"></span>1–3 days</span>
           <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#d64545"></span>Over 3 days</span>
         </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTeams }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:24px 28px 48px;display:flex;flex-direction:column;gap:18px;max-width:1180px">
+
+        <sc-if value="{{ teams.showList }}" hint-placeholder-val="{{ true }}">
+          <header style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+            <p style="color:#4a5c70;font-size:15px">Amplify your impact together.</p>
+            <sc-if value="{{ teams.showCreateBtn }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ teams.startCreate }}" style="min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:14px">+ Create team</button>
+            </sc-if>
+          </header>
+
+          <sc-if value="{{ teams.creating }}" hint-placeholder-val="{{ false }}">
+            <section aria-labelledby="create-team-heading" style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;max-width:680px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px"><span id="create-team-heading">Create a team</span></h3><p style="font-size:13px;color:#61738b;margin-top:3px">Start with a name. You can invite members next.</p></div></div>
+              <div style="display:flex;flex-direction:column;gap:18px;padding:0 20px 22px">
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Team name <span style="color:#d64545">*</span></span><input value="{{ teams.form.name }}" onChange="{{ teams.form.setName }}" maxLength="80" placeholder="e.g. Python reviewers" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Description <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#61738b">(optional)</span></span><textarea value="{{ teams.form.desc }}" onChange="{{ teams.form.setDesc }}" maxLength="500" rows="2" placeholder="Tell others about your team." style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff;resize:vertical;line-height:1.5"></textarea></label>
+                <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">How people join</span>
+                  <select value="{{ teams.form.mode }}" onChange="{{ teams.form.setMode }}" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select>
+                </label>
+                <fieldset style="border:0;display:flex;flex-direction:column;gap:10px"><legend style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247;margin-bottom:10px">Team logo</legend>
+                <div role="radiogroup" aria-label="Logo source" style="display:flex;gap:18px;flex-wrap:wrap">
+                  <label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="radio" name="{{ teams.form.radioName }}" checked="{{ teams.form.logoSourceBuiltin }}" onChange="{{ teams.form.setSourceBuiltin }}" disabled="{{ teams.form.locked }}" style="width:auto;accent-color:#0d9e52"> Choose an icon</label>
+                  <label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="radio" name="{{ teams.form.radioName }}" checked="{{ teams.form.logoSourceCustom }}" onChange="{{ teams.form.setSourceCustom }}" disabled="{{ teams.form.locked }}" style="width:auto;accent-color:#0d9e52"> Custom image</label>
+                </div>
+                <sc-if value="{{ teams.form.logoSourceBuiltin }}" hint-placeholder-val="{{ true }}">
+                <div role="radiogroup" aria-label="Team logo" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ teams.form.logoOptions }}" as="lo" hint-placeholder-count="7">
+                    <button role="radio" aria-checked="{{ lo.on }}" onClick="{{ lo.pick }}" disabled="{{ lo.disabled }}" style="display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid {{ lo.border }};border-radius:7px;background:{{ lo.bg }};color:{{ lo.fg }};font-size:12px;font-weight:600">
+                      <span aria-hidden="true" style="width:30px;height:30px;border-radius:8px;background:{{ lo.swatchBg }};color:{{ lo.swatchFg }};display:grid;place-items:center;font-size:13px;font-weight:700">{{ lo.mark }}</span>{{ lo.label }}
+                    </button>
+                  </sc-for>
+                </div>
+                </sc-if>
+                <sc-if value="{{ teams.form.logoSourceCustom }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:center;padding:12px;border:1px solid rgba(15,111,207,.16);border-radius:8px;background:#f4f7fb">
+                    <image-slot id="{{ teams.form.logoSlotId }}" shape="rounded" radius="14" style="width:88px;height:88px" placeholder="Drop a logo"></image-slot>
+                    <div style="display:flex;flex-direction:column;gap:3px"><strong style="font-size:13px">Custom logo</strong><span style="font-size:12px;color:#61738b">Square PNG, JPEG, or WebP. Drop an image or click to browse.</span><span style="font-size:12px;color:#61738b">{{ teams.form.logoNote }}</span></div>
+                  </div>
+                </sc-if>
+                </fieldset>
+                <div style="display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:14px;align-items:center;padding:12px;border:1px solid rgba(15,111,207,.16);border-radius:8px;background:#f4f7fb">
+                    <image-slot id="{{ teams.form.bannerSlotId }}" shape="rounded" radius="8" style="width:100%;height:84px" placeholder="Drop a banner"></image-slot>
+                    <div style="display:flex;flex-direction:column;gap:3px"><strong style="font-size:13px">Team homepage banner</strong><span style="font-size:12px;color:#61738b">Wide PNG, JPEG, or WebP · up to 768 KB</span><span style="font-size:12px;color:#61738b">{{ teams.form.bannerNote }}</span></div>
+                  </div>
+                <p style="font-size:12px;color:#61738b">Team totals are public. Members and their activity are visible only inside the team.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <button onClick="{{ teams.confirmCreate }}" disabled="{{ teams.form.cantCreate }}" style="min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:14px;opacity:{{ teams.form.createOpacity }};cursor:{{ teams.form.createCursor }}">Create team</button>
+                  <button onClick="{{ teams.cancelCreate }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px">Cancel</button>
+                </div>
+              </div>
+            </section>
+          </sc-if>
+
+          <nav aria-label="Teams directory" style="display:flex;gap:24px;border-bottom:1px solid #e8edf5">
+            <sc-if value="{{ teams.showMineTab }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ teams.showMine }}" aria-current="{{ teams.mineCurrent }}" style="display:flex;align-items:center;gap:8px;padding:12px 0;border:0;border-bottom:2px solid {{ teams.mineTabBorder }};background:none;color:{{ teams.mineTabFg }};font-size:14px;font-weight:600;margin-bottom:-1px">Your teams <span style="font-family:'Geist Mono',monospace;font-size:11px;padding:1px 7px;border-radius:100px;background:#f4f7fb;color:#4a5c70">{{ teams.mineCount }}</span></button>
+            </sc-if>
+            <button onClick="{{ teams.showExplore }}" aria-current="{{ teams.exploreCurrent }}" style="padding:12px 0;border:0;border-bottom:2px solid {{ teams.exploreTabBorder }};background:none;color:{{ teams.exploreTabFg }};font-size:14px;font-weight:600;margin-bottom:-1px">Explore teams</button>
+          </nav>
+
+          <sc-if value="{{ teams.showInbox }}" hint-placeholder-val="{{ false }}">
+            <section aria-label="Invitations and requests" style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Invitations &amp; requests</h3></div></div>
+              <sc-for list="{{ teams.inbox }}" as="ib" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                  <div style="flex:1;min-width:200px"><strong style="font-size:14px">{{ ib.name }}</strong><p style="font-size:13px;color:#61738b;margin-top:2px">{{ ib.desc }}</p></div>
+                  <sc-if value="{{ ib.actionable }}" hint-placeholder-val="{{ false }}"><button onClick="{{ ib.act }}" style="min-height:36px;padding:6px 14px;border:{{ ib.actBorder }};border-radius:8px;background:{{ ib.actBg }};color:{{ ib.actFg }};font-weight:700;font-size:13px">{{ ib.actLabel }}</button></sc-if>
+                  <sc-if value="{{ ib.pending }}" hint-placeholder-val="{{ false }}"><span style="padding:2px 8px;border-radius:100px;background:#fef9c3;color:#854d0e;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">Pending</span></sc-if>
+                </div>
+              </sc-for>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ teams.showLeaderboard }}" hint-placeholder-val="{{ false }}">
+            <section aria-labelledby="team-leaderboard-heading" style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px"><span id="team-leaderboard-heading">Team leaderboard</span></h3><p style="font-size:13px;color:#61738b;margin-top:3px">{{ teams.periodDesc }}</p></div><div role="tablist" aria-label="Leaderboard period" style="display:inline-flex;gap:2px;padding:3px;background:#f4f7fb;border:1px solid rgba(15,111,207,.16);border-radius:9px">
+                  <button role="tab" aria-selected="{{ teams.periodAllOn }}" onClick="{{ teams.setPeriodAll }}" style="padding:5px 10px;border:0;border-radius:7px;background:{{ teams.periodAllBg }};box-shadow:{{ teams.periodAllShadow }};color:{{ teams.periodAllFg }};font-size:13px;font-weight:600">All time</button>
+                  <button role="tab" aria-selected="{{ teams.period90On }}" onClick="{{ teams.setPeriod90 }}" style="padding:5px 10px;border:0;border-radius:7px;background:{{ teams.period90Bg }};box-shadow:{{ teams.period90Shadow }};color:{{ teams.period90Fg }};font-size:13px;font-weight:600">Last 90 days</button>
+                </div></div>
+              <ol style="list-style:none">
+              <sc-for list="{{ teams.leaderboard }}" as="lb" hint-placeholder-count="5">
+                <li style="display:flex;align-items:center;gap:13px;padding:13px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                  <span style="width:20px;text-align:center;font-family:'Geist Mono',monospace;font-size:13px;color:#61738b">{{ lb.rank }}</span>
+                  <span aria-hidden="true" style="width:34px;height:34px;flex:none;border-radius:9px;background:#e7f1ff;color:#0b4f8a;display:grid;place-items:center;font-size:12px;font-weight:700">{{ lb.mark }}</span>
+                  <div style="flex:1;min-width:160px"><button onClick="{{ lb.open }}" style="border:0;background:none;padding:0;text-align:left;font-size:14px;font-weight:700;color:#07111f">{{ lb.name }}</button><div style="font-size:12px;color:#61738b;text-transform:{{ lb.subCase }}">{{ lb.sub }}</div></div>
+                  <div style="display:flex;gap:24px;text-align:right">
+                    <span style="display:flex;flex-direction:column;gap:2px"><strong style="font-family:'Geist Mono',monospace;font-size:15px">{{ lb.primaryVal }}</strong><span style="font-size:11px;color:#61738b">{{ lb.primaryLabel }}</span></span>
+                    <sc-if value="{{ lb.showRate }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-family:'Geist Mono',monospace;font-size:15px">{{ lb.rate }}</strong><span style="font-size:11px;color:#61738b">Per active contributor</span></span></sc-if>
+                  </div>
+                </li>
+              </sc-for>
+              </ol>
+            </section>
+          </sc-if>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:8px;height:38px;flex:1 1 240px;max-width:340px;padding:0 12px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff">
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#61738b" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+              <input type="search" aria-label="Search teams" value="{{ teams.query }}" onChange="{{ teams.setQuery }}" placeholder="{{ teams.searchPlaceholder }}" style="border:0;outline:0;background:transparent;flex:1;min-width:0;font-size:14px">
+            </label>
+            <p style="font-size:12px;color:#61738b">{{ teams.toolsNote }}</p>
+          </div>
+
+          <sc-if value="{{ teams.empty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:40px 24px;text-align:center;border:1px dashed rgba(15,111,207,.28);border-radius:8px;background:#fff">
+              <b style="font-size:16px">{{ teams.emptyTitle }}</b><span style="font-size:14px;color:#61738b;max-width:460px">{{ teams.emptyBody }}</span>
+              <sc-if value="{{ teams.emptyActions }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button onClick="{{ teams.startCreate }}" style="min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:14px">Create team</button><sc-if value="{{ teams.emptyExplore }}" hint-placeholder-val="{{ false }}"><button onClick="{{ teams.showExplore }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px">Explore teams</button></sc-if></div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ teams.hasRows }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow:hidden">
+              <sc-for list="{{ teams.rows }}" as="t" hint-placeholder-count="3">
+                <button onClick="{{ t.open }}" style="display:flex;width:100%;align-items:center;gap:16px;padding:18px 20px;border:0;border-top:1px solid #e8edf5;background:#fff;text-align:left;flex-wrap:wrap" style-hover="background:#f4f7fb">
+                  <span aria-hidden="true" style="width:44px;height:44px;flex:none;border-radius:11px;background:#e7f1ff;color:#0b4f8a;display:grid;place-items:center;font-size:14px;font-weight:700">{{ t.mark }}</span>
+                  <div style="flex:1;min-width:200px"><strong style="font-size:15px;color:#07111f">{{ t.name }}</strong><p style="font-size:13px;color:#61738b;margin-top:3px">{{ t.desc }}</p>
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:12px;color:#61738b">{{ t.meta }}</div>
+                  </div>
+                  <sc-if value="{{ t.showStats }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:24px;text-align:right"><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-family:'Geist Mono',monospace;font-size:15px">{{ t.accepted }}</strong><span style="font-size:11px;color:#61738b">Accepted outcomes</span></span><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-family:'Geist Mono',monospace;font-size:15px">{{ t.validations }}</strong><span style="font-size:11px;color:#61738b">Validations</span></span></div>
+                  </sc-if>
+                  <span aria-hidden="true" style="color:#9aacbe">→</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <p style="font-size:12px;color:#61738b;max-width:80ch">{{ teams.listHelp }}</p>
+        </sc-if>
+
+        <sc-if value="{{ teams.showDetail }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ teams.back }}" style="align-self:flex-start;border:0;background:none;padding:0;color:#0f6fcf;font-weight:600;font-size:14px">← Teams</button>
+          <sc-if value="{{ teams.detail.showCreationNotice }}" hint-placeholder-val="{{ false }}">
+            <div role="status" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-radius:8px;background:#e8f9ef;color:#0b7a40;font-size:13px">Team created. Invite members next, or add a repository focus.<button onClick="{{ teams.detail.dismissCreation }}" style="border:0;background:none;color:#0b4f8a;font-weight:600;font-size:13px">Dismiss</button></div>
+          </sc-if>
+          <header style="position:relative;overflow:hidden;border:1px solid rgba(15,111,207,.16);border-radius:12px;background:#fff">
+            <sc-if value="{{ teams.detail.showBanner }}" hint-placeholder-val="{{ false }}">
+              <div style="height:120px;border-bottom:1px solid rgba(15,111,207,.16)"><image-slot id="{{ teams.detail.bannerSlotId }}" shape="rect" style="width:100%;height:120px" placeholder="Team banner"></image-slot></div>
+            </sc-if>
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:22px 24px">
+              <span aria-hidden="true" style="width:58px;height:58px;flex:none;border-radius:14px;background:#e7f1ff;color:#0b4f8a;display:grid;place-items:center;font-size:19px;font-weight:700;overflow:hidden">
+                <sc-if value="{{ teams.detail.logoSourceCustom }}" hint-placeholder-val="{{ false }}"><image-slot id="{{ teams.detail.logoSlotId }}" shape="rounded" radius="14" style="width:58px;height:58px" placeholder="Logo"></image-slot></sc-if>
+                <sc-if value="{{ teams.detail.logoSourceBuiltin }}" hint-placeholder-val="{{ true }}">{{ teams.detail.mark }}</sc-if>
+              </span>
+              <div style="flex:1;min-width:220px">
+                <h2 tabindex="-1" style="font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:28px;line-height:1.2">{{ teams.detail.name }}</h2>
+                <p style="font-size:14px;color:#243247;margin-top:4px">{{ teams.detail.desc }}</p>
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:#61738b">
+                  <sc-if value="{{ teams.detail.isMember }}" hint-placeholder-val="{{ false }}"><span style="padding:2px 8px;border-radius:100px;background:#e7f1ff;color:#0b4f8a;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;text-transform:none;letter-spacing:0;font-size:11px">You’re {{ teams.detail.roleLabel }}</span></sc-if>
+                  <span>{{ teams.detail.modeLabel }}</span>
+                  <sc-if value="{{ teams.detail.showStatusBadge }}" hint-placeholder-val="{{ false }}"><span style="padding:2px 8px;border-radius:100px;background:#e8edf5;color:#4a5c70;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ teams.detail.statusLabel }}</span></sc-if>
+                </div>
+              </div>
+              <sc-if value="{{ teams.detail.showHeaderAction }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ teams.detail.headerAction }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px">{{ teams.detail.headerActionLabel }}</button>
+              </sc-if>
+            </div>
+          </header>
+
+          <sc-if value="{{ teams.detail.isPublic }}" hint-placeholder-val="{{ false }}">
+            <dl style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;border-radius:10px;overflow:hidden">
+              <sc-for list="{{ teams.detail.metrics }}" as="mt" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-left:1px solid {{ mt.divider }}"><dt style="font-size:12px;color:#61738b">{{ mt.label }}</dt><dd style="font-size:28px;font-weight:700;font-family:'Geist Mono',monospace;line-height:1">{{ mt.value }}</dd><span style="font-size:11px;color:#61738b">{{ mt.help }}</span></div>
+              </sc-for>
+            </dl>
+            <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+              <h3 style="font-size:16px;font-weight:700">{{ teams.detail.publicHeading }}</h3>
+              <p style="font-size:14px;color:#61738b;max-width:62ch">Team totals are public. The roster, repository focus, and activity are available to members.</p>
+              <sc-if value="{{ teams.detail.joinIsButton }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ teams.detail.joinAction }}" disabled="{{ teams.detail.joinDisabled }}" style="min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:14px;opacity:{{ teams.detail.joinOpacity }};cursor:{{ teams.detail.joinCursor }}">{{ teams.detail.joinLabel }}</button>
+              </sc-if>
+              <sc-if value="{{ teams.detail.joinIsText }}" hint-placeholder-val="{{ false }}">
+                <p style="font-size:13px;color:#4a5c70">{{ teams.detail.joinText }}</p>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ teams.detail.isMember }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px">
+              <nav aria-label="Team sections" style="flex:0 0 auto;max-width:100%;display:flex;flex-wrap:wrap;gap:2px;padding:3px;background:#f4f7fb;border:1px solid rgba(15,111,207,.16);border-radius:9px">
+                <sc-for list="{{ teams.detail.sections }}" as="sec" hint-placeholder-count="4">
+                  <button onClick="{{ sec.pick }}" aria-current="{{ sec.current }}" style="display:flex;align-items:center;gap:6px;min-height:34px;padding:6px 12px;border:0;border-radius:7px;background:{{ sec.bg }};box-shadow:{{ sec.shadow }};color:{{ sec.fg }};font-size:13px;font-weight:600">{{ sec.label }}<sc-if value="{{ sec.showCount }}" hint-placeholder-val="{{ false }}"><span aria-label="{{ sec.countLabel }}" style="padding:2px 8px;border-radius:100px;background:#fef9c3;color:#854d0e;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;font-size:10px">{{ sec.count }}</span></sc-if></button>
+                </sc-for>
+              </nav>
+              <span style="font-size:12px;color:#61738b">Member workspace · Team totals are public.</span>
+            </div>
+
+            <sc-if value="{{ teams.detail.showArchivedNotice }}" hint-placeholder-val="{{ false }}">
+              <p role="status" style="padding:13px 16px;border-radius:8px;background:#fef9c3;color:#854d0e;font-size:13px">{{ teams.detail.archivedNote }}</p>
+            </sc-if>
+
+            <sc-if value="{{ teams.detail.secOverview }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <dl style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;border-radius:10px;overflow:hidden">
+                  <sc-for list="{{ teams.detail.metrics }}" as="mt" hint-placeholder-count="3">
+                    <div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-left:1px solid {{ mt.divider }}"><dt style="font-size:12px;color:#61738b">{{ mt.label }}</dt><dd style="font-size:28px;font-weight:700;font-family:'Geist Mono',monospace;line-height:1">{{ mt.value }}</dd><span style="font-size:11px;color:#61738b">{{ mt.help }}</span></div>
+                  </sc-for>
+                </dl>
+
+                <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Your Team badges</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Recognition earned from membership and work attributed to this Team. Separate from your individual response badges.</p></div></div>
+                  <ul style="list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;padding:0 20px 18px">
+                    <sc-for list="{{ teams.detail.badges }}" as="b" hint-placeholder-count="2">
+                      <li style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid {{ b.border }};border-radius:8px;background:{{ b.cardBg }}">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <span aria-hidden="true" style="width:34px;height:34px;flex:none;border-radius:50%;background:{{ b.iconBg }};color:{{ b.iconFg }};display:grid;place-items:center;font-size:15px">{{ b.icon }}</span>
+                          <div style="flex:1;min-width:0"><strong style="font-size:14px">{{ b.title }}</strong><p style="font-size:12px;color:#61738b;margin-top:2px">{{ b.sub }}</p></div>
+                          <span style="padding:2px 8px;border-radius:100px;background:{{ b.stateBg }};color:{{ b.stateFg }};font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ b.state }}</span>
+                        </div>
+                        <sc-if value="{{ b.showProgress }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#243247"><span>Attributed validations</span><span style="font-family:'Geist Mono',monospace">{{ b.progressText }}</span></div><div role="progressbar" aria-valuenow="{{ b.progressNow }}" aria-valuemin="0" aria-valuemax="{{ b.progressMax }}" style="height:6px;border-radius:100px;background:#e8edf5"><div style="width:{{ b.progressPct }};height:100%;border-radius:100px;background:#0f6fcf"></div></div></div>
+                        </sc-if>
+                        <sc-if value="{{ b.showKeptNote }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:#61738b">{{ b.keptNote }}</p></sc-if>
+                      </li>
+                    </sc-for>
+                  </ul>
+                  <div style="display:flex;flex-direction:column;gap:6px;padding:14px 20px 18px;border-top:1px solid #e8edf5">
+                    <label style="display:flex;align-items:flex-start;gap:9px;font-size:13px;color:#243247;opacity:{{ teams.detail.optInOpacity }}"><input type="checkbox" checked="{{ teams.detail.publicOptIn }}" onChange="{{ teams.detail.togglePublicOptIn }}" disabled="{{ teams.detail.optInDisabled }}" style="width:16px;height:16px;margin-top:1px;accent-color:#0f6fcf"> Allow eligible badges from this Team on my public contributor profile</label>
+                    <sc-if value="{{ teams.detail.optInDisabled }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#61738b;padding-left:25px">The Team admin has not enabled public badge display.</span></sc-if>
+                    <sc-if value="{{ teams.detail.optInEnabled }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#61738b;padding-left:25px">This is one setting for your profile. It applies to every Team that allows public badge display.</span></sc-if>
+                  </div>
+                </section>
+
+                <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Recent activity</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Validations credited to this team · members only</p></div></div>
+                  <sc-if value="{{ teams.detail.activityEmpty }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 20px 32px;text-align:center;border-top:1px solid #e8edf5"><h4 style="font-size:15px;font-weight:700">Your team’s first validation starts with you.</h4><p style="font-size:13px;color:#61738b">Review a candidate fix and choose this team before submitting.</p><button onClick="{{ go.prs }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px">Browse candidate fixes</button></div>
+                  </sc-if>
+                  <ul style="list-style:none">
+                  <sc-for list="{{ teams.detail.activity }}" as="a" hint-placeholder-count="3">
+                    <li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                      <span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:50%;background:#f4f7fb;color:#4a5c70;display:grid;place-items:center;font-size:11px;font-weight:700">{{ a.initials }}</span>
+                      <div style="flex:1;min-width:200px"><strong style="font-size:14px">{{ a.login }}</strong><p style="font-size:13px;color:#0f6fcf;margin-top:2px">{{ a.title }}</p><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#61738b">{{ a.ref }}</span></div>
+                      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span style="padding:2px 8px;border-radius:100px;background:{{ a.decBg }};color:{{ a.decFg }};font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ a.decision }}</span><time style="font-size:12px;color:#61738b">{{ a.when }}</time></div>
+                    </li>
+                  </sc-for>
+                  </ul>
+                </section>
+
+                <sc-if value="{{ teams.detail.showLeave }}" hint-placeholder-val="{{ false }}">
+                  <details style="font-size:13px;color:#61738b"><summary style="cursor:pointer;padding:6px 0">Membership options</summary>
+                    <button onClick="{{ teams.detail.leave }}" style="margin-top:8px;min-height:36px;padding:6px 14px;border:1px solid rgba(214,69,69,.35);border-radius:8px;background:#fff;color:#991b1b;font-weight:700;font-size:13px">Leave team</button>
+                  </details>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ teams.detail.secMembers }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <sc-if value="{{ teams.detail.canManageActive }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Invite a member</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Search for a member, then invite them from the results. They’ll accept in Your teams.</p></div></div>
+                    <div style="display:flex;flex-direction:column;gap:10px;padding:0 20px 20px">
+                      <label style="display:flex;flex-direction:column;gap:6px;max-width:420px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Find a member</span><input type="search" value="{{ teams.detail.inviteQuery }}" onChange="{{ teams.detail.setInviteQuery }}" maxLength="40" placeholder="Search by GitHub username…" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"></label>
+                      <p role="status" style="font-size:12px;color:#61738b">{{ teams.detail.inviteStatus }}</p>
+                      <sc-if value="{{ teams.detail.hasInviteMatches }}" hint-placeholder-val="{{ false }}">
+                        <ul aria-label="Matching members" style="list-style:none;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow:hidden;max-width:520px">
+                          <sc-for list="{{ teams.detail.inviteMatches }}" as="im" hint-placeholder-count="3">
+                            <li style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #e8edf5"><strong style="flex:1;font-size:13px">@{{ im.login }}</strong><button onClick="{{ im.invite }}" aria-label="{{ im.aria }}" style="min-height:32px;padding:5px 12px;border:1px solid rgba(15,111,207,.28);border-radius:7px;background:#fff;color:#0b4f8a;font-weight:700;font-size:12px">+ Invite</button></li>
+                          </sc-for>
+                        </ul>
+                      </sc-if>
+                      <sc-if value="{{ teams.detail.showDirectInvite }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px"><p style="font-size:12px;color:#61738b">Know their exact GitHub username? You can invite them even if they’re not listed.</p><button onClick="{{ teams.detail.directInvite }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px;min-height:34px;font-size:13px">{{ teams.detail.directInviteLabel }}</button></div>
+                      </sc-if>
+                    </div>
+                  </section>
+                </sc-if>
+                <sc-if value="{{ teams.detail.showRequests }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Join requests <span style="padding:2px 8px;border-radius:100px;background:#fef9c3;color:#854d0e;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">{{ teams.detail.requestCount }}</span></h3></div></div>
+                    <ul style="list-style:none">
+                    <sc-for list="{{ teams.detail.requests }}" as="r" hint-placeholder-count="1">
+                      <li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                        <span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:50%;background:#f4f7fb;color:#4a5c70;display:grid;place-items:center;font-size:11px;font-weight:700">{{ r.initials }}</span>
+                        <strong style="flex:1;font-size:14px">{{ r.login }}</strong>
+                        <sc-if value="{{ teams.detail.isActive }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px"><button onClick="{{ r.accept }}" style="min-height:34px;padding:6px 12px;border:0;border-radius:7px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:13px">Accept</button><button onClick="{{ r.decline }}" style="min-height:34px;padding:6px 12px;border:1px solid rgba(15,111,207,.28);border-radius:7px;background:#fff;color:#243247;font-weight:700;font-size:13px">Decline</button></div></sc-if>
+                      </li>
+                    </sc-for>
+                    </ul>
+                  </section>
+                </sc-if>
+                <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Members <span style="font-family:'Geist Mono',monospace;font-size:11px;padding:1px 7px;border-radius:100px;background:#f4f7fb;color:#4a5c70">{{ teams.detail.memberCount }}</span></h3></div><label style="display:flex;align-items:center;gap:8px;height:36px;flex:0 1 260px;padding:0 12px;border:1px solid rgba(15,111,207,.28);border-radius:8px"><input type="search" aria-label="Search members" value="{{ teams.detail.memberQuery }}" onChange="{{ teams.detail.setMemberQuery }}" placeholder="Find a member…" style="border:0;outline:0;background:transparent;flex:1;min-width:0;font-size:13px"></label></div>
+                  <ul style="list-style:none">
+                  <sc-for list="{{ teams.detail.members }}" as="m" hint-placeholder-count="4">
+                    <li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                      <span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:50%;background:#f4f7fb;color:#4a5c70;display:grid;place-items:center;font-size:11px;font-weight:700">{{ m.initials }}</span>
+                      <div style="flex:1;min-width:160px"><strong style="font-size:14px">{{ m.display }}</strong><p style="font-size:12px;color:#61738b;text-transform:capitalize;margin-top:2px">{{ m.role }}</p></div>
+                      <sc-if value="{{ m.canManage }}" hint-placeholder-val="{{ false }}">
+                        <details style="flex:none"><summary style="cursor:pointer;padding:7px;color:#0b4f8a;font-size:13px;font-weight:600">Manage<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"> {{ m.login }}</span></summary>
+                          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                            <sc-if value="{{ m.showPromote }}" hint-placeholder-val="{{ false }}"><button onClick="{{ m.togglePromote }}" style="min-height:32px;padding:5px 10px;border:1px solid rgba(15,111,207,.28);border-radius:7px;background:#fff;color:#243247;font-weight:600;font-size:12px">{{ m.promoteLabel }}</button></sc-if>
+                            <button onClick="{{ m.remove }}" style="min-height:32px;padding:5px 10px;border:1px solid rgba(214,69,69,.35);border-radius:7px;background:#fff;color:#991b1b;font-weight:600;font-size:12px">Remove</button>
+                          </div>
+                        </details>
+                      </sc-if>
+                    </li>
+                  </sc-for>
+                  </ul>
+                  <sc-if value="{{ teams.detail.noMemberMatch }}" hint-placeholder-val="{{ false }}"><p style="padding:18px 20px;border-top:1px solid #e8edf5;font-size:13px;color:#61738b">No members match your search.</p></sc-if>
+                </section>
+                <sc-if value="{{ teams.detail.canManage }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Pending invitations <span style="font-family:'Geist Mono',monospace;font-size:11px;padding:1px 7px;border-radius:100px;background:#f4f7fb;color:#4a5c70">{{ teams.detail.inviteCount }}</span></h3></div></div>
+                    <sc-if value="{{ teams.detail.noInvites }}" hint-placeholder-val="{{ false }}"><p style="padding:16px 20px;border-top:1px solid #e8edf5;font-size:13px;color:#61738b">No invitations waiting for a response.</p></sc-if>
+                    <ul style="list-style:none">
+                    <sc-for list="{{ teams.detail.invites }}" as="iv" hint-placeholder-count="1"><li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap"><strong style="flex:1;font-size:14px">{{ iv.login }}</strong><span style="padding:2px 8px;border-radius:100px;background:#fef9c3;color:#854d0e;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap">Awaiting acceptance</span></li></sc-for>
+                    </ul>
+                  </section>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ teams.detail.secRepos }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <sc-if value="{{ teams.detail.canManageActive }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Choose your focus</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Search by name, then add a repository directly from the results.</p></div></div>
+                    <div style="display:flex;flex-direction:column;gap:10px;padding:0 20px 20px">
+                      <label style="display:flex;flex-direction:column;gap:6px;max-width:420px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Find a repository</span><input type="search" value="{{ teams.detail.repoQuery }}" onChange="{{ teams.detail.setRepoQuery }}" placeholder="Search repositories by name…" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"></label>
+                      <p role="status" style="font-size:12px;color:#61738b">{{ teams.detail.repoStatus }}</p>
+                      <sc-if value="{{ teams.detail.hasRepoMatches }}" hint-placeholder-val="{{ false }}">
+                        <ul aria-label="Matching repositories" style="list-style:none;border:1px solid rgba(15,111,207,.16);border-radius:8px;overflow:hidden;max-width:620px">
+                          <sc-for list="{{ teams.detail.repoMatches }}" as="rm" hint-placeholder-count="3">
+                            <li style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #e8edf5"><div style="flex:1;min-width:0"><strong style="font-size:13px">{{ rm.name }}</strong><p style="font-size:12px;color:#61738b;margin-top:2px">{{ rm.desc }}</p></div><button onClick="{{ rm.add }}" aria-label="{{ rm.aria }}" style="min-height:32px;padding:5px 12px;border:1px solid rgba(15,111,207,.28);border-radius:7px;background:#fff;color:#0b4f8a;font-weight:700;font-size:12px">+ Add</button></li>
+                          </sc-for>
+                        </ul>
+                      </sc-if>
+                    </div>
+                  </section>
+                </sc-if>
+                <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Focused repositories <span style="font-family:'Geist Mono',monospace;font-size:11px;padding:1px 7px;border-radius:100px;background:#f4f7fb;color:#4a5c70">{{ teams.detail.repoCount }}</span></h3></div></div>
+                  <sc-if value="{{ teams.detail.noRepos }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 20px 32px;text-align:center;border-top:1px solid #e8edf5"><h4 style="font-size:15px;font-weight:700">No repositories selected yet</h4><p style="font-size:13px;color:#61738b">{{ teams.detail.noReposBody }}</p></div>
+                  </sc-if>
+                  <ul style="list-style:none">
+                  <sc-for list="{{ teams.detail.repos }}" as="rp" hint-placeholder-count="2">
+                    <li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-top:1px solid #e8edf5;flex-wrap:wrap">
+                      <div style="flex:1;min-width:200px"><strong style="font-family:'Geist Mono',monospace;font-size:13px;color:#0f6fcf">{{ rp.name }}</strong><p style="font-size:13px;color:#61738b;margin-top:2px">{{ rp.desc }}</p></div>
+                      <div style="display:flex;align-items:center;gap:12px">
+                        <button onClick="{{ rp.find }}" style="min-height:34px;padding:6px 12px;border:1px solid rgba(15,111,207,.28);border-radius:7px;background:#fff;color:#0b4f8a;font-weight:700;font-size:13px">Find reviews →</button>
+                        <sc-if value="{{ teams.detail.canManageActive }}" hint-placeholder-val="{{ false }}"><button onClick="{{ rp.remove }}" aria-label="{{ rp.removeAria }}" style="border:0;background:none;color:#0f6fcf;font-size:13px">Remove</button></sc-if>
+                      </div>
+                    </li>
+                  </sc-for>
+                  </ul>
+                </section>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ teams.detail.secSettings }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Team details</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Name and description appear in the public directory.</p></div></div>
+                  <fieldset disabled="{{ teams.detail.locked }}" style="border:0;display:flex;flex-direction:column;gap:18px;padding:0 20px 22px;max-width:640px;opacity:{{ teams.detail.lockedOpacity }}">
+                    <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Team name <span style="color:#d64545">*</span></span><input value="{{ teams.detail.draft.name }}" onChange="{{ teams.detail.draft.setName }}" maxLength="80" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"></label>
+                    <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Description</span><textarea value="{{ teams.detail.draft.desc }}" onChange="{{ teams.detail.draft.setDesc }}" rows="3" maxLength="500" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff;resize:vertical;line-height:1.5"></textarea></label>
+                    <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">How people join</span><select value="{{ teams.detail.draft.mode }}" onChange="{{ teams.detail.draft.setMode }}" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"><option value="invite_only">By invitation only</option><option value="request">Open membership</option></select></label>
+                    <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Contribution badge bar</span>
+                      <select value="{{ teams.detail.draft.threshold }}" onChange="{{ teams.detail.draft.setThreshold }}" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"><option value="3">3 attributed validations</option><option value="5">5 attributed validations</option><option value="10">10 attributed validations</option><option value="25">25 attributed validations</option></select>
+                      <span style="font-size:12px;color:#61738b">OASIS sets the available minimums. Earned badges are never revoked if this bar changes.</span>
+                    </label>
+                    <label style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">Public badge display</span>
+                      <select value="{{ teams.detail.draft.publicDisplay }}" onChange="{{ teams.detail.draft.setPublicDisplay }}" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"><option value="members">Members only</option><option value="public">Allow opted-in members to display badges publicly</option></select>
+                      <span style="font-size:12px;color:#61738b">Private Team membership is never public by default. Members must also opt in individually.</span>
+                    </label>
+                    <div style="display:flex;flex-direction:column;gap:12px;padding-top:14px;border-top:1px solid #e8edf5">
+                      <h4 style="font-size:14px;font-weight:700">Team visuals</h4>
+                      <fieldset style="border:0;display:flex;flex-direction:column;gap:10px"><legend style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247;margin-bottom:10px">Team logo</legend>
+                      <div role="radiogroup" aria-label="Logo source" style="display:flex;gap:18px;flex-wrap:wrap">
+                  <label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="radio" name="{{ teams.detail.radioName }}" checked="{{ teams.detail.logoSourceBuiltin }}" onChange="{{ teams.detail.setSourceBuiltin }}" disabled="{{ teams.detail.locked }}" style="width:auto;accent-color:#0d9e52"> Choose an icon</label>
+                  <label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="radio" name="{{ teams.detail.radioName }}" checked="{{ teams.detail.logoSourceCustom }}" onChange="{{ teams.detail.setSourceCustom }}" disabled="{{ teams.detail.locked }}" style="width:auto;accent-color:#0d9e52"> Custom image</label>
+                </div>
+                      <sc-if value="{{ teams.detail.logoSourceBuiltin }}" hint-placeholder-val="{{ true }}">
+                      <div role="radiogroup" aria-label="Team logo" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ teams.detail.logoOptions }}" as="lo" hint-placeholder-count="7">
+                    <button role="radio" aria-checked="{{ lo.on }}" onClick="{{ lo.pick }}" disabled="{{ lo.disabled }}" style="display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid {{ lo.border }};border-radius:7px;background:{{ lo.bg }};color:{{ lo.fg }};font-size:12px;font-weight:600">
+                      <span aria-hidden="true" style="width:30px;height:30px;border-radius:8px;background:{{ lo.swatchBg }};color:{{ lo.swatchFg }};display:grid;place-items:center;font-size:13px;font-weight:700">{{ lo.mark }}</span>{{ lo.label }}
+                    </button>
+                  </sc-for>
+                </div>
+                      </sc-if>
+                      <sc-if value="{{ teams.detail.logoSourceCustom }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:center;padding:12px;border:1px solid rgba(15,111,207,.16);border-radius:8px;background:#f4f7fb">
+                    <image-slot id="{{ teams.detail.logoSlotId }}" shape="rounded" radius="14" style="width:88px;height:88px" placeholder="Drop a logo"></image-slot>
+                    <div style="display:flex;flex-direction:column;gap:3px"><strong style="font-size:13px">Custom logo</strong><span style="font-size:12px;color:#61738b">Square PNG, JPEG, or WebP. Drop an image or click to browse.</span><span style="font-size:12px;color:#61738b">{{ teams.detail.logoNote }}</span></div>
+                  </div>
+                      </sc-if>
+                      </fieldset>
+                      <div style="display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:14px;align-items:center;padding:12px;border:1px solid rgba(15,111,207,.16);border-radius:8px;background:#f4f7fb">
+                    <image-slot id="{{ teams.detail.bannerSlotId }}" shape="rounded" radius="8" style="width:100%;height:84px" placeholder="Drop a banner"></image-slot>
+                    <div style="display:flex;flex-direction:column;gap:3px"><strong style="font-size:13px">Team homepage banner</strong><span style="font-size:12px;color:#61738b">Wide PNG, JPEG, or WebP · up to 768 KB</span><span style="font-size:12px;color:#61738b">{{ teams.detail.bannerNote }}</span></div>
+                  </div>
+                      <label style="display:flex;align-items:center;gap:9px;font-size:13px"><input type="checkbox" checked="{{ teams.detail.showBanner }}" onChange="{{ teams.detail.toggleBanner }}" style="width:16px;height:16px;accent-color:#0f6fcf"> Show the banner on the Team homepage</label>
+                    </div>
+                    <p style="font-size:12px;color:#61738b">Roster and individual activity are visible only to current members.</p>
+                    <button onClick="{{ teams.detail.draft.save }}" disabled="{{ teams.detail.draft.cantSave }}" style="align-self:flex-start;min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:#4cd964;color:#0b4f8a;font-weight:700;font-size:14px;opacity:{{ teams.detail.draft.saveOpacity }};cursor:{{ teams.detail.draft.saveCursor }}">Save changes</button>
+                  </fieldset>
+                </section>
+                <sc-if value="{{ teams.detail.isOwner }}" hint-placeholder-val="{{ false }}">
+                  <section style="background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px"><div><h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">Ownership &amp; lifecycle</h3><p style="font-size:13px;color:#61738b;margin-top:3px">Owner-only actions. Team history is always preserved.</p></div></div>
+                    <sc-if value="{{ teams.detail.isActive }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-top:1px solid #e8edf5">
+                        <h4 style="font-size:14px;font-weight:700">Transfer ownership</h4>
+                        <p style="font-size:13px;color:#61738b">The new owner must accept. You’ll remain a member afterward.</p>
+                        <sc-if value="{{ teams.detail.transferPending }}" hint-placeholder-val="{{ false }}"><p role="status" style="padding:12px 14px;border-radius:8px;background:#fef9c3;color:#854d0e;font-size:13px">{{ teams.detail.transferPendingText }}</p></sc-if>
+                        <sc-if value="{{ teams.detail.transferTooSmall }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:#61738b">Invite another member before transferring ownership.</p></sc-if>
+                        <sc-if value="{{ teams.detail.transferForm }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+                            <label style="display:flex;flex-direction:column;gap:6px;flex:1 1 220px;max-width:360px"><span style="font-family:'Geist Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#243247">New owner</span><select value="{{ teams.detail.transferTo }}" onChange="{{ teams.detail.setTransferTo }}" style="min-height:38px;padding:9px 12px;border:1px solid rgba(15,111,207,.28);border-radius:6px;font-size:14px;background:#fff"><option value="">Choose a member</option><sc-for list="{{ teams.detail.transferOptions }}" as="to" hint-placeholder-count="3"><option value="{{ to }}">{{ to }}</option></sc-for></select></label>
+                            <button onClick="{{ teams.detail.offerOwnership }}" disabled="{{ teams.detail.transferCant }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px;opacity:{{ teams.detail.transferOpacity }}">Offer ownership</button>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                    <div style="display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-top:1px solid #e8edf5">
+                      <h4 style="font-size:14px;font-weight:700">{{ teams.detail.archiveLabel }}</h4>
+                      <p style="font-size:13px;color:#61738b">{{ teams.detail.archiveBody }}</p>
+                      <button onClick="{{ teams.detail.archiveToggle }}" style="align-self:flex-start;min-height:38px;padding:8px 16px;border-radius:8px;border:{{ teams.detail.archiveBorder }};background:{{ teams.detail.archiveBg }};color:{{ teams.detail.archiveFg }};font-weight:700;font-size:14px">{{ teams.detail.archiveLabel }}</button>
+                    </div>
+                  </section>
+                </sc-if>
+              </div>
+            </sc-if>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ teams.confirm.open }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ teams.confirm.cancel }}" style="position:fixed;inset:0;background:rgba(7,17,31,.4);z-index:90"></div>
+          <div role="dialog" aria-modal="true" aria-labelledby="team-confirm-title" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:91;width:min(460px,calc(100vw - 32px));padding:26px;background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:10px;box-shadow:0 18px 50px rgba(11,79,138,.24);display:flex;flex-direction:column;gap:14px">
+            <h3 id="team-confirm-title" style="font-size:18px;font-weight:700">{{ teams.confirm.title }}</h3>
+            <p style="font-size:14px;line-height:1.6;color:#243247">{{ teams.confirm.explanation }}</p>
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+              <button onClick="{{ teams.confirm.cancel }}" style="min-height:38px;padding:8px 16px;border:1px solid rgba(15,111,207,.28);border-radius:8px;background:#fff;color:#0b4f8a;font-weight:700;font-size:14px">Cancel</button>
+              <button onClick="{{ teams.confirm.ok }}" style="min-height:38px;padding:8px 16px;border:0;border-radius:8px;background:{{ teams.confirm.okBg }};color:{{ teams.confirm.okFg }};font-weight:700;font-size:14px">{{ teams.confirm.label }}</button>
+            </div>
+          </div>
+        </sc-if>
       </div>
     </sc-if>
 
@@ -964,6 +1445,31 @@ class Component extends DCLogic {
 
   state = { openDetails: {}, mermaidSvg: '', mermaidFail: false, diffMode: null, prefs: readPrefs(), usePrefs: true, screen: 'home', layout: null, selId: 13, filter: 'needs', repo: '', search: '', tab: 'summary', votes: { 9: 'accept', 10: 'accept', 8: 'modify' }, overrides: {}, extraComments: {}, decision: null, confidence: 'Medium', next: '', summary: '', parent: '', toast: '', selLogin: 'alex-r', focusIdx: 0 };
 
+  teamData() {
+    if (this._teams) return this._teams;
+    const act = (login, repo, number, title, dec, when) => ({ login, ref: repo + ' #' + number, title, dec, when });
+    this._teams = { you: 'alex-r', nextId: 6, showTeamBadges: true,
+      memberPool: ['sam-oconnor', 'nkim', 'lee-h', 'omar-farouk', 'ivy-chen', 'sasha-m', 'dana-r', 'kofi-a', 'marta-s', 'noah-t', 'priya-k', 'devon-lu', 'mia-park', 'riko-t', 'jordan-b'],
+      list: [
+        { id: 1, name: 'Python security reviewers', description: 'Path-traversal and unsafe-deserialization review for Python and Markdown tooling.', logo_key: 'shield', logoSource: 'builtin', membership_mode: 'invite_only', status: 'active', accepted: 37, validations: 142, v90: 38, active90: 4, threshold: 5, publicDisplay: true, showBanner: false,
+          members: [['alex-r', 'owner'], ['priya-k', 'admin'], ['devon-lu', 'member'], ['mia-park', 'member']], invites: ['sam-oconnor'], requests: [], transfer: null, repos: ['pyyaml-safe', 'sanitize-md'],
+          activity: [act('priya-k', 'pyyaml-safe', 88, 'Reject unsafe YAML tags before construction', 'accept', '2d ago'), act('mia-park', 'sanitize-md', 41, 'Escape link targets in rendered Markdown', 'modify', '5d ago'), act('alex-r', 'pyyaml-safe', 83, 'Bound alias expansion depth', 'accept', '1w ago')],
+          myAttributed: 12, myBadges: [{ key: 'membership' }, { key: 'contributor_milestone', threshold: 5 }] },
+        { id: 2, name: 'Rust hardening squad', description: 'Memory-safety and parser review for widely used Rust crates.', logo_key: 'code', logoSource: 'builtin', membership_mode: 'request', status: 'active', accepted: 4, validations: 28, v90: 19, active90: 3, threshold: 10, publicDisplay: false, showBanner: false,
+          members: [['jordan-b', 'owner'], ['alex-r', 'member'], ['riko-t', 'member']], invites: [], requests: ['nkim'], transfer: 'alex-r', repos: ['xmlkit-rs'],
+          activity: [act('riko-t', 'xmlkit-rs', 17, 'Limit entity expansion in the pull parser', 'accept', '3d ago')],
+          myAttributed: 2, myBadges: [{ key: 'membership' }] },
+        { id: 3, name: 'Node supply-chain watch', description: 'Archive-extraction and prototype-pollution review across the Node ecosystem.', logo_key: 'lock', logoSource: 'builtin', membership_mode: 'invite_only', status: 'archived', accepted: 51, validations: 210, v90: 0, active90: 0, threshold: 25, publicDisplay: true, showBanner: false,
+          members: [['casey-w', 'owner'], ['alex-r', 'admin'], ...[0, 1, 2, 3, 4, 5].map(i => ['reviewer-' + i, 'member'])], invites: [], requests: [], transfer: null, repos: ['react', 'tarstream'],
+          activity: [act('casey-w', 'tarstream', 214, 'Reject archive entries outside the extraction root', 'accept', 'Jun 2')],
+          myAttributed: 30, myBadges: [{ key: 'membership' }, { key: 'contributor_milestone', threshold: 25 }] },
+        { id: 4, name: 'Go concurrency reviewers', description: 'Race-condition and channel-misuse review in Go services.', logo_key: 'spark', logoSource: 'builtin', membership_mode: 'request', status: 'active', accepted: 9, validations: 61, v90: 24, active90: 2, threshold: 5, publicDisplay: false, showBanner: false,
+          members: [['taylor-nguyen', 'owner'], ['sky-oduya', 'member']], invites: [], requests: ['alex-r'], myRequest: true, transfer: null, repos: [], activity: [], myAttributed: 0, myBadges: [] },
+        { id: 5, name: 'Java deserialization guild', description: '', logo_key: 'initials', logoSource: 'builtin', membership_mode: 'invite_only', status: 'active', accepted: 12, validations: 47, v90: 11, active90: 3, threshold: 5, publicDisplay: false, showBanner: false,
+          members: [['lee-h', 'owner'], ['omar-farouk', 'member'], ['ivy-chen', 'member']], invites: ['alex-r'], requests: [], transfer: null, repos: ['jdbc-helpers'], activity: [], myAttributed: 0, myBadges: [] },
+      ] };
+    return this._teams;
+  }
   flash(msg) { this.setState({ toast: msg }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2600); }
   resetVote() { return { decision: null, summary: '', next: '', parent: '', confidence: 'Medium' }; }
   openPR(id) { this.setState({ screen: 'prs', selId: id, ...this.resetVote() }); }
@@ -1030,11 +1536,14 @@ class Component extends DCLogic {
     }
 
     const detailWrapBase = 'background:#fff;border:1px solid rgba(15,111,207,.16);border-radius:8px;display:flex;flex-direction:column;min-width:0;';
-    const detailWrap = layout === 'drawer'
+    const expanded = !!s.expanded && layout !== 'drawer';
+    const detailWrap = expanded
+      ? { background: '#fff', position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', width: 'min(1040px, 94vw)', height: 'calc(100vh - 124px)', zIndex: 55, display: 'flex', flexDirection: 'column', borderRadius: 10, boxShadow: '0 24px 64px rgba(11,79,138,.32)', overflow: 'hidden' }
+      : layout === 'drawer'
       ? { background: '#fff', position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(640px, 94vw)', zIndex: 50, display: 'flex', flexDirection: 'column', boxShadow: '0 18px 50px rgba(11,79,138,.24)', overflow: 'hidden' }
       : layout === 'focus'
-        ? { flex: '1 1 100%', background: '#fff', border: '1px solid rgba(15,111,207,.16)', borderRadius: 8, display: 'flex', flexDirection: 'column', maxWidth: 880, margin: '0 auto', boxShadow: '0 18px 50px rgba(11,79,138,.14)' }
-        : { flex: '999 1 460px', background: '#fff', border: '1px solid rgba(15,111,207,.16)', borderRadius: 8, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' };
+        ? { flex: '1 1 100%', background: '#fff', border: '1px solid rgba(15,111,207,.16)', borderRadius: 8, display: 'flex', flexDirection: 'column', maxWidth: 880, margin: '0 auto', boxShadow: '0 18px 50px rgba(11,79,138,.14)', maxHeight: 'calc(100vh - 244px)', overflow: 'hidden' }
+        : { flex: '999 1 460px', background: '#fff', border: '1px solid rgba(15,111,207,.16)', borderRadius: 8, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden', maxHeight: 'calc(100vh - 244px)', overflow: 'hidden' };
 
     const dec = s.decision;
     const needsNext = dec === 'accept' || dec === 'modify';
@@ -1058,7 +1567,10 @@ class Component extends DCLogic {
       if (dec !== 'duplicate') o[dec] = sel[dec] + 1;
       const c = { who: 'alex-r', decision: dec, text: s.summary.trim() || `Duplicate of #${s.parent}.`, meta: needsNext ? `${s.confidence} confidence · ${s.next} · just now` : 'just now' };
       this.setState({ votes: { ...s.votes, [sel.id]: dec }, overrides: { ...s.overrides, [sel.id]: o }, extraComments: { ...s.extraComments, [sel.id]: [c, ...(s.extraComments[sel.id] || [])] }, ...this.resetVote() });
-      this.flash(`${DEC[dec][0]} vote posted to ${sel.repo} #${sel.number}`);
+      const TDv = this.teamData(); const credited = s.voteTeam ? TDv.list.find(t => String(t.id) === s.voteTeam && t.status === 'active' && t.members.some(m => m[0] === TDv.you)) : null;
+      if (credited) { credited.validations++; credited.v90++; credited.myAttributed = (credited.myAttributed || 0) + 1; credited.activity.unshift({ login: TDv.you, ref: sel.repo + ' #' + sel.number, title: sel.title, dec: dec, when: 'just now' }); credited.myBadges = credited.myBadges || []; if (!credited.myBadges.some(b => b.key === 'contributor_milestone') && credited.myAttributed >= credited.threshold) credited.myBadges.push({ key: 'contributor_milestone', threshold: credited.threshold }); }
+      this.setState({ voteTeam: '' });
+      this.flash(`${DEC[dec][0]} vote posted to ${sel.repo} #${sel.number}` + (credited ? ` · credited to ${credited.name}` : ''));
     };
     const nextUnvoted = () => {
       const nxt = prs.find(p => p.needs && (!sel || p.id !== sel.id));
@@ -1067,9 +1579,206 @@ class Component extends DCLogic {
 
     const screen = s.screen;
     const navItem = (k) => ({ bg: screen === k ? '#e7f1ff' : 'transparent', fg: screen === k ? '#0b4f8a' : '#243247' });
-    const go = {}; ['home', 'prs', 'projects', 'contributors', 'maintainers', 'status', 'prefs'].forEach(k => go[k] = () => this.setState({ screen: k, repo: k === 'prs' ? s.repo : s.repo }));
-    const titles = { home: ['OASIS workspace', 'My queue'], prs: ['Validate', 'Candidate fixes'], projects: ['Target repositories', 'Projects'], contributors: ['Credibility-weighted', 'Validators'], maintainers: ['Upstream', 'Maintainers'], status: ['Workspace', 'Sync status'], prefs: ['Account', 'Preferences'] };
+    const go = {}; ['home', 'prs', 'projects', 'contributors', 'maintainers', 'teams', 'status', 'prefs'].forEach(k => go[k] = () => this.setState({ screen: k, repo: k === 'prs' ? s.repo : s.repo }));
+    const titles = { home: ['OASIS workspace', 'My queue'], prs: ['Validate', 'Candidate fixes'], projects: ['Target repositories', 'Projects'], contributors: ['Credibility-weighted', 'Validators'], maintainers: ['Upstream', 'Maintainers'], teams: ['Coordinate', 'Teams'], status: ['Workspace', 'Sync status'], prefs: ['Account', 'Preferences'] };
 
+    // ---- Teams — reconciled with owasp-oasis-app@preview: TeamsTab.tsx, TeamWorkspace.tsx, teamApi.ts, TeamMemberSearch.tsx, TeamRepositorySearch.tsx, VoteForm.tsx, ContributorPanel.tsx
+    const TD = this.teamData();
+    const YOU = TD.you;
+    const LOGO_OPTS = [['initials', 'Initials', 'Aa'], ['shield', 'Shield', '◇'], ['bug', 'Bug', '✣'], ['lock', 'Lock', '▣'], ['spark', 'Spark', '✦'], ['code', 'Code', '</>'], ['leaf', 'Leaf', '⌁']];
+    const upd = () => this.forceUpdate();
+    const roleOf = (t) => (t.members.find(m => m[0] === YOU) || [])[1] || null;
+    const markOf = (t) => { const o = LOGO_OPTS.find(x => x[0] === t.logo_key); return o && t.logo_key !== 'initials' ? o[2] : initials(t.name); };
+    const modeLabel = (t) => t.membership_mode === 'request' ? 'Open membership' : 'Invite only';
+    const askConfirm = (c) => this.setState({ teamConfirm: c });
+    const confirmState = s.teamConfirm;
+    const confirmVals = confirmState ? { open: true, title: confirmState.title, explanation: confirmState.explanation, label: confirmState.label, okBg: confirmState.danger ? '#d64545' : '#4cd964', okFg: confirmState.danger ? '#fff' : '#0b4f8a', cancel: () => this.setState({ teamConfirm: null }), ok: () => { this.setState({ teamConfirm: null }); confirmState.action(); } } : { open: false };
+    const logoOptionsFor = (current, pick, disabled) => LOGO_OPTS.map(([key, label, mark]) => { const on = current === key; return { label, mark, on: on ? 'true' : 'false', disabled, pick: () => pick(key), border: on ? '#0d9e52' : 'rgba(15,111,207,.28)', bg: on ? '#e8f9ef' : '#fff', fg: on ? '#0b7a40' : '#243247', swatchBg: on ? '#0d9e52' : '#e7f1ff', swatchFg: on ? '#fff' : '#0b4f8a' }; });
+    const openTeam = (id) => this.setState({ teamOpenId: id, teamSection: 'overview', teamInviteQ: '', teamRepoQ: '', teamMemberQ: '', teamTransferTo: '', teamDraft: null });
+    const mineTeams = TD.list.filter(t => roleOf(t));
+    const view = !signedIn ? 'explore' : (s.teamsView || 'mine');
+    const openId = s.teamOpenId || null;
+    const openT = openId ? TD.list.find(x => x.id === openId) : null;
+
+    let teamsVals;
+    if (openT) {
+      const t = openT;
+      const role = signedIn ? roleOf(t) : null;
+      const isMember = !!role, canManage = role === 'owner' || role === 'admin', isOwner = role === 'owner';
+      const active = t.status === 'active';
+      const want = s.teamSection || 'overview';
+      const section = !isMember ? 'overview' : (want === 'members' || want === 'repositories' || (want === 'settings' && canManage)) ? want : 'overview';
+      const sections = [['overview', 'Stats & activity'], ['members', 'Members'], ['repositories', 'Repository focus'], ...(canManage ? [['settings', 'Team administration']] : [])]
+        .map(([id, label]) => { const on = section === id; const cnt = id === 'members' && canManage ? t.requests.length : 0; return { label, current: on ? 'page' : 'false', count: cnt, showCount: cnt > 0, countLabel: cnt + ' pending requests', pick: () => this.setState({ teamSection: id }), bg: on ? '#fff' : 'transparent', fg: on ? '#07111f' : '#4a5c70', shadow: on ? '0 1px 2px rgba(7,17,31,.14)' : 'none' }; });
+      const metrics = [['Accepted outcomes', t.accepted, 'Reviews on PRs accepted upstream'], ['Validations', t.validations, 'Personal work credited to this team'], ['Members', t.members.length, 'Contributing together']].map(([label, value, help], i) => ({ label, value, help, divider: i ? 'rgba(15,111,207,.16)' : 'transparent' }));
+      // badges: earned badges are durable records; in-progress shows the current bar
+      const mine = t.myBadges || [];
+      const earnedContrib = mine.find(x => x.key === 'contributor_milestone');
+      const badges = [];
+      if (isMember) badges.push({ icon: '◎', title: 'Team member', sub: 'Membership badge', state: 'Earned', stateBg: '#e8f9ef', stateFg: '#0b7a40', border: 'rgba(13,158,82,.35)', cardBg: '#f5faf7', iconBg: '#e8f9ef', iconFg: '#0d9e52', showProgress: false, showKeptNote: false });
+      if (isMember && earnedContrib) badges.push({ icon: '✦', title: 'Team contributor', sub: earnedContrib.threshold + ' attributed validations', state: 'Earned', stateBg: '#e8f9ef', stateFg: '#0b7a40', border: 'rgba(13,158,82,.35)', cardBg: '#f5faf7', iconBg: '#e8f9ef', iconFg: '#0d9e52', showProgress: false, showKeptNote: earnedContrib.threshold !== t.threshold, keptNote: 'Earned at the ' + earnedContrib.threshold + '-validation bar. The Team now uses ' + t.threshold + '; earned badges are never revoked.' });
+      if (isMember && !earnedContrib) { const n = t.myAttributed || 0; badges.push({ icon: '✦', title: 'Team contributor', sub: t.threshold + ' attributed validations', state: 'In progress', stateBg: '#f4f7fb', stateFg: '#4a5c70', border: 'rgba(15,111,207,.16)', cardBg: '#fff', iconBg: '#f4f7fb', iconFg: '#9aacbe', showProgress: true, progressText: n + ' / ' + t.threshold, progressNow: n, progressMax: t.threshold, progressPct: Math.min(100, n / t.threshold * 100) + '%', showKeptNote: false }); }
+      // member invite search (TeamMemberSearch)
+      const excluded = new Set([...t.members.map(m => m[0]), ...t.invites]);
+      const iq = (s.teamInviteQ || '').trim().replace(/^@/, '');
+      const iqL = iq.toLowerCase();
+      const ready = iq.length >= 2;
+      const inviteMatches = ready ? TD.memberPool.filter(l => !excluded.has(l) && l.toLowerCase().includes(iqL)).slice(0, 6) : [];
+      const validHandle = /^[a-z\d](?:[a-z\d-]{0,38})$/i.test(iq);
+      const doInvite = (login) => { t.invites.push(login); this.setState({ teamInviteQ: '' }); this.flash('Invitation sent to @' + login + '. They can accept it from Your teams in OASIS.'); };
+      const inviteStatus = !ready ? 'Type at least 2 characters to find OASIS members.' : inviteMatches.length ? inviteMatches.length + ' matching ' + (inviteMatches.length === 1 ? 'member' : 'members') + '. Choose whom to invite.' : excluded.has(iq) ? 'This person is already a member or has a pending invitation.' : 'No available members match your search.';
+      // roster
+      const mq = (s.teamMemberQ || '').toLowerCase();
+      const roster = t.members.filter(m => m[0].toLowerCase().includes(mq)).map(([login, r]) => ({ login, role: r, initials: initials(login), display: login + (login === YOU ? ' (you)' : ''),
+        canManage: canManage && active && r !== 'owner' && login !== YOU, showPromote: isOwner, promoteLabel: r === 'admin' ? 'Make member' : 'Make admin',
+        togglePromote: () => { t.members = t.members.map(m => m[0] === login ? [login, r === 'admin' ? 'member' : 'admin'] : m); this.flash('Member role updated.'); },
+        remove: () => askConfirm({ title: 'Remove ' + login + '?', explanation: 'Their past contributions stay credited to the team. They will need a new invitation to return.', label: 'Remove member', danger: true, action: () => { t.members = t.members.filter(m => m[0] !== login); this.flash('Member removed.'); } }) }));
+      // repository focus (TeamRepositorySearch)
+      const focused = new Set(t.repos);
+      const rq = (s.teamRepoQ || '').trim().toLowerCase();
+      const repoMatches = REPOS.filter(r => !focused.has(r.name) && r.name.toLowerCase().includes(rq)).sort((x, y) => x.name.localeCompare(y.name));
+      const repoStatus = repoMatches.length === 0 ? (rq ? 'No available repositories match your search. Try another name.' : 'All available repositories are already in your team’s focus.') : repoMatches.length + ' ' + (repoMatches.length === 1 ? 'repository' : 'repositories') + ' available. Add one to your team’s focus.';
+      // settings draft (Save enabled only when dirty)
+      const saved = { name: t.name, desc: t.description, mode: t.membership_mode, threshold: String(t.threshold), publicDisplay: t.publicDisplay ? 'public' : 'members', logo_key: t.logo_key, logoSource: t.logoSource };
+      const draft = s.teamDraft && s.teamDraft.id === t.id ? s.teamDraft : { id: t.id, ...saved };
+      const setDraft = (patch) => this.setState({ teamDraft: { ...draft, ...patch } });
+      const dirty = ['name', 'desc', 'mode', 'threshold', 'publicDisplay', 'logo_key', 'logoSource'].some(k => draft[k] !== saved[k]);
+      const cantSave = !dirty || !draft.name.trim() || !active;
+      const inSettings = section === 'settings';
+      const srcBuiltin = (inSettings ? draft.logoSource : t.logoSource) === 'builtin';
+      const transferOptions = t.members.filter(m => m[1] !== 'owner').map(m => m[0]);
+      const transferTo = s.teamTransferTo || '';
+      teamsVals = {
+        showList: false, showDetail: true, back: () => this.setState({ teamOpenId: null, teamSection: 'overview' }), confirm: confirmVals,
+        detail: {
+          name: t.name, desc: t.description || 'An OASIS community team', mark: markOf(t), modeLabel: modeLabel(t),
+          isMember, isPublic: !isMember, isOwner, canManage, canManageActive: canManage && active, isActive: active,
+          roleLabel: isOwner ? 'the owner' : role === 'admin' ? 'an admin' : 'a member',
+          showStatusBadge: !active, statusLabel: t.status,
+          showArchivedNotice: !active, archivedNote: 'This team is ' + t.status + '. Its history is preserved.' + (t.status === 'archived' && isOwner ? ' Reactivate it in Team administration to resume.' : ''),
+          showCreationNotice: s.teamJustCreated === t.id, dismissCreation: () => this.setState({ teamJustCreated: null }),
+          showHeaderAction: isMember && active, headerActionLabel: canManage ? 'Invite members' : 'Find a review', headerAction: () => this.setState({ teamSection: canManage ? 'members' : 'repositories' }),
+          showBanner: !!t.showBanner, toggleBanner: () => { t.showBanner = !t.showBanner; upd(); },
+          logoSourceBuiltin: srcBuiltin, logoSourceCustom: !srcBuiltin, locked: !active, lockedOpacity: active ? 1 : .6, radioName: 'team-' + t.id + '-logo-source',
+          setSourceBuiltin: () => setDraft({ logoSource: 'builtin' }), setSourceCustom: () => setDraft({ logoSource: 'custom' }),
+          logoOptions: logoOptionsFor(draft.logo_key, (k) => setDraft({ logo_key: k }), !active),
+          logoSlotId: 'team-' + t.id + '-logo', bannerSlotId: 'team-' + t.id + '-banner',
+          logoNote: 'Takes effect when you save changes.', bannerNote: 'Optional. Shown at the top of the Team homepage.',
+          metrics, sections,
+          secOverview: isMember && section === 'overview', secMembers: isMember && section === 'members', secRepos: isMember && section === 'repositories', secSettings: isMember && canManage && section === 'settings',
+          publicHeading: t.invites.includes(YOU) ? 'You’re invited' : 'Join this team',
+          ...(!signedIn ? { joinIsButton: true, joinIsText: false, joinLabel: 'Sign in with GitHub', joinDisabled: false, joinOpacity: 1, joinCursor: 'pointer', joinAction: () => this.flash('Sign in with GitHub to join Teams.') }
+            : !active ? { joinIsButton: false, joinIsText: true, joinText: 'This team is not accepting new members.' }
+            : t.invites.includes(YOU) ? { joinIsButton: true, joinIsText: false, joinLabel: 'Accept invitation', joinDisabled: false, joinOpacity: 1, joinCursor: 'pointer', joinAction: () => { t.invites = t.invites.filter(x => x !== YOU); t.members.push([YOU, 'member']); t.myBadges = [{ key: 'membership' }]; this.flash('Welcome to the team.'); } }
+            : t.membership_mode === 'request' ? { joinIsButton: true, joinIsText: false, joinLabel: t.myRequest ? 'Request pending' : 'Request to join', joinDisabled: !!t.myRequest, joinOpacity: t.myRequest ? .55 : 1, joinCursor: t.myRequest ? 'default' : 'pointer', joinAction: () => { if (t.myRequest) return; t.myRequest = true; t.requests.push(YOU); this.flash('Join request sent. A team owner or admin will review it.'); } }
+            : { joinIsButton: false, joinIsText: true, joinText: 'Membership is by invitation from an owner or admin.' }),
+          badges,
+          publicOptIn: !!TD.showTeamBadges, optInDisabled: !t.publicDisplay, optInEnabled: !!t.publicDisplay, optInOpacity: t.publicDisplay ? 1 : .6,
+          togglePublicOptIn: () => { if (!t.publicDisplay) return; TD.showTeamBadges = !TD.showTeamBadges; upd(); },
+          activity: t.activity.map(x => ({ ...x, initials: initials(x.login), decBg: DEC[x.dec][2], decFg: DEC[x.dec][3], decision: DEC[x.dec][0] })), activityEmpty: t.activity.length === 0,
+          showLeave: isMember && !isOwner && active,
+          leave: () => askConfirm({ title: 'Leave ' + t.name + '?', explanation: 'You will lose access to the private workspace. Your past contributions will remain credited to the team.', label: 'Leave team', danger: true, action: () => { t.members = t.members.filter(m => m[0] !== YOU); this.setState({ teamOpenId: null }); this.flash('You left the team.'); } }),
+          inviteQuery: s.teamInviteQ || '', setInviteQuery: (e) => this.setState({ teamInviteQ: e.target.value }), inviteStatus,
+          hasInviteMatches: inviteMatches.length > 0, inviteMatches: inviteMatches.map(l => ({ login: l, aria: 'Invite ' + l, invite: () => doInvite(l) })),
+          showDirectInvite: ready && inviteMatches.length === 0 && validHandle && !excluded.has(iq), directInviteLabel: 'Invite @' + iq + ' by username', directInvite: () => doInvite(iq),
+          showRequests: canManage && t.requests.length > 0, requestCount: t.requests.length,
+          requests: t.requests.map(login => ({ login, initials: initials(login),
+            accept: () => { t.requests = t.requests.filter(x => x !== login); t.members.push([login, 'member']); this.flash(login + ' joined the team.'); },
+            decline: () => { t.requests = t.requests.filter(x => x !== login); this.flash('Request declined.'); } })),
+          memberQuery: s.teamMemberQ || '', setMemberQuery: (e) => this.setState({ teamMemberQ: e.target.value }), members: roster, noMemberMatch: roster.length === 0, memberCount: t.members.length,
+          inviteCount: t.invites.length, noInvites: t.invites.length === 0, invites: t.invites.map(login => ({ login })),
+          repoQuery: s.teamRepoQ || '', setRepoQuery: (e) => this.setState({ teamRepoQ: e.target.value }), repoStatus,
+          hasRepoMatches: repoMatches.length > 0, repoMatches: repoMatches.map(r => ({ name: r.name, desc: r.desc, aria: 'Add ' + r.name + ' to team focus', add: () => { t.repos.push(r.name); this.setState({ teamRepoQ: '' }); this.flash(r.name + ' added to this team’s focus.'); } })),
+          repoCount: t.repos.length, noRepos: t.repos.length === 0, noReposBody: canManage ? 'Choose a repository above to give your team a starting point.' : 'An owner or admin can add repositories for the team.',
+          repos: t.repos.map(name => { const r = REPOS.find(x => x.name === name) || { desc: '' }; return { name, desc: r.desc, removeAria: 'Remove ' + name + ' from focus',
+            find: () => this.setState({ screen: 'prs', repo: name, filter: 'all', selId: null, focusIdx: 0 }),
+            remove: () => { t.repos = t.repos.filter(x => x !== name); this.flash('Repository removed from team focus.'); } }; }),
+          draft: { name: draft.name, desc: draft.desc, mode: draft.mode, threshold: draft.threshold, publicDisplay: draft.publicDisplay,
+            setName: (e) => setDraft({ name: e.target.value }), setDesc: (e) => setDraft({ desc: e.target.value }), setMode: (e) => setDraft({ mode: e.target.value }),
+            setThreshold: (e) => setDraft({ threshold: e.target.value }), setPublicDisplay: (e) => setDraft({ publicDisplay: e.target.value }),
+            cantSave, saveOpacity: cantSave ? .45 : 1, saveCursor: cantSave ? 'not-allowed' : 'pointer',
+            save: () => { if (cantSave) return; Object.assign(t, { name: draft.name.trim(), description: draft.desc, membership_mode: draft.mode, threshold: Number(draft.threshold), publicDisplay: draft.publicDisplay === 'public', logo_key: draft.logoSource === 'builtin' ? draft.logo_key : t.logo_key, logoSource: draft.logoSource }); this.setState({ teamDraft: null }); this.flash('Team settings saved.'); } },
+          transferPending: !!t.transfer, transferPendingText: 'Waiting for ' + t.transfer + ' to accept ownership.',
+          transferTooSmall: !t.transfer && t.members.length < 2, transferForm: !t.transfer && t.members.length >= 2,
+          transferOptions, transferTo, setTransferTo: (e) => this.setState({ teamTransferTo: e.target.value }), transferCant: !transferTo, transferOpacity: transferTo ? 1 : .45,
+          offerOwnership: () => { if (!transferTo) return; askConfirm({ title: 'Offer ownership to ' + transferTo + '?', explanation: 'You remain the owner until they accept. After acceptance, you become a regular member.', label: 'Offer ownership', action: () => { t.transfer = transferTo; this.setState({ teamTransferTo: '' }); this.flash('Ownership offer sent.'); } }); },
+          archiveLabel: active ? 'Archive team' : 'Reactivate team',
+          archiveBody: active ? 'Pause membership changes and new contributions. You can reactivate the team later.' : 'Resume invitations, join requests, and contribution attribution.',
+          archiveBg: active ? '#fff' : '#4cd964', archiveFg: active ? '#991b1b' : '#0b4f8a', archiveBorder: active ? '1px solid rgba(214,69,69,.35)' : '0',
+          archiveToggle: () => askConfirm(active
+            ? { title: 'Archive this team?', explanation: 'The team’s members, repositories, and history will be preserved.', label: 'Archive team', danger: true, action: () => { t.status = 'archived'; this.flash('Team archived. Its history is preserved.'); } }
+            : { title: 'Reactivate this team?', explanation: 'Your team can resume work with its existing members and history.', label: 'Reactivate team', action: () => { t.status = 'active'; this.flash('Team reactivated.'); } }),
+        },
+      };
+    } else {
+      const creating = !!s.teamCreating && signedIn;
+      const form = s.teamForm || { name: '', desc: '', mode: 'invite_only', logo: 'initials', logoSource: 'builtin' };
+      const setForm = (patch) => this.setState({ teamForm: { ...form, ...patch } });
+      const query = (s.teamQuery || '').toLowerCase();
+      const byAchievement = (x, y) => y.accepted - x.accepted || y.validations - x.validations || x.name.localeCompare(y.name);
+      const list = view === 'mine' ? mineTeams : [...TD.list].sort(byAchievement);
+      const filtered = list.filter(t => (t.name + ' ' + (t.description || '')).toLowerCase().includes(query));
+      const period = s.teamPeriod || 'all_time';
+      const inbox = [];
+      if (signedIn) TD.list.forEach(t => {
+        if (t.invites.includes(YOU)) inbox.push({ name: t.name, desc: 'You’re invited to join this team.', actionable: true, pending: false, actLabel: 'Accept invitation', actBg: '#4cd964', actFg: '#0b4f8a', actBorder: '0', act: () => { t.invites = t.invites.filter(x => x !== YOU); t.members.push([YOU, 'member']); t.myBadges = [{ key: 'membership' }]; openTeam(t.id); this.flash('Welcome to the team.'); } });
+        if (t.transfer === YOU) inbox.push({ name: t.name, desc: 'You’ve been offered ownership. The current owner becomes a member when you accept.', actionable: true, pending: false, actLabel: 'Accept ownership', actBg: '#fff', actFg: '#0b4f8a', actBorder: '1px solid rgba(15,111,207,.28)', act: () => { t.members = t.members.map(m => m[1] === 'owner' ? [m[0], 'member'] : m[0] === YOU ? [YOU, 'owner'] : m); t.transfer = null; openTeam(t.id); this.flash('You’re now the owner of ' + t.name + '.'); } });
+        if (t.myRequest) inbox.push({ name: t.name, desc: 'Your join request is awaiting approval.', actionable: false, pending: true });
+      });
+      const cantCreate = !form.name.trim();
+      teamsVals = {
+        showList: true, showDetail: false, confirm: confirmVals,
+        showCreateBtn: signedIn && !creating, creating,
+        startCreate: () => this.setState({ teamCreating: true }), cancelCreate: () => this.setState({ teamCreating: false, teamForm: null }),
+        form: { name: form.name, desc: form.desc, mode: form.mode, radioName: 'create-logo-source', locked: false,
+          setName: (e) => setForm({ name: e.target.value }), setDesc: (e) => setForm({ desc: e.target.value }), setMode: (e) => setForm({ mode: e.target.value }),
+          logoSourceBuiltin: form.logoSource === 'builtin', logoSourceCustom: form.logoSource === 'custom',
+          setSourceBuiltin: () => setForm({ logoSource: 'builtin' }), setSourceCustom: () => setForm({ logoSource: 'custom' }),
+          logoOptions: logoOptionsFor(form.logo, (k) => setForm({ logo: k }), false),
+          logoSlotId: 'create-team-logo', bannerSlotId: 'create-team-banner',
+          logoNote: 'Choose your own logo image.', bannerNote: 'Optional. Add a banner to your team homepage.',
+          cantCreate, createOpacity: cantCreate ? .45 : 1, createCursor: cantCreate ? 'not-allowed' : 'pointer' },
+        confirmCreate: () => {
+          if (cantCreate) return;
+          const id = TD.nextId++;
+          TD.list.push({ id, name: form.name.trim(), description: form.desc.trim(), logo_key: form.logoSource === 'builtin' ? form.logo : 'initials', logoSource: form.logoSource, membership_mode: form.mode, status: 'active', accepted: 0, validations: 0, v90: 0, active90: 0, threshold: 5, publicDisplay: false, showBanner: false,
+            members: [[YOU, 'owner']], invites: [], requests: [], transfer: null, repos: [], activity: [], myAttributed: 0, myBadges: [{ key: 'membership' }] });
+          this.setState({ teamCreating: false, teamForm: null, teamsView: 'mine', teamOpenId: id, teamSection: 'overview', teamJustCreated: id, teamDraft: null });
+        },
+        showMineTab: signedIn, showMine: () => this.setState({ teamsView: 'mine' }), showExplore: () => this.setState({ teamsView: 'explore' }),
+        mineCount: mineTeams.length, mineCurrent: view === 'mine' ? 'page' : 'false', exploreCurrent: view === 'explore' ? 'page' : 'false',
+        mineTabBorder: view === 'mine' ? '#0f6fcf' : 'transparent', mineTabFg: view === 'mine' ? '#07111f' : '#4a5c70',
+        exploreTabBorder: view === 'explore' ? '#0f6fcf' : 'transparent', exploreTabFg: view === 'explore' ? '#07111f' : '#4a5c70',
+        showInbox: view === 'mine' && inbox.length > 0, inbox,
+        showLeaderboard: view === 'explore',
+        periodDesc: period === 'all_time' ? 'All-time achievement · accepted outcomes, then validations.' : 'Recent activity · last 90 days, with context per active contributor.',
+        periodAllOn: period === 'all_time' ? 'true' : 'false', period90On: period === '90d' ? 'true' : 'false',
+        setPeriodAll: () => this.setState({ teamPeriod: 'all_time' }), setPeriod90: () => this.setState({ teamPeriod: '90d' }),
+        periodAllBg: period === 'all_time' ? '#fff' : 'transparent', periodAllShadow: period === 'all_time' ? '0 1px 2px rgba(7,17,31,.14)' : 'none', periodAllFg: period === 'all_time' ? '#07111f' : '#4a5c70',
+        period90Bg: period === '90d' ? '#fff' : 'transparent', period90Shadow: period === '90d' ? '0 1px 2px rgba(7,17,31,.14)' : 'none', period90Fg: period === '90d' ? '#07111f' : '#4a5c70',
+        leaderboard: [...TD.list].sort(period === 'all_time' ? byAchievement : (x, y) => y.v90 - x.v90 || x.name.localeCompare(y.name)).map((t, i) => ({
+          rank: i + 1, mark: markOf(t), name: t.name, open: () => openTeam(t.id),
+          sub: t.status !== 'active' ? t.status : (period === 'all_time' ? 'All-time achievement' : 'Recent activity'), subCase: t.status !== 'active' ? 'capitalize' : 'none',
+          primaryVal: period === 'all_time' ? t.accepted : t.v90, primaryLabel: period === 'all_time' ? 'Accepted outcomes' : 'Validations',
+          showRate: period === '90d', rate: (t.active90 ? t.v90 / t.active90 : 0).toFixed(1) })),
+        query: s.teamQuery || '', setQuery: (e) => this.setState({ teamQuery: e.target.value }),
+        searchPlaceholder: view === 'mine' ? 'Find one of your teams…' : 'Search teams…',
+        toolsNote: view === 'mine' ? 'Your membership across OASIS' : 'All-time achievement · ranked by accepted outcomes',
+        listHelp: view === 'mine' ? 'Your work stays yours. Choose a team when submitting a validation to add it to the team’s totals.' : 'Accepted outcomes count reviews on pull requests later accepted upstream. Validation count breaks ties. Membership and individual activity stay private.',
+        empty: filtered.length === 0, hasRows: filtered.length > 0,
+        emptyTitle: query ? 'No matching teams' : view === 'mine' ? 'Your next review could be a team effort.' : 'No teams yet',
+        emptyBody: query ? 'Try another name or clear your search.' : view === 'mine' ? 'Create a team or explore teams that welcome new members.' : 'Start the first team and invite a fellow reviewer.',
+        emptyActions: !query && signedIn, emptyExplore: view === 'mine',
+        rows: filtered.map(t => { const r = roleOf(t); return { name: t.name, desc: t.description || 'An OASIS community team', mark: markOf(t), open: () => openTeam(t.id),
+          meta: (view === 'mine' && r ? r[0].toUpperCase() + r.slice(1) + ' · ' : '') + (t.status !== 'active' ? t.status[0].toUpperCase() + t.status.slice(1) : modeLabel(t)),
+          showStats: view === 'explore', accepted: t.accepted, validations: t.validations }; }),
+      };
+    }
+    // Vote form: optional attribution to ONE active Team; locked once submitted (VoteForm.tsx)
+    const voteTeamOpts = signedIn ? mineTeams.filter(t => t.status === 'active') : [];
+    const voteTeams = { show: voteTeamOpts.length > 0, value: s.voteTeam || '', set: (e) => this.setState({ voteTeam: e.target.value }), options: voteTeamOpts.map(t => ({ id: String(t.id), name: t.name })) };
+    // Public contributor profile: Team badges need Team permission AND the member's opt-in (ContributorPanel.tsx)
+    const publicTeamBadges = (login) => login !== YOU || !TD.showTeamBadges ? [] : TD.list.filter(t => t.publicDisplay && roleOf(t)).flatMap(t => (t.myBadges || []).map(b => ({ team: t.name, label: b.key === 'membership' ? 'Team member' : 'Team contributor · ' + b.threshold + ' attributed validations' })));
     const repoAgg = REPOS.map(r => {
       const rp = prs.filter(p => p.repo === r.name);
       const a = rp.reduce((t, p) => t + p.accept, 0), m = rp.reduce((t, p) => t + p.modify, 0), rj = rp.reduce((t, p) => t + p.reject, 0), tot = a + m + rj || 1;
@@ -1085,6 +1794,7 @@ class Component extends DCLogic {
     const partsRaw = [['Comment score', cc[3]], ['Peer score', +(cc[3] * 0.32).toFixed(2)], ['Reaction score', 1.25], ['Trust score', +(base - cc[3] - cc[3] * 0.32 - 1.25).toFixed(2)]].map(([l, v]) => [l, Math.max(0, v)]);
     const pmax = Math.max(...partsRaw.map(p => p[1])) || 1;
     const selC = { login: cc[0], initials: initials(cc[0]), rank: `#${ci + 1}`, r90: cc[2], rep: cc[1].toFixed(1), base: base.toFixed(1), mult: '1.18', parts: partsRaw.map(([label, v]) => ({ label, val: v.toFixed(1), w: pct(v / pmax * 100) })) };
+    selC.teamBadges = publicTeamBadges(selC.login); selC.hasTeamBadges = selC.teamBadges.length > 0;
 
     const openPRs = prs.filter(p => p.state === 'open' && (!usePrefs || p.prefOk));
     const upNext = prs.filter(p => p.needs).sort((a, b) => SEVRANK[a.sev] - SEVRANK[b.sev]).slice(0, 5).map(p => ({ ...p, cwe: p.cweFull }));
@@ -1103,9 +1813,10 @@ class Component extends DCLogic {
     const LAYOUTS = [['1a', 'split', 'Split'], ['1b', 'drawer', 'Table'], ['1c', 'focus', 'Focus']];
 
     return {
-      signedIn, signedOut: !signedIn, needsCount, go, nav: { home: navItem('home'), prs: navItem('prs'), projects: navItem('projects'), contributors: navItem('contributors'), maintainers: navItem('maintainers'), status: { bg: screen === 'status' ? '#e7f1ff' : '#fff' }, prefs: { bg: screen === 'prefs' ? '#e7f1ff' : 'transparent' } },
+      signedIn, signedOut: !signedIn, needsCount, go, nav: { home: navItem('home'), prs: navItem('prs'), projects: navItem('projects'), contributors: navItem('contributors'), maintainers: navItem('maintainers'), teams: navItem('teams'), status: { bg: screen === 'status' ? '#e7f1ff' : '#fff' }, prefs: { bg: screen === 'prefs' ? '#e7f1ff' : 'transparent' } },
       page: { eyebrow: titles[screen][0], title: titles[screen][1] },
-      isHome: screen === 'home', isPRs: screen === 'prs', isProjects: screen === 'projects', isContributors: screen === 'contributors', isMaintainers: screen === 'maintainers', isStatus: screen === 'status',
+      isHome: screen === 'home', isPRs: screen === 'prs', isProjects: screen === 'projects', isContributors: screen === 'contributors', isMaintainers: screen === 'maintainers', isTeams: screen === 'teams', isStatus: screen === 'status',
+      teams: teamsVals, voteTeams,
       layouts: LAYOUTS.map(([id, k, label]) => ({ id, label, bg: layout === k ? '#fff' : 'transparent', fg: layout === k ? '#07111f' : '#4a5c70', shadow: layout === k ? '0 1px 2px rgba(7,17,31,.14)' : 'none', pick: () => this.setState({ layout: k, selId: k === 'drawer' ? null : s.selId, focusIdx: 0 }) })),
       isSplit: layout === 'split', isDrawer: layout === 'drawer', isFocus: layout === 'focus', isFocusOrSplit: layout !== 'drawer',
       footerPos: layout === 'focus' ? 'static' : 'sticky',
@@ -1114,7 +1825,8 @@ class Component extends DCLogic {
       upNext, closeToTrusted,
       search: s.search, onSearch: (e) => this.setState({ search: e.target.value, focusIdx: 0 }), repoFilter: s.repo, onRepo: (e) => this.setState({ repo: e.target.value, focusIdx: 0 }),
       repoOptions: REPOS, filters, list: listOut, listEmpty: listOut.length === 0,
-      hasSel: !!selOut, sel: selOut, detailWrap, drawerBackdrop: layout === 'drawer' && !!selOut, closeDetail: () => this.setState({ selId: null, ...this.resetVote() }),
+      hasSel: !!selOut, sel: selOut, detailWrap, drawerBackdrop: layout === 'drawer' && !!selOut, closeDetail: () => this.setState({ selId: null, expanded: false, ...this.resetVote() }),
+      isExpanded: expanded, canExpand: !expanded && layout !== 'drawer' && !!selOut, toggleExpand: () => this.setState({ expanded: !expanded }),
       detailTabs: [['summary', 'Summary'], ['details', 'Details'], ['diff', 'Diff'], ['comments', `Comments (${commentsCount})`]].map(([k, label]) => ({ label, border: s.tab === k ? '#0f6fcf' : 'transparent', fg: s.tab === k ? '#0b4f8a' : '#61738b', pick: () => this.setState({ tab: k }) })),
       diffModes: [['split', 'Side by side'], ['unified', 'Unified']].map(([k, label]) => ({ label, bg: dm === k ? '#fff' : 'transparent', fg: dm === k ? '#07111f' : '#4a5c70', shadow: dm === k ? '0 1px 2px rgba(7,17,31,.12)' : 'none', pick: () => this.setState({ diffMode: k }) })), diffSplit: dm === 'split', diffUnified: dm === 'unified',
       tabSummary: s.tab === 'summary', tabDetails: s.tab === 'details', tabDiff: s.tab === 'diff', tabComments: s.tab === 'comments',

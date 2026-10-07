@@ -1,3 +1,4 @@
+import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
  * React SPA served via ASSETS binding; API routes handled by worker.
@@ -19,7 +20,6 @@ import {
 import { reconcileRemovedRepositories } from './cleanup.js';
 import { HUBSPOT_SYNC_CRON } from './hubspot.js';
 import { runTrackedHubSpot } from './scheduledJobs.js';
-import { startShadowSync } from './shadowSync.js';
 import {
   CanonicalSyncWorkflow,
   setCanonicalScheduleEnabled,
@@ -37,14 +37,30 @@ import {
   handleContributorDetail,
   handleMaintainers,
   handleTools,
-} from './handlers/leaderboard.js';
+} from './handlers/workspace.js';
 import { handleRegister } from './handlers/register.js';
 import { handleApply } from './handlers/apply.js';
 import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
-import { handlePRDetails, handlePRFiles, handlePRComments, handlePRReact } from './handlers/prPanel.js';
+import { handlePRDetails, handlePRFiles, handlePRComments, handlePRCommentCreate, handlePRReact } from './handlers/prPanel.js';
+import {
+  handleCreateTeam,
+  handleMyTeams,
+  handleTeamAdmin,
+  handleTeamDetail,
+  handleTeamJoinRequests,
+  handleTeamLeaderboard,
+  handleTeamMembers,
+  handleTeamMemberOptions,
+  handleTeamRepositories,
+  handleTeamRepositoryOptions,
+  handleTeams,
+  handleTeamSettings,
+  handleTeamMedia,
+} from './handlers/teams.js';
+import { handlePRWorkflow, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
@@ -138,12 +154,34 @@ export default {
        if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
 
        /* ── User Preferences ───────────────────────────────────────── */
+       if ((method === 'GET' || method === 'PUT') && url.pathname === '/api/preferences/workspace') return await handleWorkspacePreferences(request, env);
        if (method === 'GET'  && url.pathname === '/api/preferences/mine') return await handleGetPreferences(request, env);
        if (method === 'PUT'  && url.pathname === '/api/preferences/mine') return await handlePutPreferences(request, env);
 
        /* ── Voting ─────────────────────────────────────────────────── */
        if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
        if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
+
+       /* ── Community Teams ───────────────────────────────────────── */
+       if (method === 'GET'  && url.pathname === '/api/teams')             return await handleTeams(env, request);
+       if (method === 'POST' && url.pathname === '/api/teams')             return await handleCreateTeam(request, env);
+       if (method === 'GET'  && url.pathname === '/api/teams/mine')        return await handleMyTeams(request, env);
+       if (method === 'GET'  && url.pathname === '/api/teams/leaderboard') return await handleTeamLeaderboard(env, request, url);
+       if (method === 'GET'  && url.pathname === '/api/teams/repository-options') return await handleTeamRepositoryOptions(env, request);
+       const teamMatch = url.pathname.match(/^\/api\/teams\/(\d+)(?:\/(settings|members|member-options|join-requests|repositories|admin|media))?$/);
+       if (teamMatch) {
+         const teamId = Number(teamMatch[1]);
+         const action = teamMatch[2];
+         if (method === 'GET' && !action) return await handleTeamDetail(request, env, teamId);
+         if (method === 'GET' && action === 'member-options') return await handleTeamMemberOptions(request, env, teamId, url);
+         if (method === 'POST' && action === 'settings') return await handleTeamSettings(request, env, teamId);
+         if (method === 'POST' && action === 'members') return await handleTeamMembers(request, env, teamId);
+         if (method === 'POST' && action === 'join-requests') return await handleTeamJoinRequests(request, env, teamId);
+         if (method === 'POST' && action === 'repositories') return await handleTeamRepositories(request, env, teamId);
+         if (method === 'POST' && action === 'admin') return await handleTeamAdmin(request, env, teamId);
+         if (method === 'POST' && action === 'media') return await handleTeamMedia(request, env, teamId);
+         return jsonErr('Method not allowed for this Team action', 405, request);
+       }
 
       /* ── PR Panel (proxy to GitHub API) ─────────────────────────── */
       const prPanelMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/(details|files|comments|react)$/);
@@ -153,6 +191,7 @@ export default {
         if (method === 'GET'  && action === 'details')  return await handlePRDetails(request, env, prId);
         if (method === 'GET'  && action === 'files')    return await handlePRFiles(request, env, prId);
         if (method === 'GET'  && action === 'comments') return await handlePRComments(request, env, prId);
+        if (method === 'POST' && action === 'comments') return await handlePRCommentCreate(request, env, prId);
         if (method === 'POST' && action === 'react')    return await handlePRReact(request, env, prId);
         return jsonErr('Method not allowed for this PR panel action', 405, request);
       }
@@ -259,7 +298,7 @@ export default {
          return jsonOk({ enabled: true, legacy_retired: true }, request);
        }
 
-       /* ── Leaderboard API ───────────────────────────────────────── */
+       /* ── Workspace API ─────────────────────────────────────────── */
        /* POST /api/admin/run-hubspot-sync — bounded operational fallback */
        if (method === 'POST' && url.pathname === '/api/admin/run-hubspot-sync') {
          if (!isAdminRequest(request, env)) return jsonErr('Unauthorised', 401, request);
@@ -275,20 +314,20 @@ export default {
          }
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/meta')
+       if (method === 'GET' && url.pathname === '/api/workspace/meta')
          return await handleMeta(env, request);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/repos')
+       if (method === 'GET' && url.pathname === '/api/workspace/repos')
          return await handleRepos(env, request, url);
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
-       const repoDetailMatch = url.pathname.match(/^\/api\/leaderboard\/repos\/(\d+)$/);
+       const repoDetailMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)$/);
        if (method === 'GET' && repoDetailMatch) {
          return await handleRepoDetail(env, request, Number(repoDetailMatch[1]));
        }
 
-       if (method === 'GET' && url.pathname === '/api/leaderboard/prs')
+       if (method === 'GET' && url.pathname === '/api/workspace/prs')
          return await handlePRs(env, request, url);
-       if (method === 'GET' && url.pathname === '/api/leaderboard/contributors')
+       if (method === 'GET' && url.pathname === '/api/workspace/contributors')
          return await handleContributors(env, request, url);
 
        /* ── Contributor detail (for ContributorPanel slide-out) ───── */
@@ -298,13 +337,27 @@ export default {
          return await handleContributorDetail(env, request, login);
        }
 
-      if (method === 'GET' && url.pathname === '/api/leaderboard/maintainers')
+       /* ── Maintainer disposition and upstream submission ─────────── */
+       const workflowMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/workflow$/);
+       if (method === 'GET' && workflowMatch) {
+         return await handlePRWorkflow(request, env, Number(workflowMatch[1]));
+       }
+       const maintainerDecisionMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/maintainer-decision$/);
+       if (method === 'POST' && maintainerDecisionMatch) {
+         return await handleMaintainerDecision(request, env, Number(maintainerDecisionMatch[1]));
+       }
+       const submitUpstreamMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/submit-upstream$/);
+       if (method === 'POST' && submitUpstreamMatch) {
+         return await handleSubmitUpstream(request, env, Number(submitUpstreamMatch[1]));
+       }
+
+      if (method === 'GET' && url.pathname === '/api/workspace/maintainers')
         return await handleMaintainers(env, request, url);
-      if (method === 'GET' && url.pathname === '/api/leaderboard/tools')
+      if (method === 'GET' && url.pathname === '/api/workspace/tools')
         return await handleTools(env, request, url);
 
       /* ── Retired public sync trigger ───────────────────────────── */
-      if (method === 'GET' && url.pathname === '/leaderboard-refresh') {
+      if (method === 'GET' && url.pathname === '/workspace-refresh') {
         return jsonErr('This public sync trigger is retired. Use the authenticated canonical sync endpoint.', 410, request);
       }
 
@@ -333,14 +386,6 @@ export default {
       console.log(JSON.stringify({ event: 'hubspot_sync_dispatched', ...dispatch }));
       return;
     }
-    if (event.cron === '30 2 * * *' && env.ENVIRONMENT === 'preview') {
-      const cutoff = await env.DB.prepare(
-        "SELECT value FROM sync_state WHERE key = 'last_synced_at'",
-      ).first<{ value: string }>();
-      const reference = `preview-${new Date(event.scheduledTime).toISOString()}`;
-      await startShadowSync(env, reference, cutoff?.value ?? new Date(event.scheduledTime).toISOString());
-      return;
-    }
     if (event.cron !== '0 */4 * * *' || env.ENVIRONMENT !== 'production') {
       console.warn(JSON.stringify({ event: 'unknown_cron_trigger', cron: event.cron }));
       return;
@@ -352,7 +397,6 @@ export default {
 
 // Re-export ALLOWED_ORIGINS for use in any future edge middleware
 export { ALLOWED_ORIGINS };
-export { ShadowSyncWorkflow } from './shadowSync.js';
 export { CanonicalSyncWorkflow };
 export { OrphanCleanupWorkflow };
 export { HubSpotSyncWorkflow };

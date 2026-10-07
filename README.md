@@ -137,11 +137,12 @@ worker/                    ← Cloudflare Worker (TypeScript source)
   security.ts              ← Security headers, CORS, CSRF, rate limiting, response helpers
   validation.ts            ← Input validators (email, GitHub handle, role) and body parser
   db.ts                    ← D1 database helpers (upsert, getSyncState, rebuildContributors)
+  responseBadges.ts        ← Independent response-recognition rules and calculations
   github.ts                ← GitHub API client, comment/PR body parsers, bot detection
   sync.ts                  ← GitHub sync engine (cron full sync + chunked manual sync)
   hubspot.ts               ← Durable registration and application contact sync
   handlers/
-    leaderboard.ts         ← /api/leaderboard/* endpoint handlers
+    workspace.ts           ← /api/workspace/* endpoint handlers
     register.ts            ← POST /api/register
     apply.ts               ← POST /api/apply
     feedback.ts            ← POST /api/feedback — creates GitHub issue from preview banner form
@@ -154,12 +155,12 @@ src/                       ← React SPA (frontend)
     AuthContext.tsx         ← React context — GitHub auth state (user, loading, logout, refetch)
   pages/
     Home.tsx               ← Landing page
-    Leaderboards.tsx       ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
+    Workspace.tsx          ← Workspace shell (Pull Requests, Contributors, Maintainers, Projects)
     About.tsx              ← Team and project background
     Overview.tsx           ← How OASIS works
     Support.tsx            ← How to help: share, recruit, validate, sponsor
     Sponsors.tsx           ← Sponsors page
-    leaderboards/          ← One file per leaderboard tab
+    workspace/             ← One file per workspace tab
       PRsTab.tsx           ← PR table with My Vote column, Needs My Vote filter
       ContributorsTab.tsx
       MaintainersTab.tsx
@@ -216,10 +217,11 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `security.ts` | Content Security Policy, security response headers, CORS preflight, CSRF token generation and validation, rate limiting (KV-backed), `jsonOk`/`jsonErr` response helpers |
 | `validation.ts` | Sanitizes and validates all user input: email (RFC 5322 + blocklist), GitHub username, name, role, request body size and JSON parsing |
 | `db.ts` | All D1 read/write operations: upsert repos, PRs, participants, contributors; sync state key/value store; `rebuildContributors` aggregation |
+| `responseBadges.ts` | Calculates First Responder, Fast Responder, and Coverage Contributor independently of reputation and vote weight |
 | `github.ts` | GitHub REST API client (`ghFetch`, `ghFetchAll` with pagination); parses OASIS decision comments (`accept`/`modify`/`reject`); detects SAST tool from PR body; filters automated/bot accounts |
 | `sync.ts` | `runSync` — full sync for cron (1000 subrequest limit, fetches reactions); `runSyncOneRepo` — cursor-based chunked sync for manual trigger (10 PRs per call, 50 subrequest limit); shared `processPR` function used by both |
 | `hubspot.ts` | Queues registration and application contact data in D1, then syncs it to HubSpot with retries and privacy-safe logging |
-| `handlers/leaderboard.ts` | Six read-only API endpoints: `/api/leaderboard/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
+| `handlers/workspace.ts` | Six read-only API endpoints: `/api/workspace/meta`, `/repos`, `/prs`, `/contributors`, `/maintainers`, `/tools` |
 | `handlers/register.ts` | `POST /api/register` — validates and atomically queues registration contact data for HubSpot |
 | `handlers/apply.ts` | `POST /api/apply` — stores role applications and queues contact fields for HubSpot while keeping narrative text in D1 |
 | `handlers/feedback.ts` | `POST /api/feedback` — creates a GitHub issue in this repo via the API |
@@ -250,9 +252,9 @@ The worker handles all server-side logic. Here is what each module is responsibl
 | `Footer` | Site-wide footer |
 | `PreviewBanner` | Dismissible banner shown on the preview environment indicating the site is in staging; includes a link to submit feedback |
 | `RegisterForm` | Validator/sponsor registration form — posts to `POST /api/register` |
-| `SortableTable` / `ColHeader` | Generic sortable data table used by all leaderboard tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
+| `SortableTable` / `ColHeader` | Generic sortable data table used by all workspace tabs. Accepts an optional `toolbarRight?: ReactNode` rendered flush-right in the search toolbar (used by `PRsTab` for filter pills). `emptyMessage` accepts `ReactNode` so empty states can include interactive elements. |
 | `QuotesCarousel` | Auto-advancing animated carousel for testimonial/quote content on the Home page |
-| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the leaderboard; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
+| `PRPanel` | Slide-out side panel shown when a PR row is clicked in the workspace; contains five tabs: **Summary** (CWE, CVE, CVSS, TL;DR, consensus), **Body** (full PR description rendered as markdown with Mermaid support), **Diffs** (per-file sub-tab bar with side-by-side or unified diff and intra-line character highlighting; diff view dropdown is internal to this tab), **Comments** (GitHub issue comments with reactions and OASIS decision badges), and **PR** (link to open on GitHub) |
 | `VoteForm` | Form inside the PR Panel for submitting an accept/modify/reject vote; builds the OASIS validation comment template and posts to `POST /api/vote` |
 | `VoteModal` | Modal wrapper that prompts unauthenticated users to sign in with GitHub before voting |
 
@@ -301,11 +303,11 @@ The OAuth callback URL registered in the GitHub app must be `https://preview.owa
 
 ## Voting system
 
-Validators can submit their OASIS validation decision directly from the leaderboard PR panel.
+Validators can submit their OASIS validation decision directly from the workspace PR panel.
 
 ### How it works
 
-1. User clicks a PR row in the leaderboards → PR Panel slides open
+1. User clicks a PR row in the workspace → PR Panel slides open
 2. User clicks the "Vote" tab (sign-in modal shown if not authenticated)
 3. User selects **Accept**, **Modify**, or **Reject** and fills in the structured form
 4. `POST /api/vote` validates CSRF, session, rate limit, and body; then:
@@ -360,7 +362,8 @@ The **Pull Requests** table in the Workspace is the primary work queue for valid
 | Column | Notes |
 |---|---|
 | Pull Request | Combined column: muted repo-name link (top) + PR number and full title below. Title truncated by CSS ellipsis — no JS slice. |
-| Status | OASIS status badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). Header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Community status | OASIS validator outcome badge (`Needs Review`, `Trusted`, `Rejected`, `Accepted`). The header is an interactive `ⓘ` popover listing all status definitions and the Trusted criteria thresholds. |
+| Workflow | Separate maintainer/upstream lifecycle badge (`Maintainer Review`, `Changes Requested`, `Maintainer Accepted`, `Submitted Upstream`, `Upstream Changes Requested`, `Merged Upstream`, or `Closed Without Merge`). |
 | My Vote | Shown only when logged in. Displays the user's vote with coloured badge. Row gets a coloured left-border inset shadow: green = Accept, amber = Modify, red = Reject. Also shows `pr-row-agree` (green tint) or `pr-row-disagree` (amber tint) bg overlay when the user's vote matches/diverges from the crowd plurality. |
 | Consensus | Compact stacked bar (Accept/Modify/Reject proportions) + total vote count. Tooltip shows breakdown including OASIS vs non-OASIS comment counts. |
 | Participants | Total unique participants. |
@@ -447,7 +450,7 @@ wrangler d1 execute oasis-db --remote \
 # Apply schema to a fresh database
 wrangler d1 execute oasis-db --remote --file=schema.sql
 
-# Check leaderboard sync state
+# Check workspace sync state
 wrangler d1 execute oasis-db --remote \
   --command="SELECT * FROM sync_state"
 ```
@@ -522,7 +525,7 @@ npm run build && npm run deploy
 ## Commit convention
 
 ```
-feat: add leaderboard tools tab
+feat: add workspace tools tab
 fix: CSRF cookie not sent on mobile Safari
 chore: update wrangler to 4.x
 docs: update README for TypeScript refactor

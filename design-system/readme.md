@@ -7,7 +7,7 @@ The design system for **OASIS** (Open Automated Security Initiative for Software
 
 **Canonical sources**
 - Brand foundations: `owasp-oasis/owasp-oasis-app@main` → `src/index.css`, `src/pages/BrandGuide.tsx`, `src/pages/Home.css`, `src/components/Nav.*`, `src/components/Footer.*`.
-- Workspace: **OASIS Workspace v2** mockup (frozen copy in `ui_kits/workspace/`). It replaces the live `/workspace` pages.
+- Workspace: **OASIS Workspace v3** mockup (v2 + Teams; frozen copy in `ui_kits/workspace/`). It replaces the live `/workspace` pages.
 - Preview features: `owasp-oasis/owasp-oasis-app@preview` → `Product/reputation-badging-system.md` (response badges, maintainer and upstream lifecycle).
 - **Conflict rule:** when the live site and Workspace v2 disagree, **Workspace v2 wins** and the site should be updated to match.
 
@@ -33,7 +33,7 @@ Rule language: **MUST** = required; **SHOULD** = default unless there is a writt
 | `assets/logo/` | `oasis-logo.svg` (icon), `oasis-wordmark.svg`, `oasis-wordmark-full.svg` |
 | `SKILL.md` | Agent Skill manifest |
 
-**Components:** Button, Eyebrow, Card, Avatar · SeverityBadge, StatusChip, DecisionChip, LifecycleChip, CweTag · SearchInput, SegmentedFilter, Field, Checkbox · StatBlock, ConsensusBar, DiffView, DonorLogo · VoteBar · ResponseBadgeCard · Toast, EmptyState · SiteNav, AccountMenu, WorkspaceSidebar, SiteFooter.
+**Components:** TeamAvatar, TeamLogoField, TeamMediaField, TeamBadgeCard, InlineSearchResults, ConfirmDialog (Teams, §17) · Button, Eyebrow, Card, Avatar · SeverityBadge, StatusChip, DecisionChip, LifecycleChip, CweTag · SearchInput, SegmentedFilter, Field, Checkbox · StatBlock, ConsensusBar, DiffView, DonorLogo · VoteBar · ResponseBadgeCard · Toast, EmptyState · SiteNav, AccountMenu, WorkspaceSidebar, SiteFooter.
 
 **Intentional additions** (no counterpart in the live code, taken from Workspace v2 or the preview spec): LifecycleChip and ResponseBadgeCard (preview spec), VoteBar, ConsensusBar, DiffView, DonorLogo, SegmentedFilter, Checkbox rows, WorkspaceSidebar and AccountMenu (v2).
 
@@ -484,6 +484,65 @@ Needs Review → Trusted → Maintainer Review → Maintainer Accepted → Submi
 | Account and Preferences in the SiteNav menu | A second account block in the sidebar |
 | Lucide icons, currentColor | Emoji or hand-drawn icons |
 | "Closed Without Merge" in gray | Red for a neutral close |
+
+---
+
+## 17. Teams (extension)
+
+Source of truth: `owasp-oasis-app@preview` — `src/pages/workspace/TeamsTab.tsx`, `TeamWorkspace.tsx`, `teamApi.ts`, `TeamMemberSearch.tsx`, `TeamRepositorySearch.tsx`, `TeamLogoChoice.tsx`, `TeamMediaUpload.tsx`, `src/components/VoteForm.tsx`, `ContributorPanel.tsx`, and `docs/teams-feature-{brief,intent}.md`, `docs/teams-ux-validation.md`. Reference screens: **OASIS Workspace v3** (`ui_kits/workspace/` once refreshed). Teams is a coordination and reporting layer; it never changes validation, consensus, maintainer, or upstream rules.
+
+### Rules (MUST — do not reinterpret)
+- A validation belongs to one individual. It MAY be credited to **one** active Team at submission ("Credit this validation", default **Personal only**). The choice is locked after submission.
+- Public: directory, name, description, logo, member count, attributed validations, accepted outcomes, leaderboard.
+- Members only: roster, detailed activity, repository focus, individual attribution.
+- Roles: owner, admin, member. Owners and admins manage members, invitations, join requests, repository focus, details and visuals. **Ownership transfer and archive/reactivate are owner-only.** Transfer requires the recipient to accept; the former owner becomes a member.
+- Membership: **By invitation only** (default) or **Open membership** (request → owner/admin approves or declines).
+- Team badges: one **Team member** badge (on joining) and one **Team contributor** milestone. Bar is chosen from **3, 5, 10, 25** attributed validations. Earned badges are never revoked when the bar changes.
+- Team badges are private by default. Public display needs **both** the Team setting ("Allow opted-in members to display badges publicly") **and** the member's profile opt-in. The opt-in is one profile-level setting.
+- Team badges and individual response badges (§11) are separate systems and appear in separate sections.
+- Archived Teams pause membership changes, invitations, requests and new attribution; members, repositories, visuals, history and badges are preserved. Archived Teams are excluded from the vote-form Team list.
+
+### Information architecture
+- WorkspaceSidebar gains **Teams** after Maintainers → `/workspace/teams`.
+- List views: **Your teams** (signed-in default; inbox of invitations, ownership offers, pending requests) and **Explore teams** (public directory + leaderboard). Signed-out visitors see Explore only.
+- Team workspace sections: **Stats & activity · Members · Repository focus · Team administration** (admin/owner only). Rendered as a SegmentedFilter-style tab row that wraps on narrow screens; non-members see public stats and a join panel only.
+
+### Screen → component map
+| Screen / element | Components |
+|---|---|
+| Teams list header | tagline (Geist 15) + Button primary "+ Create team" (signed-in only) |
+| Your teams / Explore tabs | underline tabs (§6 Tabs) with mono count |
+| Inbox | Card rows + Button primary "Accept invitation", Button quiet "Accept ownership", StatusChip-style "Pending" |
+| Leaderboard | Card list + SegmentedFilter (All time / Last 90 days) + **TeamAvatar** |
+| Directory search / list | SearchInput + Card rows (TeamAvatar, meta "Owner · Invite only") + EmptyState |
+| Create team | Field ×3 (name*, description, how people join) + **TeamLogoField** + **TeamMediaField** (banner) + Button primary / quiet |
+| Team header | TeamAvatar (58px) + optional banner + role chip "You're the owner/an admin/a member" + Button quiet "Invite members" / "Find a review" |
+| Stats | StatBlock row (Accepted outcomes · Validations · Members) |
+| Your Team badges | **TeamBadgeCard** (earned / in progress) + Checkbox opt-in |
+| Recent activity | Card rows + DecisionChip + EmptyState ("Your team’s first validation starts with you.") |
+| Members | **InlineSearchResults** (invite) + join-request rows + roster with "Manage" disclosure + pending invitations |
+| Repository focus | InlineSearchResults (add) + focused list with "Find reviews →" (opens Candidate fixes filtered by repo) |
+| Team administration | Field, select (threshold 3/5/10/25, public display), TeamLogoField, TeamMediaField, Button primary "Save changes" (disabled until changed) |
+| Ownership & lifecycle | select + Button quiet "Offer ownership"; Button danger-outline "Archive team" / primary "Reactivate team" |
+| Destructive / owner actions | **ConfirmDialog** |
+| Vote form | select "Credit this validation" at the top of the form |
+| Validator profile | "Team badges · Shared by the member and Team admin" list |
+
+### New reusable components (`components/teams/`)
+- **TeamAvatar** — rounded-square mark (44px list, 34px leaderboard, 58px header; radius 11/9/14), `--blue-soft` / `--blue-dark`; built-in mark, custom image, or initials fallback. Never the OASIS logo.
+- **TeamLogoField** — radiogroup "Choose an icon / Custom image"; only the active source's control shows. Built-ins: Initials, Shield, Bug, Lock, Spark, Code, Leaf. Selected option: `--green` border, `--green-soft` fill.
+- **TeamMediaField** — preview + copy block on `--gray-100`; logo 88px square; banner "Wide PNG, JPEG, or WebP · up to 768 KB".
+- **TeamBadgeCard** — earned (green-soft) or in progress (white + progress bar to the current bar); shows "Earned at the N-validation bar…" when the bar has since changed.
+- **InlineSearchResults** — live search (min 2 characters for members), status line with `role="status"`, results list with "+ Invite"/"+ Add"; excludes existing members, pending invites and focused repos; direct "Invite @name by username" fallback.
+- **ConfirmDialog** — modal, 460px, radius 10, `--shadow-strong`; Cancel (quiet) + action (danger `--dec-reject` or primary).
+
+No new tokens are required. Status "archived" uses the neutral gray chip (`--gray-200`/`--gray-600`); archived notice uses `--status-needs-bg`/`-fg`.
+
+### Copy (verbatim from preview unless noted)
+Tagline "Amplify your impact together." (OASIS-approved replacement for "Review together. Make a shared impact.") · "Your work stays yours. Choose a team when submitting a validation to add it to the team’s totals." · "Team totals are public. Members and their activity are visible only inside the team." · "OASIS sets the available minimums. Earned badges are never revoked if this bar changes." · "Private Team membership is never public by default. Members must also opt in individually." · Confirmations: "Leave {team}?", "Remove {login}?", "Offer ownership to {login}?", "Archive this team?", "Reactivate this team?". Naming map: "Browse pull requests" → **"Browse candidate fixes"** (§6).
+
+### States
+Empty (no teams, no matches, no activity, no repositories, no invitations), pending (join request, invitation awaiting acceptance, ownership offer), archived (notice + locked settings + no manage actions), permission-limited (members see roster read-only, no administration section; non-members see public panel only), signed-out (Explore only, "Sign in with GitHub"). Loading, error-with-Retry, media-upload-failure warning and suspended status are specified in preview but not simulated in v3; use `role="status"` text "Loading teams…" and the §13 inline error pattern.
 
 ---
 

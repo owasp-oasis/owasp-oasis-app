@@ -2,7 +2,7 @@
  * ProjectPanel — slide-out detail panel for a single project.
  *
  * Tabs: Overview | PRs | Contributors
- * Fetches from GET /api/leaderboard/repos/:id
+ * Fetches from GET /api/workspace/repos/:id
  * Inner panels (PRPanel, ContributorPanel) stack on top.
  */
 
@@ -28,6 +28,7 @@ interface Repo {
   total_accept: number;
   total_modify: number;
   total_reject: number;
+  accepted_outcomes?: number;
 }
 
 interface PR {
@@ -200,7 +201,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
     if (!repo) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/leaderboard/repos/${repo.id}`)
+    fetch(`/api/workspace/repos/${repo.id}`)
       .then((r) => r.json() as Promise<{ ok: boolean; error?: string } & Partial<RepoDetailResponse>>)
       .then((d) => {
         if (!d.ok) {

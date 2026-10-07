@@ -9,7 +9,7 @@ export type SyncJobStatus =
   | 'deferred'
   | 'interrupted';
 
-export type SyncJobMode = 'legacy' | 'shadow' | 'live';
+export type SyncJobMode = 'live';
 export type SyncJobTrigger = 'scheduled' | 'manual' | 'continuation' | 'submission';
 export type SyncJobCategory = 'workspace' | 'integration' | 'analytics';
 
@@ -33,9 +33,7 @@ export interface StartSyncJobOptions {
 }
 
 export const SYNC_JOBS: readonly SyncJobDefinition[] = [
-  { key: 'legacy_workspace_sync', label: 'Legacy Workspace sync', category: 'workspace', schedule: 'Retired; historical runs only', criticalForWorkspace: false, retryable: false },
   { key: 'canonical_workspace_sync', label: 'Canonical Workspace sync', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
-  { key: 'shadow_sync_dispatch', label: 'Shadow sync dispatch', category: 'workspace', schedule: 'Daily in preview', criticalForWorkspace: false, retryable: true },
   { key: 'repository_inventory', label: 'Repository inventory', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'pull_request_catalog', label: 'Pull request catalog', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
   { key: 'upstream_merge_status', label: 'Upstream merge status', category: 'workspace', schedule: 'Every 4 hours', criticalForWorkspace: true, retryable: true },
@@ -385,7 +383,7 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
   const db = env.DB;
   const budgetCutoff = new Date(Date.now() - 99 * 86_400_000).toISOString().slice(0, 10);
   const [
-    stateRows, runRows, incompleteRows, parity, parityDifferences,
+    stateRows, runRows, incompleteRows,
     budgets, budgetHistory, hubspot, canonicalLock,
   ] = await Promise.all([
     db.prepare(`SELECT key, value FROM sync_state WHERE key IN (
@@ -408,22 +406,6 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
        WHERE status IN ('failed', 'skipped', 'deferred', 'interrupted')
        ORDER BY started_at DESC LIMIT 100
     `).all<JobRunRow>(),
-    db.prepare('SELECT * FROM sync_parity_runs ORDER BY created_at DESC LIMIT 1').first<Record<string, unknown>>(),
-    db.prepare(`
-      SELECT entity_type, difference_type, fields_json, COUNT(*) AS count
-        FROM sync_parity_differences
-       WHERE pipeline_run_id = (
-         SELECT pipeline_run_id FROM sync_parity_runs ORDER BY created_at DESC LIMIT 1
-       )
-       GROUP BY entity_type, difference_type, fields_json
-       ORDER BY count DESC, entity_type, difference_type
-       LIMIT 100
-    `).all<{
-      entity_type: string;
-      difference_type: string;
-      fields_json: string;
-      count: number;
-    }>(),
     db.prepare('SELECT * FROM sync_daily_budgets WHERE budget_date = ? ORDER BY budget_key')
       .bind(nowIso().slice(0, 10)).all<Record<string, unknown>>(),
     db.prepare(`
@@ -448,7 +430,7 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
   const lastSuccessAt = state.get('last_synced_at') ?? null;
   const running = state.get('sync_running') === '1';
   const workspaceParents = (runRows.results ?? []).filter(row => (
-    row.job_key === 'legacy_workspace_sync' || row.job_key === 'canonical_workspace_sync'
+    row.job_key === 'canonical_workspace_sync'
   ));
   const latestWorkspace = workspaceParents.sort(
     (left, right) => Date.parse(right.started_at) - Date.parse(left.started_at),
@@ -508,32 +490,6 @@ async function getSyncStatusWithObservability(env: Env): Promise<Record<string, 
         lease_expires_at: canonicalLock['lease_expires_at'],
       } : null,
     },
-    shadow: parity ? {
-      pipeline_run_id: parity['pipeline_run_id'],
-      canonical_pipeline_run_id: parity['canonical_pipeline_run_id'],
-      status: parity['status'],
-      comparable_entities: parity['comparable_entities'],
-      matched_entities: parity['matched_entities'],
-      changed_during_run: parity['changed_during_run'],
-      difference_count: parity['difference_count'],
-      consecutive_matches: parity['consecutive_matches'],
-      required_consecutive_matches: 3,
-      eligible_for_cutover: parity['eligible_for_cutover'] === 1,
-      compared_at: parity['compared_at'],
-      difference_summary: (parityDifferences.results ?? []).map(row => ({
-        entity_type: row.entity_type,
-        difference_type: row.difference_type,
-        fields: (() => {
-          try {
-            const fields = JSON.parse(row.fields_json) as unknown;
-            return Array.isArray(fields)
-              ? fields.filter((field): field is string => typeof field === 'string').slice(0, 50)
-              : [];
-          } catch { return []; }
-        })(),
-        count: row.count,
-      })),
-    } : null,
     budgets: budgets.results ?? [],
     budget_history: budgetHistory.results ?? [],
     incomplete_runs: (incompleteRows.results ?? []).map(publicRun),
@@ -552,9 +508,6 @@ const OBSERVABILITY_TABLES = [
   'sync_job_runs',
   'sync_job_events',
   'sync_work_items',
-  'sync_shadow_entities',
-  'sync_parity_runs',
-  'sync_parity_differences',
   'sync_daily_budgets',
   'sync_pipeline_locks',
 ] as const;
@@ -592,7 +545,6 @@ async function getPreMigrationSyncStatus(env: Env): Promise<Record<string, unkno
       last_attempt_at: null,
       stale_after_hours: 8,
     },
-    shadow: null,
     canonical: {
       schedule_enabled: false,
       pipeline_run_id: null,
