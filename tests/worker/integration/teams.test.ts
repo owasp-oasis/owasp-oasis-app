@@ -67,13 +67,15 @@ describe('Community Teams', () => {
     const csrf = makeCsrf();
     const create = await post('/api/teams', { name: 'Python reviewers', description: 'Review Python fixes.' }, csrf, owner.sessionCookie, owner.tokenCookie);
     expect(create.status).toBe(200);
-    const created = await create.json() as { team: { id: number; name: string } };
+    const created = await create.json() as { team: { id: number; name: string; created_at: string } };
     expect(created.team.name).toBe('Python reviewers');
+    expect(created.team.id).toEqual(expect.any(Number));
+    expect(created.team.created_at).toEqual(expect.any(String));
 
     const publicDetail = await SELF.fetch(new Request(`http://localhost/api/teams/${created.team.id}`));
     const publicBody = await publicDetail.json() as Record<string, unknown>;
     expect(publicBody.members).toBeUndefined();
-    expect((publicBody.team as { member_count: number }).member_count).toBe(1);
+    expect((publicBody.team as { id: number; created_at: string; member_count: number })).toMatchObject({ id: created.team.id, created_at: created.team.created_at, member_count: 1 });
 
     const privateDetail = await SELF.fetch(new Request(`http://localhost/api/teams/${created.team.id}`, {
       headers: { Cookie: `${owner.sessionCookie}; ${owner.tokenCookie}` },

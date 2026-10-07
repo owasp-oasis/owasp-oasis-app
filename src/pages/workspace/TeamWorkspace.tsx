@@ -31,6 +31,12 @@ type Section = 'overview' | 'members' | 'repositories' | 'settings'
 interface Confirmation { title: string; explanation: string; label: string; action: () => Promise<boolean> }
 interface TeamSettingsSnapshot { name: string; description: string; mode: MembershipMode; logoKey: TeamLogoKey; contributionThreshold: number; publicBadges: boolean }
 
+function formatTeamDate(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date)
+}
+
 export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: Props) {
   const { user } = useAuth()
   const [params] = useSearchParams()
@@ -156,7 +162,7 @@ export default function TeamWorkspace({ teamId, onClose, onMembershipChanged }: 
     <button className="team-link team-back" onClick={onClose}>← Teams</button>
     <header className={'teams-heading team-profile-heading' + (bannerImage ? ' has-team-banner' : '')} style={bannerImage ? { backgroundImage: `url(${bannerImage})` } : undefined}>
       <div className="team-profile-banner-overlay" aria-hidden="true" />
-      <div className="team-identity"><TeamAvatar team={{ ...detail.team, logo_image_data: logoImage }} large /><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div></div></div>
+      <div className="team-identity"><TeamAvatar team={{ ...detail.team, logo_image_data: logoImage }} large /><div><h2 ref={heading} tabIndex={-1}>{detail.team.name}</h2><p>{detail.team.description || 'An OASIS community team'}</p><div className="team-meta">{detail.membership && <span className="team-badge">You’re {isOwner ? 'the owner' : 'a' + (detail.membership === 'admin' ? 'n admin' : ' member')}</span>}<span>{detail.team.membership_mode === 'request' ? 'Open membership' : 'Invite only'}</span>{!active && <span className="team-badge">{detail.team.status}</span>}</div><div className="team-profile-details" aria-label="Team profile details"><span><span className="team-profile-detail-label">Team ID</span><strong>#{detail.team.id}</strong></span><span><span className="team-profile-detail-label">Founded</span><time dateTime={detail.team.created_at}>{formatTeamDate(detail.team.created_at)}</time></span></div></div></div>
     </header>
 
     <div className={detail.membership ? 'team-layout' : ''}>

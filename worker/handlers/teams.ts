@@ -161,7 +161,7 @@ export async function handleMyTeams(request: Request, env: Env): Promise<Respons
   if (!user) return jsonErr('Not authenticated — please sign in with GitHub', 401, request);
   const [memberships, invites, joinRequests, ownershipTransfers] = await Promise.all([
     env.DB.prepare(`
-      SELECT t.id, t.name, t.description, t.logo_key, t.logo_image_data, t.membership_mode, t.status, tm.role, tm.joined_at
+      SELECT t.id, t.name, t.description, t.created_at, t.logo_key, t.logo_image_data, t.membership_mode, t.status, tm.role, tm.joined_at
         FROM team_memberships tm JOIN teams t ON t.id = tm.team_id
        WHERE tm.github_login = ? AND tm.left_at IS NULL
        ORDER BY t.name COLLATE NOCASE

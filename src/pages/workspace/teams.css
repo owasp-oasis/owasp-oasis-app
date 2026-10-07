@@ -23,6 +23,12 @@
 .team-avatar:has(> svg), .team-avatar { font-variant-numeric: tabular-nums; }
 .team-person-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; background: var(--gray-100); color: var(--team-muted); font-size: .75rem; font-weight: 650; }
 .team-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: .78rem; color: var(--team-muted); }
+.team-profile-details { display: flex; flex-wrap: wrap; gap: 14px 20px; margin-top: 12px; color: var(--team-muted); font-size: .78rem; }
+.team-profile-details > span { display: inline-flex; align-items: baseline; gap: 6px; }
+.team-profile-detail-label { font-weight: 650; }
+.team-profile-details strong, .team-profile-details time { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.has-team-banner .team-profile-details { color: rgba(255, 255, 255, .8); }
+.has-team-banner .team-profile-details strong, .has-team-banner .team-profile-details time { color: var(--white); }
 .team-badge { display: inline-flex; align-items: center; border-radius: 5px; padding: 3px 7px; background: var(--gray-200); color: var(--ink-soft); font-size: .72rem; font-weight: 550; line-height: 1.3; }
 .team-button { display: inline-flex; justify-content: center; align-items: center; gap: 6px; min-height: 38px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--white); color: var(--ink-soft); font-size: .85rem; font-weight: 600; font-family: inherit; line-height: 1.3; cursor: pointer; text-decoration: none; }
 .team-button:hover { background: var(--gray-100); text-decoration: none; border-color: var(--line-strong); }
