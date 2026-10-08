@@ -290,3 +290,40 @@ k6 or Artillery for:
 - Rate limiting behavior under load
 - Leaderboard query performance
 - Sync cron scalability
+
+## Team invitation notification checks
+
+Run the focused Worker regressions:
+
+```bash
+npx vitest run tests/worker/integration/teamInvitations.test.ts tests/worker/integration/teams.test.ts
+```
+
+These cover invitee-only reads, pending/active filtering, uncached responses,
+non-authenticating session scope and rotation, CSRF and identifier validation,
+accept/decline outcomes, replay, and concurrent accept versus decline.
+
+For local browser validation, run `npm run preview:teams` and open
+`http://127.0.0.1:4175/workspace`. The loopback-only demo uses in-memory D1, dummy
+accounts, and blocks outbound Worker requests. Its default `demo-owner` account
+has a pending invitation from **Web application defenders**. Restart the demo to
+reset invitation state and generate fresh login sessions. Set
+`TEAMS_PREVIEW_PORT` to choose another port.
+
+1. Confirm the notification shows one invitation. Use **View invitations** and
+   verify focus moves to the invitation heading and both response actions work.
+2. Dismiss, navigate, and reload: the notification remains hidden, but Teams
+   still lists the invitation. Restart the demo and reload: the new login
+   session displays the reminder again.
+3. As the admin demo persona, invite the owner to another Team you manage.
+   Return to the owner and confirm one combined notification counts both
+   invitations. Decline one: the count decreases. Accept the last: the banner
+   disappears and the user joins that Team.
+4. Revoke an invitation from another tab after loading the recipient's list.
+   Respond to the stale invitation: show an explanation, refresh the list, and
+   update the count without adding membership.
+5. Verify anonymous and no-invitation states, keyboard actions, another tab's
+   dismissal, a failed invitation read followed by Retry, and a narrow viewport.
+
+Local browser evidence and remaining preview checks are recorded in
+[Team invitation verification](docs/evidence/team-invitations/README.md).

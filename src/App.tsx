@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import Nav from './components/Nav'
+import { MyTeamsProvider } from './context/MyTeamsContext'
+import TeamInvitationNotice from './components/TeamInvitationNotice'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
 import OnboardingModal from './components/OnboardingModal/OnboardingModal'
@@ -44,6 +46,7 @@ function AppShell() {
       {!isStandalone && <PreviewBanner />}
       {!isStandalone && <Nav onOpenOnboarding={() => setOnboardingOpen(true)} />}
       <main id="main-content" tabIndex={-1}>
+        <TeamInvitationNotice />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
@@ -90,9 +93,9 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter><WorkspaceProvider>
+      <BrowserRouter><MyTeamsProvider><WorkspaceProvider>
         <AppShell />
-      </WorkspaceProvider></BrowserRouter>
+      </WorkspaceProvider></MyTeamsProvider></BrowserRouter>
     </AuthProvider>
   )
 }

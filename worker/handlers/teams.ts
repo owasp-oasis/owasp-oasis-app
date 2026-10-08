@@ -10,7 +10,7 @@ import type { Env } from '../types.js';
 import { jsonErr, jsonOk, validateCSRF } from '../security.js';
 import { getRequestPrincipal, roleAllows } from '../authorization.js';
 import { getSession, type SessionUser } from './auth.js';
-import { parseBody, vGitHub, vText } from '../validation.js';
+import { hashString, parseBody, vGitHub, vText } from '../validation.js';
 import { isTeamBadgeThreshold, listTeamBadges, syncTeamBadges, type TeamBadgeSettings } from '../teamBadges.js';
 
 type TeamRole = 'owner' | 'admin' | 'member';
@@ -186,11 +186,13 @@ export async function handleMyTeams(request: Request, env: Env): Promise<Respons
     `).bind(user.github_login).all(),
   ]);
   return jsonOk({
+    // UI-only correlation value: never return the authenticating session cookie.
+    notification_session: await hashString('team-invitations:' + user.session_id),
     teams: memberships.results ?? [],
     invites: invites.results ?? [],
     join_requests: joinRequests.results ?? [],
     ownership_transfers: ownershipTransfers.results ?? [],
-  }, request);
+  }, request, { cache: 'no-store' });
 }
 
 /** POST /api/teams */
@@ -382,12 +384,35 @@ export async function handleTeamMembers(request: Request, env: Env, teamId: numb
   const action = parsed.val.action;
   const timestamp = now();
 
-  if (action === 'accept_invite') {
+  if (action === 'accept_invite' || action === 'decline_invite') {
+    const inviteId = parsed.val.invite_id;
+    if (typeof inviteId !== 'number' || !Number.isSafeInteger(inviteId) || inviteId <= 0) {
+      return jsonErr('A valid invitation id is required', 400, request);
+    }
     const invite = await env.DB.prepare(`SELECT id FROM team_invites WHERE id = ? AND team_id = ? AND invitee_login = ? AND status = 'pending'`)
-      .bind(parsed.val.invite_id, teamId, user.github_login).first<{ id: number }>();
-    if (!invite) return jsonErr('Invitation not found', 404, request);
-    await addMembership(env, teamId, user.github_login, 'member', timestamp);
-    await env.DB.prepare(`UPDATE team_invites SET status = 'accepted', resolved_at = ? WHERE id = ?`).bind(timestamp, invite.id).run();
+      .bind(inviteId, teamId, user.github_login).first<{ id: number }>();
+    if (!invite) return jsonErr('This invitation is no longer available. Refresh your invitations to see what is pending.', 404, request);
+    if (action === 'decline_invite') {
+      const result = await env.DB.prepare(`UPDATE team_invites SET status = 'declined', resolved_at = ? WHERE id = ? AND status = 'pending'`)
+        .bind(timestamp, invite.id).run();
+      if (!result.meta.changes) return jsonErr('This invitation is no longer available. Refresh your invitations to see what is pending.', 409, request);
+      return jsonOk({ declined: true }, request);
+    }
+    // Keep membership and resolution atomic, including concurrent responses/revocation.
+    const results = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO team_memberships (team_id, github_login, role, joined_at)
+        SELECT team_id, invitee_login, 'member', ? FROM team_invites
+        WHERE id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM teams WHERE id = ? AND status = 'active')
+          AND NOT EXISTS (SELECT 1 FROM team_memberships WHERE team_id = ? AND github_login = ? AND left_at IS NULL)`)
+        .bind(timestamp, invite.id, teamId, teamId, user.github_login),
+      env.DB.prepare(`UPDATE team_invites SET status = 'accepted', resolved_at = ?
+        WHERE id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM teams WHERE id = ? AND status = 'active')`)
+        .bind(timestamp, invite.id, teamId),
+    ]);
+    if (!results[1].meta.changes) return jsonErr('This invitation is no longer available. Refresh your invitations to see what is pending.', 409, request);
+    await syncTeamBadges(env, teamId, user.github_login);
     return jsonOk({ joined: true }, request);
   }
 
