@@ -155,20 +155,6 @@
   border-left: 4px solid var(--blue);
 }
 
-/* ── Growing ── */
-.team-growing {
-  text-align: center;
-  padding: 24px;
-  background: var(--white);
-  border-radius: 10px;
-  border: 1px dashed var(--gray-200);
-}
-
-.team-growing p {
-  color: var(--gray-600);
-  font-size: 0.95rem;
-}
-
 @media (max-width: 600px) {
   .team-card {
     flex-direction: column;
