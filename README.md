@@ -301,6 +301,31 @@ The OAuth callback URL registered in the GitHub app must be `https://preview.owa
 
 ---
 
+## Team invitation notifications
+
+Signed-in users with pending Team invitations see one dismissible notification
+with the invitation count. **View invitations** opens **Workspace → Teams →
+Your teams**, where each invitation can be accepted or declined. Invitations to
+inactive Teams and resolved invitations are excluded. OASIS does not currently
+expire invitations automatically.
+
+Dismissing the notification leaves invitations pending and hides the reminder
+for the current login session, including page reloads and other tabs on the same
+origin. A new login session shows the reminder again. The browser stores only a
+non-authenticating session digest for dismissal; invitation details and session
+credentials are not stored in local storage. If browser storage is unavailable,
+dismissal lasts until the page reloads. Invitation state refreshes on login,
+window focus, and responses from Your teams.
+
+The existing authenticated `/api/teams/mine` endpoint supplies invitation state
+and a UI-only `notification_session` digest with `Cache-Control: no-store`.
+`POST /api/teams/:id/members` accepts `decline_invite` alongside `accept_invite`;
+both require the invitee's session, CSRF protection, and a pending invitation to
+an active Team. Acceptance resolves the invitation and creates membership in
+one database transaction. No schema migration is required.
+
+---
+
 ## Voting system
 
 Validators can submit their OASIS validation decision directly from the workspace PR panel.
