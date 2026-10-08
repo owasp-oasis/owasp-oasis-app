@@ -178,13 +178,6 @@ export default function About() {
               </div>
             </div>
           </div>
-
-          <div className="team-growing">
-            <p>
-              + a growing volunteer team of 5 and counting.{' '}
-              <a href="/home">Join Team OASIS</a> to be part of what comes next.
-            </p>
-          </div>
         </div>
       </section>
     </div>
