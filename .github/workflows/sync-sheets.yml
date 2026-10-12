@@ -14,13 +14,12 @@ jobs:
       - name: Fetch registrations from Cloudflare Worker
         run: |
           echo "Fetching registrations..."
-          curl -s \
+          curl --fail --silent --show-error --max-time 30 \
             -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
             "https://www.owasp-oasis.org/api/admin/registrations" \
             -o /tmp/registrations.json
 
-          echo "Response:"
-          cat /tmp/registrations.json
+          # Never print response bodies: Actions logs are readable in this public repository.
 
           COUNT=$(cat /tmp/registrations.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('registrations', [])))")
           echo "Total registrations: $COUNT"
@@ -36,7 +35,7 @@ jobs:
             "${{ secrets.GOOGLE_SHEETS_WEBHOOK }}?secret=${{ secrets.ADMIN_SECRET }}")
 
           echo "HTTP Status: $RESPONSE"
-          cat /tmp/sheets_response.json
+          # The webhook response may echo contact data; log only its status.
 
           if [ "$RESPONSE" != "200" ]; then
             echo "❌ Sync failed with HTTP $RESPONSE"
