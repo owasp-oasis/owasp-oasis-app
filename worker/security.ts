@@ -23,6 +23,7 @@ const SEC_HEADERS: Record<string, string> = {
     "font-src 'self'",
     "img-src 'self' data: https://www.appsecai.io https://cdn.prod.website-files.com https://avatars.githubusercontent.com https://github.com",
     "connect-src 'self'",
+    "frame-src https://calendar.google.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
