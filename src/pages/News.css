@@ -144,7 +144,7 @@
 }
 
 .events-calendar {
-  margin-top: 40px;
+  margin-bottom: 28px;
   overflow: hidden;
   background: var(--white);
   border: 1px solid var(--line);

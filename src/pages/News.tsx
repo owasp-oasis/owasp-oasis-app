@@ -94,6 +94,30 @@ export default function News() {
             <h2>Upcoming events</h2>
           </div>
 
+          <section className="events-calendar" aria-labelledby="events-calendar-title">
+            <div className="events-calendar-header">
+              <div>
+                <span className="badge badge-green">Live schedule</span>
+                <h2 id="events-calendar-title">OWASP OASIS Events Calendar</h2>
+                <p>
+                  Browse office hours and validation sessions. Times are shown in your browser&apos;s time zone:
+                  {' '}<strong>{eventsTimeZoneLabel}</strong>.
+                </p>
+              </div>
+              <a href={eventsCalendarUrl} target="_blank" rel="noopener noreferrer" className="events-calendar-link">
+                Open in Google Calendar <ArrowIcon />
+              </a>
+            </div>
+            <div className="events-calendar-frame">
+              <iframe
+                src={eventsCalendarUrl}
+                title="OWASP OASIS Events Calendar"
+                loading="lazy"
+                scrolling="no"
+              />
+            </div>
+          </section>
+
           <div className="event-grid">
             {upcomingEvents.map(event => (
               <article key={event.date} className={`event-card${event.cancelled ? ' event-card--cancelled' : ''}`}>
@@ -124,30 +148,6 @@ export default function News() {
               </article>
             ))}
           </div>
-
-          <section className="events-calendar" aria-labelledby="events-calendar-title">
-            <div className="events-calendar-header">
-              <div>
-                <span className="badge badge-green">Live schedule</span>
-                <h2 id="events-calendar-title">OWASP OASIS Events Calendar</h2>
-                <p>
-                  Browse office hours and validation sessions. Times are shown in your browser&apos;s time zone:
-                  {' '}<strong>{eventsTimeZoneLabel}</strong>.
-                </p>
-              </div>
-              <a href={eventsCalendarUrl} target="_blank" rel="noopener noreferrer" className="events-calendar-link">
-                Open in Google Calendar <ArrowIcon />
-              </a>
-            </div>
-            <div className="events-calendar-frame">
-              <iframe
-                src={eventsCalendarUrl}
-                title="OWASP OASIS Events Calendar"
-                loading="lazy"
-                scrolling="no"
-              />
-            </div>
-          </section>
 
           <div className="news-section-heading news-section-heading--latest">
             <div>
