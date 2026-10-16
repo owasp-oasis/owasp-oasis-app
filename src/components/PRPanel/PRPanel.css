@@ -1275,7 +1275,7 @@ details[open] > .prp-md-summary::before {
 }
 /* v3 shared detail panel, embedded or modal. */
 .prp-v3{font:14px/1.6 var(--sans);background:var(--white);border:1px solid var(--line);z-index:300;max-width:94vw;width:min(640px,94vw)}
-.prp-v3.prp-panel--inline{position:relative;inset:auto;width:100%;max-width:none;height:calc(100dvh - 270px - var(--banner-height,0px));min-height:480px;max-height:none;transform:none;box-shadow:none;border-radius:8px;z-index:auto;animation:none;display:flex;flex-direction:column;overflow:hidden}
+.prp-v3.prp-panel--inline{position:relative;inset:auto;width:100%;max-width:none;height:100%;min-height:0;max-height:100%;transform:none;box-shadow:none;border-radius:8px;z-index:auto;animation:none;display:flex;flex-direction:column;overflow:hidden}
 .prp-v3.prp-panel--expanded{position:fixed;inset:3dvh auto auto 50%;transform:translateX(-50%);width:min(1040px,94vw);height:94dvh;border-radius:10px;box-shadow:var(--shadow-strong);z-index:400}
 .prp-backdrop{z-index:299;background:rgba(7,17,31,.35)}
 .prp-v3 .prp-header{display:flex;flex-wrap:wrap;gap:8px;padding:18px 20px;flex:none;border-bottom:1px solid var(--line)}
@@ -1286,6 +1286,6 @@ details[open] > .prp-md-summary::before {
 .prp-v3 .prp-vote-btn--accept{color:var(--dec-accept-fg);background:var(--dec-accept-bg);border-color:var(--dec-accept)}.prp-v3 .prp-vote-btn--modify{color:var(--dec-modify-fg);background:var(--dec-modify-bg);border-color:var(--dec-modify)}.prp-v3 .prp-vote-btn--reject{color:var(--dec-reject-fg);background:var(--dec-reject-bg);border-color:var(--dec-reject)}.prp-v3 .prp-vote-btn--duplicate{color:var(--dec-duplicate-fg);background:var(--dec-duplicate-bg);border-color:var(--dec-duplicate)}.prp-v3 .prp-vote-btn--active{box-shadow:inset 0 0 0 2px currentColor}
 .prp-v3 .prp-vote-form{background:var(--paper);border-top:1px solid var(--line);box-shadow:none}.vm-form fieldset{display:grid;gap:16px;border:0;padding:0;min-width:0}.vm-form .vm-label{font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.08em}.vm-form :is(input,select,textarea){font-size:14px;border-color:var(--line-strong)}.vm-form .vm-footer{justify-content:flex-start}.vm-form .vm-help{font:12px/1.5 var(--sans);color:var(--muted)}.vm-form .vm-decision-group{display:flex;gap:6px;flex-wrap:wrap}.vm-form .vm-decision-btn--active{box-shadow:inset 0 0 0 2px currentColor}.vm-form .vm-decision-btn--modify{color:var(--dec-modify-fg);background:var(--dec-modify-bg)}.vm-form .vm-error{color:var(--dec-reject-fg);background:var(--dec-reject-bg)}
 .prp-v3 :is(button,a,input,textarea,select):focus-visible{outline:3px solid var(--focus-ring);outline-offset:3px}
-@media(max-width:1100px){.prp-v3.prp-panel--inline{height:calc(100dvh - 305px - var(--banner-height,0px))}}
+@media(max-width:1100px) and (min-width:768px){.prp-v3.prp-panel--inline{height:100%;max-height:100%;min-height:0}}
 @media(max-width:767px){.prp-v3.prp-panel--inline{height:75dvh;min-height:500px}.prp-v3 .prp-vote-btn,.prp-v3 .prp-tab,.prp-v3 .prp-close{min-height:44px}.prp-v3 .prp-header{padding:14px}.prp-v3 .prp-body{padding:14px}.prp-v3 .prp-fix-title{font-size:18px}}
 @media(prefers-reduced-motion:reduce){.prp-v3,.prp-v3 *{animation:none!important;transition:none!important}}
