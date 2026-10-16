@@ -1,11 +1,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
-import { runSyncOneCommentReaction, seedCommentReactionWorkItems } from '../../../worker/sync.js';
+import { runSyncOneCommentReaction, runSyncOneRepo, seedCommentReactionWorkItems } from '../../../worker/sync.js';
 import {
   clearPRReviewProjection,
   reconcileCurrentParticipants,
   rebuildContributors,
   syncVotesFromComments,
+  upsertComments,
 } from '../../../worker/db.js';
 import { applySchema, cleanDB, insertTestPR, insertTestRepo } from './helpers.js';
 import { fetchMock } from './fetchMock.js';
@@ -156,6 +157,67 @@ describe('bounded canonical synchronization work', () => {
       { github_login: 'legacy-reviewer', comment_id: 3006, voted_at: commentTime },
       { github_login: 'ui-reviewer', comment_id: 3005, voted_at: uiVoteTime },
     ]);
+  });
+
+  it('persists parsed assessment answers on comments and projects them to user_votes', async () => {
+    await insertTestRepo(env, { id: 108, name: 'assessment-sync' });
+    await insertTestPR(env, { id: 2008, repo_id: 108, repo_name: 'assessment-sync', number: 14 });
+    const timestamp = '2026-10-01T12:00:00.000Z';
+    await upsertComments(env.DB, [{
+      id: 3009, prId: 2008, repoName: 'assessment-sync', prNumber: 14, login: 'reviewer',
+      decision: 'accept', vulnerabilityAssessment: 'hardening', introducedVulnerability: 'no',
+      securityIssueAddressed: 'yes', breaksCodebase: null, createdAt: timestamp, prCreatedAt: timestamp,
+    }]);
+
+    await syncVotesFromComments(env.DB);
+
+    const stored = await env.DB.prepare(`SELECT pc.vulnerability_assessment AS comment_answer,
+      uv.vulnerability_assessment, uv.introduced_vulnerability, uv.security_issue_addressed, uv.breaks_codebase
+      FROM pr_comments pc JOIN user_votes uv ON uv.comment_id = pc.id WHERE pc.id = 3009`)
+      .first<Record<string, string | null>>();
+    expect(stored).toEqual({
+      comment_answer: 'hardening', vulnerability_assessment: 'hardening',
+      introduced_vulnerability: 'no', security_issue_addressed: 'yes', breaks_codebase: null,
+    });
+  });
+
+  it('round-trips assessment values from a GitHub validation comment through canonical sync', async () => {
+    const updatedAt = '2026-10-05T10:00:00.000Z';
+    const commentBody = [
+      'Validation summary:', '| Decision | Accept |',
+      '| Confidence | Medium |', '| Summary | Candidate review |', '| Next step | Merge |',
+      '', 'Security assessment:', '| Question | Answer |',
+      '| Vulnerability assessment | Hardening |',
+      '| Introduces new vulnerability | No |',
+      '| Addresses the security issue | Yes |',
+      '| Breaks the codebase | Unknown |',
+    ].join('\n');
+    fetchMock.when(request => request.url.includes('/orgs/owasp-oasis/repos'))
+      .respondWith(Response.json([{ id: 109, name: 'assessment-sync', full_name: 'owasp-oasis/assessment-sync', description: '', language: 'TypeScript', stargazers_count: 2, fork: true }]));
+    fetchMock.when(request => request.url === 'https://api.github.com/repos/owasp-oasis/assessment-sync')
+      .respondWith(Response.json({ parent: { html_url: 'https://github.com/upstream/assessment-sync' } }));
+    fetchMock.when(request => request.url.includes('/pulls?state=open'))
+      .respondWith(Response.json([{ id: 2010, number: 14, title: 'Assessment sync test', state: 'open', html_url: 'https://github.com/owasp-oasis/assessment-sync/pull/14', body: '', created_at: updatedAt, updated_at: updatedAt, user: { login: 'author' }, head: { sha: 'head-sha' } }]));
+    fetchMock.when(request => request.url.includes('/pulls?state=closed'))
+      .respondWith(Response.json([]));
+    fetchMock.when(request => request.url.includes('/issues/14/comments'))
+      .respondWith(Response.json([{ id: 3010, body: commentBody, user: { login: 'assessment-reviewer' }, created_at: updatedAt }]));
+
+    const result = await runSyncOneRepo(env, { cursorKey: 'assessment_sync_cursor' });
+    expect(result.ok).toBe(true);
+    const comment = await env.DB.prepare(`SELECT decision, vulnerability_assessment, introduced_vulnerability,
+      security_issue_addressed, breaks_codebase FROM pr_comments WHERE id = 3010`)
+      .first<Record<string, string | null>>();
+    expect(comment).toEqual({
+      decision: 'accept', vulnerability_assessment: 'hardening', introduced_vulnerability: 'no',
+      security_issue_addressed: 'yes', breaks_codebase: 'unknown',
+    });
+
+    await syncVotesFromComments(env.DB);
+    const vote = await env.DB.prepare(`SELECT decision, vulnerability_assessment, introduced_vulnerability,
+      security_issue_addressed, breaks_codebase FROM user_votes WHERE github_login = 'assessment-reviewer'`)
+      .first<Record<string, string | null>>();
+    expect(vote).toEqual(comment);
   });
 
   it('removes current participant rows that have no review source', async () => {

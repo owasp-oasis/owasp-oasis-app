@@ -25,7 +25,13 @@ interface Comment {
   body: string
   created_at: string
   reactions: Reactions
-  oasis_decision: 'accept' | 'modify' | 'reject' | null
+  oasis_decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null
+  oasis_assessment?: {
+    vulnerability_assessment: string | null
+    introduced_vulnerability: string | null
+    security_issue_addressed: string | null
+    breaks_codebase: string | null
+  }
 }
 
 interface Props {

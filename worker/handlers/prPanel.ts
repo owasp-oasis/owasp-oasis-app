@@ -14,7 +14,7 @@
  */
 
 import type { Env } from '../types.js';
-import { ghFetch, ghFetchAll, parseDecision, parseDetectionTool, ORG } from '../github.js';
+import { ghFetch, ghFetchAll, parseDecision, parseValidationAssessment, parseDetectionTool, ORG } from '../github.js';
 import type { GitHubReaction } from '../github.js';
 import { checkRateLimit, jsonOk, jsonErr, validateCSRF } from '../security.js';
 import { getSession } from './auth.js';
@@ -210,6 +210,7 @@ export async function handlePRComments(request: Request, env: Env, id: number): 
       eyes:        c.reactions.eyes,
     } : { total_count: 0, '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 },
     oasis_decision: parseDecision(c.body),
+    oasis_assessment: parseValidationAssessment(c.body),
   }));
 
   return jsonOk({ comments: result }, request);
@@ -276,6 +277,7 @@ export async function handlePRCommentCreate(request: Request, env: Env, id: numb
       created_at: ghComment.created_at ?? new Date().toISOString(),
       reactions: { total_count: 0, '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 },
       oasis_decision: parseDecision(ghComment.body ?? commentBody),
+      oasis_assessment: parseValidationAssessment(ghComment.body ?? commentBody),
     },
   }, request);
 }

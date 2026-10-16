@@ -172,7 +172,7 @@ describe('PR Panel endpoints', () => {
             JSON.stringify([
               {
                 id: 123456,
-                body: '## validation summary: This is valid\n\n| decision | accept |',
+                body: 'Validation summary:\n\n| Decision | Accept |\n\n| Vulnerability assessment | Hardening |\n| Introduces new vulnerability | No |',
                 user: { login: 'validator' },
                 created_at: new Date().toISOString(),
               },
@@ -194,6 +194,10 @@ describe('PR Panel endpoints', () => {
       const body = await res.json();
       expect(Array.isArray(body.comments)).toBe(true);
       expect(body.comments[0].oasis_decision).toBe('accept');
+      expect(body.comments[0].oasis_assessment).toMatchObject({
+        vulnerability_assessment: 'hardening', introduced_vulnerability: 'no',
+        security_issue_addressed: null, breaks_codebase: null,
+      });
     });
 
     it('parses OASIS template comments', async () => {
@@ -205,7 +209,7 @@ describe('PR Panel endpoints', () => {
       );
 
       const body = await res.json();
-      expect(body.comments[0].body).toContain('validation summary');
+      expect(body.comments[0].body).toContain('Validation summary');
     });
 
     it('returns 404 for non-existent PR', async () => {

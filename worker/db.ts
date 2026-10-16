@@ -292,9 +292,15 @@ export async function upsertComments(db: D1Database, comments: CommentData[]): P
   for (const c of comments) {
     await db.prepare(`
       INSERT OR REPLACE INTO pr_comments
-        (id, pr_id, repo_name, pr_number, login, decision, duplicate_of, created_at, pr_created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(c.id, c.prId, c.repoName, c.prNumber, c.login, c.decision ?? null, c.duplicateOf ?? null, c.createdAt, c.prCreatedAt).run();
+        (id, pr_id, repo_name, pr_number, login, decision, duplicate_of,
+         vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase,
+         created_at, pr_created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      c.id, c.prId, c.repoName, c.prNumber, c.login, c.decision ?? null, c.duplicateOf ?? null,
+      c.vulnerabilityAssessment ?? null, c.introducedVulnerability ?? null,
+      c.securityIssueAddressed ?? null, c.breaksCodebase ?? null, c.createdAt, c.prCreatedAt,
+    ).run();
   }
 }
 
@@ -367,6 +373,10 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       pc.pr_number,
       pc.decision,
       pc.duplicate_of,
+      pc.vulnerability_assessment,
+      pc.introduced_vulnerability,
+      pc.security_issue_addressed,
+      pc.breaks_codebase,
       pc.created_at
     FROM pr_comments pc
     JOIN pull_requests pr ON pr.id = pc.pr_id
@@ -382,6 +392,10 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
     pr_number: number;
     decision: string;
     duplicate_of: number | null;
+    vulnerability_assessment: string | null;
+    introduced_vulnerability: string | null;
+    security_issue_addressed: string | null;
+    breaks_codebase: string | null;
     created_at: string;
   }>();
 
@@ -403,13 +417,18 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
     // linkage on legacy imports; do not replace their decision or timestamp.
     await db.prepare(`
       INSERT INTO user_votes
-        (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, comment_id, voted_at,
+         vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(github_login, pr_id) DO UPDATE SET
         comment_id = CASE
           WHEN user_votes.comment_id IS NULL THEN excluded.comment_id
           ELSE user_votes.comment_id
-        END
+        END,
+        vulnerability_assessment = excluded.vulnerability_assessment,
+        introduced_vulnerability = excluded.introduced_vulnerability,
+        security_issue_addressed = excluded.security_issue_addressed,
+        breaks_codebase = excluded.breaks_codebase
     `).bind(
       comment.login,
       comment.pr_id,
@@ -419,6 +438,10 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
       parentPrId,
       comment.id,
       comment.created_at,
+      comment.vulnerability_assessment,
+      comment.introduced_vulnerability,
+      comment.security_issue_addressed,
+      comment.breaks_codebase,
     ).run();
 
     await db.prepare(`
