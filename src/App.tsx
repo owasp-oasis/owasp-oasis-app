@@ -21,6 +21,7 @@ import FixCostCalculator from './pages/FixCostCalculator'
 import Admin from './pages/Admin'
 import AdminAnalytics from './pages/AdminAnalytics'
 import AnalyticsTracker from './components/AnalyticsTracker'
+import { guideRoutes } from './pages/GuideRoutes'
 
 function LegacyWorkspaceLink({ path }: { path: string }) {
   const { search, hash } = useLocation()
@@ -45,6 +46,7 @@ function AppShell() {
       {!isStandalone && <Nav onOpenOnboarding={() => setOnboardingOpen(true)} />}
       <main id="main-content" tabIndex={-1}>
         <Routes>
+          {guideRoutes}
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route path="/about" element={<About />} />
