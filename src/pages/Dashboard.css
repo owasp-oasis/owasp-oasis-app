@@ -236,3 +236,41 @@
   .dashboard-panel:nth-of-type(2) { animation-delay: .05s; }
   @keyframes dashboard-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 }
+
+/* Live dashboard states and aggregate-only content. */
+.dashboard-refresh { padding: 9px 14px; color: var(--dash-text); background: var(--dash-panel); border: 1px solid var(--dash-blue); border-radius: 5px; cursor: pointer; }
+.dashboard-refresh:disabled { opacity: .6; cursor: wait; }
+.dashboard-freshness { margin-top: 24px; color: var(--dash-muted); font-size: .82rem; line-height: 1.7; }
+.dashboard-freshness p { margin: 3px 0; }
+.dashboard-stale { color: #ffcc55; }
+.oasis-dashboard a { color: var(--dash-blue); }
+.oasis-dashboard button:focus-visible, .oasis-dashboard a:focus-visible { outline: 2px solid var(--dash-blue); outline-offset: 4px; }
+.dashboard-scope { color: var(--dash-muted); line-height: 1.6; font-size: .85rem; margin: 0 0 24px; }
+.oasis-dashboard .panel-heading h2 { font-size: 1rem; }
+.oasis-dashboard .panel-heading { flex-wrap: wrap; }
+.oasis-dashboard .metric-card > span { white-space: normal; }
+.oasis-dashboard .mini-legend { flex-wrap: wrap; gap: 12px; }
+.oasis-dashboard .closed { background: #ff7a7a; }
+.status-needs-review { color: #ffcc55; }
+.dashboard-activity-grid { display: grid; grid-template-columns: repeat(28, minmax(0, 1fr)); gap: 5px; margin: 20px 0 12px; }
+.dashboard-activity-grid .heatmap-cell { aspect-ratio: 1; min-height: 18px; }
+.dashboard-ledger-note { padding: 0 18px 18px; }
+@media(max-width:680px) {
+  .active-validators-heading { grid-template-columns: 1fr; gap: 14px; padding: 18px 8px; }
+  .active-validators-heading > div + div { border-left: 0; }
+  .active-validators-heading > div { justify-content: flex-start; }
+  .dashboard-activity-grid { grid-template-columns: repeat(14, minmax(0, 1fr)); }
+  .oasis-dashboard .mini-legend { font-size: .6rem; }
+}
+
+/* Keep edge tooltips within narrow viewports, including keyboard focus. */
+.oasis-dashboard .chart-hotspot:first-of-type .chart-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n+1) .heatmap-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n+2) .heatmap-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n+3) .heatmap-tooltip { left: 0; right: auto; transform: none; }
+.oasis-dashboard .chart-hotspot:last-of-type .chart-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n) .heatmap-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n-1) .heatmap-tooltip,
+.oasis-dashboard .dashboard-activity-grid .heatmap-cell:nth-child(14n-2) .heatmap-tooltip { left: auto; right: 0; transform: none; }
+.oasis-dashboard .active-validators-heading { min-height: 92px; }
+.oasis-dashboard .active-validators-heading strong { font-size: 2.1rem; }
