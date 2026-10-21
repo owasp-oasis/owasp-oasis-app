@@ -88,22 +88,29 @@ export function renderGuideMarkdown(markdown: string): ReactNode[] {
 }
 
 interface Props {
-  active: 'quick-start' | 'reviewer-guide'
+  active: 'quick-start' | 'reviewer-guide' | 'worked-example'
   markdown: string
 }
+
+const guideLinks = [
+  { id: 'quick-start', label: 'Quick Start', href: '/quick-start' },
+  { id: 'reviewer-guide', label: 'Reviewer Guide', href: '/reviewer-guide' },
+  { id: 'worked-example', label: 'Worked Example', href: '/worked-example' },
+] as const
 
 export default function GuideDocument({ active, markdown }: Props) {
   return <div className="guide-page">
     <div className="guide-container">
       <nav className="guide-nav" aria-label="Reviewer guides">
-        <Link to="/quick-start" aria-current={active === 'quick-start' ? 'page' : undefined}>Quick Start</Link>
-        <Link to="/reviewer-guide" aria-current={active === 'reviewer-guide' ? 'page' : undefined}>Reviewer Guide</Link>
+        {guideLinks.map(guide => <Link key={guide.id} to={guide.href} aria-current={active === guide.id ? 'page' : undefined}>{guide.label}</Link>)}
       </nav>
       <article className="guide-content">{renderGuideMarkdown(markdown)}</article>
       <nav className="guide-next" aria-label="Continue reviewing">
         {active === 'quick-start'
           ? <Link to="/reviewer-guide"><span>Next</span><strong>Read the Reviewer Guide</strong></Link>
-          : <Link to="/quick-start"><span>Back</span><strong>Quick Start</strong></Link>}
+          : active === 'reviewer-guide'
+            ? <Link to="/worked-example"><span>Next</span><strong>Read the Worked Example</strong></Link>
+            : <Link to="/reviewer-guide"><span>Back</span><strong>Reviewer Guide</strong></Link>}
         <Link className="guide-browse" to="/workspace/fixes">Browse Candidate Fixes</Link>
       </nav>
     </div>

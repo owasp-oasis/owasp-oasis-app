@@ -71,4 +71,4 @@ Form fields depend on the selected decision. In the current interface, all decis
 
 OASIS validation is community input and does not merge code. The Workflow view tracks maintainer and upstream actions separately. Project maintainers decide whether and how to respond to a candidate submitted to their repository.
 
-Return to the [Quick Start](/quick-start) or [browse Candidate Fixes](/workspace/fixes).
+Continue to the [Worked Example](/worked-example), return to the [Quick Start](/quick-start), or [browse Candidate Fixes](/workspace/fixes).

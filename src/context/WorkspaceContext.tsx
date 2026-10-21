@@ -3,9 +3,21 @@ import { useAuth } from './AuthContext'
 import { WORKSPACE_DEFAULTS, type WorkspacePreferences } from '../workspacePreferences'
 import { teamGet, teamPut, errorMessage } from '../pages/workspace/teamApi'
 
-const Context = createContext({
+interface WorkspaceContextValue {
+  preferences: WorkspacePreferences
+  loading: boolean
+  preferencesReady: boolean
+  saving: boolean
+  error: string | null
+  save: (patch: Partial<WorkspacePreferences>) => Promise<void>
+  retry: () => void
+  notify: (message: string) => void
+}
+
+const Context = createContext<WorkspaceContextValue>({
   preferences: WORKSPACE_DEFAULTS,
   loading: false,
+  preferencesReady: false,
   saving: false,
   error: null as string | null,
   save: async (_patch: Partial<WorkspacePreferences>) => {},
@@ -18,6 +30,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadedLogin, setLoadedLogin] = useState<string | null>(null)
+  const [loadFailedLogin, setLoadFailedLogin] = useState<string | null>(null)
   const [toast, setToast] = useState('')
   const [retryId, setRetryId] = useState(0)
   const identity = useRef(user?.login)
@@ -32,12 +46,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController()
     setPreferences(WORKSPACE_DEFAULTS); setError(null)
-    if (!user) { setLoading(false); return }
+    if (!user) { setLoading(false); setLoadedLogin(null); setLoadFailedLogin(null); return }
+    const login = user.login
     setLoading(true)
+    setLoadedLogin(null)
+    setLoadFailedLogin(null)
     void teamGet<{ preferences: WorkspacePreferences }>('/api/preferences/workspace', controller.signal)
       .then(data => setPreferences({ ...WORKSPACE_DEFAULTS, ...data.preferences }))
-      .catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)) })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .catch(e => { if (!controller.signal.aborted) { setError(errorMessage(e)); setLoadFailedLogin(login) } })
+      .finally(() => { if (!controller.signal.aborted) { setLoading(false); setLoadedLogin(login) } })
     return () => controller.abort()
   }, [user?.login, retryId])
   const save = useCallback((patch: Partial<WorkspacePreferences>) => {
@@ -56,6 +73,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void work.finally(() => { if (queue.current === work) setSaving(false) }).catch(() => {})
     return work
   }, [user?.login, notify])
-  return <Context.Provider value={{ preferences, loading, saving, error, save, retry: () => setRetryId(id => id + 1), notify }}>{children}{toast && <div className="ws-toast" role="status" key={toast}>{toast}</div>}</Context.Provider>
+  return <Context.Provider value={{ preferences, loading, preferencesReady: !user || (loadedLogin === user.login && loadFailedLogin !== user.login), saving, error, save, retry: () => setRetryId(id => id + 1), notify }}>{children}{toast && <div className="ws-toast" role="status" key={toast}>{toast}</div>}</Context.Provider>
 }
 export const useWorkspace = () => useContext(Context)

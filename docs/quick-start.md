@@ -26,7 +26,7 @@ Ask two questions:
 - Is the reported problem supported by the available evidence?
 - Does the proposed change address it without creating an obvious new problem?
 
-## Record a decision when you have enough support
+## Submit your vote
 
 Choose Accept, Modify, Reject, or Duplicate when the evidence supports that decision. The current form may ask for comments and, depending on the decision, confidence, a recommended action, or other context. Keep your explanation concise and tied to what you reviewed. See the [Reviewer Guide](/reviewer-guide) for more detail on the decisions and review questions.
 
