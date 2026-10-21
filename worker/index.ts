@@ -1,3 +1,4 @@
+import { handleDashboard, handleRegistrationCount } from './handlers/dashboard.js';
 import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
@@ -124,13 +125,10 @@ export default {
 
       /* ── GET /api/count ────────────────────────────────────────── */
       if (method === 'GET' && url.pathname === '/api/count') {
-        try {
-          const row = env.DB
-            ? await env.DB.prepare('SELECT COUNT(*) as count FROM registrations').first<{ count: number }>()
-            : { count: 0 };
-          return jsonOk({ count: row?.count ?? 0 }, request);
-        } catch { return jsonOk({ count: 0 }, request); }
+        return handleRegistrationCount(env, request);
       }
+
+      if (method === 'GET' && url.pathname === '/api/dashboard') return handleDashboard(env, request);
 
       /* ── POST /api/register ────────────────────────────────────── */
       if (method === 'POST' && url.pathname === '/api/register') {
