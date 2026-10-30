@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import RegisterForm from '../components/RegisterForm'
 import QuotesCarousel from '../components/QuotesCarousel'
 import type { Quote } from '../components/QuotesCarousel'
 import './Home.css'
+
+const AWARD_ALERT_KEY = 'oasis-alert:sans-2026-finalist'
 
 const quotes: Quote[] = [
   {
@@ -140,9 +143,38 @@ const reasons = [
 ]
 
 export default function Home() {
+  const [showAwardAlert, setShowAwardAlert] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage.getItem(AWARD_ALERT_KEY) !== 'dismissed'
+  })
+
+  const dismissAwardAlert = () => {
+    setShowAwardAlert(false)
+    window.localStorage.setItem(AWARD_ALERT_KEY, 'dismissed')
+  }
+
   return (
     <div className="home">
       <a className="skip-link" href="#register-form">Skip to registration</a>
+
+      {showAwardAlert && (
+        <aside className="home-alert" role="status" aria-label="SANS Difference Makers Awards announcement">
+          <div className="home-alert-inner">
+            <span className="home-alert-label">Community vote</span>
+            <div className="home-alert-message">
+              <strong>OWASP OASIS is a 2026 SANS Difference Makers Awards finalist.</strong>
+              <span>Voting closes November 9.</span>
+            </div>
+            <a className="home-alert-action" href="https://go.sans.org/MBGfxJ" target="_blank" rel="noopener noreferrer">
+              Vote for OASIS
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            </a>
+            <button className="home-alert-dismiss" type="button" onClick={dismissAwardAlert} aria-label="Dismiss awards announcement">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></svg>
+            </button>
+          </div>
+        </aside>
+      )}
 
       {/* ── Hero ── */}
       <section className="home-hero">
