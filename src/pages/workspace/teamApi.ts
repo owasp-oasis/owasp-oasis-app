@@ -20,6 +20,7 @@ export interface Team {
   id: number
   name: string
   description: string
+  created_at: string
   logo_key: TeamLogoKey
   logo_image_data?: string | null
   banner_image_data?: string | null
