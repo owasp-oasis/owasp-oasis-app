@@ -79,13 +79,13 @@ const upcomingEvents: Event[] = [
     day: '20–21',
     month: 'NOV',
     dateLabel: 'November 20–21, 2026',
-    venue: 'NahamCon @ Prompt2Pwn',
+    venue: 'NahamCon · NahamSec / Prompt2Pwn',
     kind: 'Speaking',
     title: 'Saving Open Source One Remediation at a Time',
     time: 'Time TBD',
     location: 'Oakland Marriott · Oakland, CA',
     details: 'Michael Cartsonis presents at NahamCon 2026 during Prompt2Pwn. The conference schedule will be updated here when the exact session time is announced.',
-    href: 'https://p2p.nahamcon.com/#details',
+    href: 'https://labs.zenity.io/prompt2pwn',
   },
   {
     date: '2026-10-21',
@@ -101,6 +101,42 @@ const upcomingEvents: Event[] = [
     href: 'https://conf.apisecuniversity.com',
   },
   {
+    date: '2026-10-21',
+    day: '21',
+    month: 'OCT',
+    dateLabel: 'October 21, 2026',
+    venue: 'OASIS facilitator training',
+    kind: 'Training',
+    title: 'OASIS Facilitator Training — Slot C (Australia & Pacific)',
+    time: '5:00–6:00 PM PT · Wednesday, October 21',
+    location: 'Online · Facilitator orientation',
+    details: 'Michael Cartsonis led an OASIS facilitator orientation covering the project workflow, Office Hours, onboarding sessions, validation clinics, and resources for safe community sessions.',
+  },
+  {
+    date: '2026-10-14',
+    day: '14',
+    month: 'OCT',
+    dateLabel: 'October 14, 2026',
+    venue: 'OASIS facilitator training',
+    kind: 'Training',
+    title: 'OASIS Facilitator Training — Slot B (Americas)',
+    time: '3:30–4:30 PM PT · Wednesday, October 14',
+    location: 'Online · Facilitator orientation',
+    details: 'Michael Cartsonis led an OASIS facilitator orientation covering the project workflow, Office Hours, onboarding sessions, validation clinics, and resources for safe community sessions.',
+  },
+  {
+    date: '2026-10-14',
+    day: '14',
+    month: 'OCT',
+    dateLabel: 'October 14, 2026',
+    venue: 'OASIS facilitator training',
+    kind: 'Training',
+    title: 'OASIS Facilitator Training — Slot A (Europe, Africa & Asia)',
+    time: '8:00–9:00 AM PT · Wednesday, October 14',
+    location: 'Online · Facilitator orientation',
+    details: 'Michael Cartsonis led an OASIS facilitator orientation covering the project workflow, Office Hours, onboarding sessions, validation clinics, and resources for safe community sessions.',
+  },
+  {
     date: '2026-10-08',
     day: '8',
     month: 'OCT',
@@ -113,7 +149,35 @@ const upcomingEvents: Event[] = [
     location: 'Online · Zoom Webinar',
     details: 'This webinar has been cancelled and will be rescheduled. A new date will be announced soon.',
   },
+  {
+    date: '2025-11-06',
+    day: '6–7',
+    month: 'NOV',
+    dateLabel: 'November 6–7, 2025',
+    venue: 'OWASP Global AppSec USA 2025',
+    kind: 'Community gathering',
+    title: 'OASIS at OWASP Global AppSec USA 2025 — Informal Lunch BOF',
+    time: 'During lunch on both conference days',
+    location: 'Liberty Ballroom lunch area · Marriott Marquis Washington, DC',
+    details: 'OASIS had no scheduled presentations at the conference. The community met informally at lunch each day for a Birds of a Feather gathering, with no formal agenda or separate registration.',
+    href: 'https://owasp.glueup.com/event/owasp-2025-global-appsec-usa-washington-dc-131624/',
+  },
 ]
+
+const OASIS_CALENDAR_ID = 'c_a50ce340788bfe4e0498a6107f9cf9d26c31de6649747e8be7e902b1f5eda87d@group.calendar.google.com'
+
+function getCalendarEmbedUrl() {
+  const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+  const params = new URLSearchParams({
+    height: '600',
+    wkst: '1',
+    ctz: localTimeZone,
+    showPrint: '0',
+    src: OASIS_CALENDAR_ID,
+    color: '#8e24aa',
+  })
+  return `https://calendar.google.com/calendar/embed?${params.toString()}`
+}
 
 const ArrowIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" className="news-arrow-icon">
@@ -134,6 +198,22 @@ export default function News() {
 
       <section className="section news-events-section">
         <div className="container">
+          <section className="events-calendar-panel" aria-labelledby="events-calendar-title">
+            <div className="events-calendar-heading">
+              <span className="badge badge-green">Shared calendar</span>
+              <h2 id="events-calendar-title">OWASP OASIS Events Calendar</h2>
+              <p>Browse OASIS trainings, community gatherings, and appearances. Calendar times follow your browser’s local time zone.</p>
+            </div>
+            <div className="events-calendar-frame">
+              <iframe
+                title="OWASP OASIS Events Calendar"
+                src={getCalendarEmbedUrl()}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </section>
+
           <div className="news-section-heading">
             <span className="badge badge-green">Calendar</span>
             <h2>Events &amp; appearances</h2>
@@ -141,7 +221,7 @@ export default function News() {
 
           <div className="event-grid">
             {upcomingEvents.map(event => (
-              <article key={event.date} className={`event-card${event.cancelled ? ' event-card--cancelled' : ''}`}>
+              <article key={`${event.date}-${event.title}`} className={`event-card${event.cancelled ? ' event-card--cancelled' : ''}`}>
                 <div className="event-date" aria-label={event.dateLabel}>
                   <time dateTime={event.date}>
                     <span className="event-date-month">{event.month}</span>
