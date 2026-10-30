@@ -6,6 +6,7 @@ import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
 import OnboardingModal from './components/OnboardingModal/OnboardingModal'
 import Home from './pages/Home'
+import Dashboard from './pages/Dashboard'
 import About from './pages/About'
 import Overview from './pages/Overview'
 import Workspace from './pages/Workspace'
@@ -49,7 +50,7 @@ function AppShell() {
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route path="/about" element={<About />} />
           <Route path="/overview" element={<Overview />} />
-          <Route path="/dashboard" element={<LegacyWorkspaceLink path="/workspace" />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/workspace" element={<Workspace activeTab="queue" />} />
           <Route path="/workspace/projects" element={<Workspace activeTab="projects" />} />
           <Route path="/workspace/pull-requests" element={<LegacyWorkspaceLink path="/workspace/fixes" />} />

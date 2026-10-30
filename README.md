@@ -532,3 +532,47 @@ docs: update README for TypeScript refactor
 refactor: extract PR processing into shared function
 style: fix table alignment on mobile
 ```
+
+## Public Status Dashboard
+
+`/dashboard` displays database-backed community totals and is linked from the
+main navigation and footer. `GET /api/dashboard?range=30|90|all` supplies a
+single aggregate snapshot; it never substitutes demonstration data. Failed
+reads return 503, and the page offers a retry. `/api/count` likewise returns
+503 on database failure instead of a successful zero.
+
+Metric definitions:
+
+- **Community registrations:** all rows in `registrations`, including form
+  registrations and automatic GitHub sign-in registrations. This is a count
+  of registration records, not a deduplicated count of people.
+- **Reviewers who voted · 90 days:** distinct reviewers in `user_votes` during
+  the current UTC day and preceding 89 days, across all retained votes.
+- **Recorded votes / Community votes:** the canonical `user_votes` projection,
+  one retained vote per reviewer/fix, including GitHub imports. Ordinary
+  discussion and automated validator comments are excluded by the existing
+  vote-import pipeline. These totals are not raw comment counts or an audit
+  history of superseded decisions. The total is all-time and independent of
+  whether the associated project or fix is currently active.
+- **Forked projects:** all active repositories tracked in `repos`, including
+  forks that have no candidate fixes yet. **Candidate fixes / current status:**
+  aggregates over all current non-deleted fixes in active projects, with no
+  500-row limit. Status precedence matches Workspace: closed
+  and marked merged upstream; other closed; open and meeting the 10-participant,
+  75%-Accept threshold; otherwise needs review.
+- **Candidate trend:** cumulative creation counts within 30/90 UTC calendar
+  days or all available history, sampled at twelve date boundaries through
+  today. Only fixes with valid creation dates appear in the chart.
+- **Review activity:** retained votes grouped by their own `voted_at` date over
+  84 UTC calendar days through today, including today's partial day. This
+  does not assign historical votes to a PR's last-update date.
+
+The response includes a query timestamp and the existing GitHub sync timestamp.
+A missing sync timestamp or one older than eight hours is flagged in the UI.
+Responses may be publicly cached for 60 seconds; Refresh requests a new snapshot.
+No person identifiers are returned or displayed by the dashboard. Every active
+project is included in the comparison; the recent-fix list is limited to ten
+items. No database migration, credential, or new binding is required.
+
+Run `npx vitest run tests/worker/integration/dashboard.test.ts` for dashboard
+regressions, then `npm run check` for the full test/build gate.
