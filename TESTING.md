@@ -327,3 +327,11 @@ reset invitation state and generate fresh login sessions. Set
 
 Local browser evidence and remaining preview checks are recorded in
 [Team invitation verification](docs/evidence/team-invitations/README.md).
+
+## Google Sheets workflow privacy
+
+Run `python3 tests/scripts/test_sheets_workflow.py` to execute the export
+workflow shell steps with synthetic contact data and a mock HTTP client.
+These checks verify that success and failure paths never print contact data,
+that only aggregate counts are reported, and that failed registration fetches
+stop the step. GitHub validation runs this check separately from `npm run check`.
