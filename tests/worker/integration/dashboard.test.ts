@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
 import { SELF } from './testWorker.js';
-import { applySchema, cleanDB, insertTestPR, insertTestRepo } from './helpers.js';
-import { handleDashboard, handleRegistrationCount } from '../../../worker/handlers/dashboard.js';
+import { applySchema, buildCookieHeader, cleanDB, createTestSession, insertTestPR, insertTestRepo } from './helpers.js';
+import { handleDashboard, handleRegistrationCount, PUBLIC_DASHBOARD_REFRESH_SECONDS } from '../../../worker/handlers/dashboard.js';
 import type { DashboardData } from '../../../worker/dashboardTypes.js';
 import type { Env } from '../../../worker/types.js';
 
@@ -124,6 +124,57 @@ describe('public dashboard', () => {
     expect(data.last_synced_at).toBe(synced);
     expect(data.sync_running).toBe(true);
     expect(data.generated_at.slice(0,10)).toBe(day(0));
+  });
+
+  it('serves the public dashboard from a shared snapshot until the refresh interval passes', async () => {
+    const response = await SELF.fetch(new Request('http://localhost/api/dashboard?range=90'));
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=300');
+    expect(response.headers.get('Vary')).toContain('Origin');
+    const first = await response.json() as DashboardData;
+    expect(first).toMatchObject({ source: 'snapshot', refresh_seconds: PUBLIC_DASHBOARD_REFRESH_SECONDS });
+    expect(PUBLIC_DASHBOARD_REFRESH_SECONDS).toBeGreaterThanOrEqual(3600);
+
+    await insertTestPR(env);
+    const cached = await dashboard();
+    expect(cached.totals.candidates).toBe(0);
+    expect(cached.generated_at).toBe(first.generated_at);
+
+    const expired = new Date(Date.now() - (PUBLIC_DASHBOARD_REFRESH_SECONDS + 1) * 1000).toISOString();
+    await env.RATE_KV.put('dashboard:snapshot:v1:90', JSON.stringify({ ...first, generated_at: expired }));
+    const refreshed = await dashboard();
+    expect(refreshed.totals.candidates).toBe(1);
+    expect(Date.parse(refreshed.generated_at)).toBeGreaterThan(Date.parse(expired));
+  });
+
+  it('keeps serving the last public snapshot when the database is unavailable', async () => {
+    const snapshot = await dashboard();
+    const expired = new Date(Date.now() - (PUBLIC_DASHBOARD_REFRESH_SECONDS + 1) * 1000).toISOString();
+    await env.RATE_KV.put('dashboard:snapshot:v1:90', JSON.stringify({ ...snapshot, generated_at: expired }));
+    const broken = { ...env, DB: undefined } as unknown as Env;
+    const response = await handleDashboard(broken, new Request('http://localhost/api/dashboard?range=90'));
+    expect(response.status).toBe(200);
+    expect((await response.json() as DashboardData).generated_at).toBe(expired);
+  });
+
+  it('gives admins live figures and refuses everyone else', async () => {
+    const request = (cookie?: string) => SELF.fetch(new Request('http://localhost/api/admin/dashboard?range=90', cookie ? { headers: { Cookie: cookie } } : {}));
+    expect((await request()).status).toBe(401);
+    const member = await createTestSession(env, { github_user_id: 992, github_login: 'ordinary-member' });
+    expect((await request(buildCookieHeader(member.sessionCookie, member.tokenCookie))).status).toBe(403);
+
+    await dashboard();
+    await insertTestPR(env);
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const response = await request(buildCookieHeader(admin.sessionCookie, admin.tokenCookie));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    const live = await response.json() as DashboardData;
+    expect(live).toMatchObject({ source: 'live', refresh_seconds: null });
+    expect(live.totals.candidates).toBe(1);
+    // The admin read does not change what public visitors see before their next refresh.
+    expect((await dashboard()).totals.candidates).toBe(0);
+    const invalid = await SELF.fetch(new Request('http://localhost/api/admin/dashboard?range=7', { headers: { Cookie: buildCookieHeader(admin.sessionCookie, admin.tokenCookie) } }));
+    expect(invalid.status).toBe(400);
   });
 
   it('bounds the query inputs and marks failures unavailable instead of returning zeros', async () => {

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { DashboardData } from '../../worker/dashboardTypes'
+import { useAuth } from '../context/AuthContext'
 import './Dashboard.css'
+
+const LIVE_REFRESH_MS = 60_000
+const LIVE_PREFERENCE_KEY = 'oasis.dashboard.liveUpdates'
 
 const formatNumber = (value: number) => value.toLocaleString('en-US')
 function formatDate(value: string | null, withTime = false) {
@@ -9,6 +13,22 @@ function formatDate(value: string | null, withTime = false) {
   return new Intl.DateTimeFormat('en', withTime
     ? { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
     : { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(value))
+}
+
+function describeInterval(seconds: number) {
+  if (seconds % 3600 === 0) return seconds === 3600 ? 'every hour' : `every ${seconds / 3600} hours`
+  return `every ${Math.round(seconds / 60)} minutes`
+}
+
+function readLivePreference() {
+  try { return localStorage.getItem(LIVE_PREFERENCE_KEY) === '1' } catch { return false }
+}
+
+async function fetchDashboard(url: string, signal: AbortSignal, live: boolean) {
+  const response = await fetch(url, { signal, credentials: 'same-origin', ...(live ? { cache: 'no-store' as const } : {}) })
+  const payload = await response.json() as DashboardData
+  if (!response.ok || payload.ok !== true || !payload.totals || !Array.isArray(payload.trend?.points) || !Array.isArray(payload.activity?.days) || !Array.isArray(payload.projects) || !Array.isArray(payload.recent_fixes)) throw new Error('Unavailable')
+  return payload
 }
 
 function CandidateChart({ trend }: { trend: DashboardData['trend'] }) {
@@ -57,30 +77,55 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [revision, setRevision] = useState(0)
+  const { user, loading: authLoading } = useAuth()
+  // Admins read live D1 totals; everyone else shares the server's periodic snapshot.
+  const isAdmin = user?.role === 'admin'
+  const url = `${isAdmin ? '/api/admin/dashboard' : '/api/dashboard'}?range=${range}`
+  const [liveUpdates, setLiveUpdates] = useState(readLivePreference)
+  const toggleLiveUpdates = (enabled: boolean) => {
+    setLiveUpdates(enabled)
+    try { localStorage.setItem(LIVE_PREFERENCE_KEY, enabled ? '1' : '0') } catch { /* The toggle still works for this visit. */ }
+  }
   useEffect(() => {
+    if (authLoading) return
     const controller = new AbortController()
     setLoading(true)
     setError('')
     setData(null)
-    void fetch(`/api/dashboard?range=${range}`, { signal: controller.signal, cache: 'no-store' })
-      .then(async response => {
-        const payload = await response.json() as DashboardData
-        if (!response.ok || payload.ok !== true || !payload.totals || !Array.isArray(payload.trend?.points) || !Array.isArray(payload.activity?.days) || !Array.isArray(payload.projects) || !Array.isArray(payload.recent_fixes)) throw new Error('Unavailable')
-        if (!controller.signal.aborted) setData(payload)
-      })
+    void fetchDashboard(url, controller.signal, isAdmin)
+      .then(payload => { if (!controller.signal.aborted) setData(payload) })
       .catch(() => { if (!controller.signal.aborted) setError('Dashboard data is temporarily unavailable. Please try again.') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [range, revision])
+  }, [authLoading, url, isAdmin, revision])
+  useEffect(() => {
+    if (!isAdmin || !liveUpdates) return
+    let controller: AbortController | null = null
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      controller?.abort()
+      const current = controller = new AbortController()
+      // Background refreshes keep the last good figures on screen if a request fails.
+      void fetchDashboard(url, current.signal, true)
+        .then(payload => { if (!current.signal.aborted) { setData(payload); setError('') } })
+        .catch(() => undefined)
+    }, LIVE_REFRESH_MS)
+    return () => { window.clearInterval(timer); controller?.abort() }
+  }, [isAdmin, liveUpdates, url])
 
   const stale = data && (!data.last_synced_at || Date.now() - Date.parse(data.last_synced_at) > 8 * 3_600_000)
   return <div className="oasis-dashboard">
     <section className="dashboard-hero">
       <div className="dashboard-shell">
-        <div className="dashboard-hero-meta"><span className="dashboard-kicker">OASIS // Community security signal</span><button className="dashboard-refresh" disabled={loading} onClick={() => setRevision(n => n + 1)}>{loading ? 'Loading…' : 'Refresh data'}</button></div>
+        <div className="dashboard-hero-meta"><span className="dashboard-kicker">OASIS // Community security signal</span>{isAdmin && <div className="dashboard-admin-controls">
+          <label className="dashboard-live-toggle"><input type="checkbox" checked={liveUpdates} onChange={event => toggleLiveUpdates(event.target.checked)} />Live updates (every 60s)</label>
+          <button className="dashboard-refresh" disabled={loading} onClick={() => setRevision(n => n + 1)}>{loading ? 'Loading…' : 'Refresh data'}</button>
+        </div>}</div>
         <div className="dashboard-hero-body"><div><h1>OWASP OASIS<br /><span>Status Dashboard</span></h1><p>Community participation, candidate fixes, and recorded review outcomes.</p></div></div>
         {data && <div className="dashboard-freshness">
-          <p>Database totals fetched {formatDate(data.generated_at, true)}.</p>
+          {data.source === 'live'
+            ? <p>Live database totals fetched {formatDate(data.generated_at, true)}{liveUpdates ? ' · Updating every 60 seconds' : ''}.</p>
+            : <p>Database totals as of {formatDate(data.generated_at, true)}{data.refresh_seconds ? ` · Public figures refresh ${describeInterval(data.refresh_seconds)}` : ''}.</p>}
           <p className={stale ? 'dashboard-stale' : ''}>GitHub last synced {formatDate(data.last_synced_at, true)}{data.sync_running ? ' · Sync in progress' : ''}{stale ? ' · Review data may be out of date' : ''}. <Link to="/workspace/sync">Sync status</Link></p>
         </div>}
       </div>

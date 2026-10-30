@@ -240,6 +240,9 @@
 /* Live dashboard states and aggregate-only content. */
 .dashboard-refresh { padding: 9px 14px; color: var(--dash-text); background: var(--dash-panel); border: 1px solid var(--dash-blue); border-radius: 5px; cursor: pointer; }
 .dashboard-refresh:disabled { opacity: .6; cursor: wait; }
+.dashboard-admin-controls { display: flex; align-items: center; gap: 14px; }
+.dashboard-live-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.dashboard-live-toggle input { accent-color: var(--dash-blue); }
 .dashboard-freshness { margin-top: 24px; color: var(--dash-muted); font-size: .82rem; line-height: 1.7; }
 .dashboard-freshness p { margin: 3px 0; }
 .dashboard-stale { color: #ffcc55; }

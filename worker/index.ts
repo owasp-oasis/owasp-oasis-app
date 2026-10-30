@@ -1,4 +1,4 @@
-import { handleDashboard, handleRegistrationCount } from './handlers/dashboard.js';
+import { handleAdminDashboard, handleDashboard, handleRegistrationCount } from './handlers/dashboard.js';
 import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
@@ -226,6 +226,9 @@ export default {
       }
       if (method === 'POST' && url.pathname === '/api/analytics/engagement') {
         return await handleAnalyticsEngagement(request, env);
+      }
+      if (method === 'GET' && url.pathname === '/api/admin/dashboard') {
+        return await handleAdminDashboard(request, env);
       }
       if (method === 'GET' && url.pathname === '/api/admin/analytics') {
         return await handleAdminAnalytics(request, env);
