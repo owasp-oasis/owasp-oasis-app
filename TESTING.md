@@ -313,8 +313,9 @@ reset invitation state and generate fresh login sessions. Set
 1. Confirm the notification shows one invitation. Use **View invitations** and
    verify focus moves to the invitation heading and both response actions work.
 2. Dismiss, navigate, and reload: the notification remains hidden, but Teams
-   still lists the invitation. Restart the demo and reload: the new login
-   session displays the reminder again.
+   still lists the invitation. Add another pending invitation without changing
+   login session: the reminder returns for the new invitation. Restart the demo
+   and reload: the new login session displays the reminder again.
 3. As the admin demo persona, invite the owner to another Team you manage.
    Return to the owner and confirm one combined notification counts both
    invitations. Decline one: the count decreases. Accept the last: the banner

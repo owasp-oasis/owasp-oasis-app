@@ -311,11 +311,12 @@ expire invitations automatically.
 
 Dismissing the notification leaves invitations pending and hides the reminder
 for the current login session, including page reloads and other tabs on the same
-origin. A new login session shows the reminder again. The browser stores only a
-non-authenticating session digest for dismissal; invitation details and session
-credentials are not stored in local storage. If browser storage is unavailable,
-dismissal lasts until the page reloads. Invitation state refreshes on login,
-window focus, and responses from Your teams.
+origin. The dismissal covers invitations through the highest dismissed invite
+ID, so a later invitation shows the reminder again. The browser stores only
+this numeric watermark under a non-authenticating session-digest key; invitation
+details and session credentials are not stored in local storage. If browser
+storage is unavailable, dismissal lasts until the page reloads. Invitation state
+refreshes on login, window focus, and responses from Your teams.
 
 The existing authenticated `/api/teams/mine` endpoint supplies invitation state
 and a UI-only `notification_session` digest with `Cache-Control: no-store`.

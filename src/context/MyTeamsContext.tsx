@@ -1,10 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import { emptyMyTeams, errorMessage, teamGet, type MyTeams } from '../pages/workspace/teamApi'
+import { highestPendingInviteId, hasUndismissedInvites } from '../lib/teamInvitationDismissal'
 
 const dismissalKey = 'oasis-team-invitations-dismissed'
-function readDismissal(): string | null {
-  try { return localStorage.getItem(dismissalKey) } catch { return null }
+function scopedDismissalKey(sessionScope: string): string {
+  return `${dismissalKey}:${sessionScope}`
+}
+function readDismissal(sessionScope?: string): number | null {
+  if (!sessionScope) return null
+  try {
+    const value = Number(localStorage.getItem(scopedDismissalKey(sessionScope)))
+    return Number.isSafeInteger(value) && value > 0 ? value : null
+  } catch { return null }
 }
 
 interface MyTeamsValue {
@@ -29,7 +37,7 @@ function SessionTeamsProvider({ signedIn, children }: { signedIn: boolean; child
   const [mine, setMine] = useState<MyTeams>(emptyMyTeams)
   const [loading, setLoading] = useState(signedIn)
   const [error, setError] = useState<string | null>(null)
-  const [dismissedSession, setDismissedSession] = useState(readDismissal)
+  const [dismissedThroughInviteId, setDismissedThroughInviteId] = useState<number | null>(null)
   const pending = useRef<AbortController | null>(null)
 
   const refresh = useCallback(async () => {
@@ -48,11 +56,18 @@ function SessionTeamsProvider({ signedIn, children }: { signedIn: boolean; child
   }, [signedIn])
 
   useEffect(() => {
+    setDismissedThroughInviteId(readDismissal(mine.notification_session))
+  }, [mine.notification_session])
+
+  useEffect(() => {
     void refresh()
     // Reconcile invites handled in another tab without background polling.
     const onFocus = () => { void refresh() }
     const onStorage = (event: StorageEvent) => {
-      if (event.key === dismissalKey || event.key === null) setDismissedSession(readDismissal())
+      const key = mine.notification_session ? scopedDismissalKey(mine.notification_session) : null
+      if (event.key === key || event.key === null) {
+        setDismissedThroughInviteId(readDismissal(mine.notification_session))
+      }
     }
     window.addEventListener('focus', onFocus)
     window.addEventListener('storage', onStorage)
@@ -61,15 +76,17 @@ function SessionTeamsProvider({ signedIn, children }: { signedIn: boolean; child
       window.removeEventListener('focus', onFocus)
       window.removeEventListener('storage', onStorage)
     }
-  }, [refresh])
+  }, [mine.notification_session, refresh])
 
   const dismiss = () => {
-    if (!mine.notification_session) return
-    setDismissedSession(mine.notification_session)
-    // Store only a non-authenticating session digest, never invite data or credentials.
-    try { localStorage.setItem(dismissalKey, mine.notification_session) } catch { /* In-memory dismissal still works. */ }
+    const sessionScope = mine.notification_session
+    const inviteId = highestPendingInviteId(mine.invites)
+    if (!sessionScope || inviteId === null) return
+    setDismissedThroughInviteId(inviteId)
+    // Scope the numeric watermark to a non-authenticating session digest.
+    try { localStorage.setItem(scopedDismissalKey(sessionScope), String(inviteId)) } catch { /* In-memory dismissal still works. */ }
   }
-  return <MyTeamsContext.Provider value={{ mine, loading, error, refresh, dismiss, dismissed: !!mine.notification_session && dismissedSession === mine.notification_session }}>
+  return <MyTeamsContext.Provider value={{ mine, loading, error, refresh, dismiss, dismissed: !hasUndismissedInvites(mine.invites, dismissedThroughInviteId) }}>
     {children}
   </MyTeamsContext.Provider>
 }

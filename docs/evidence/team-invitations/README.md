@@ -6,7 +6,8 @@ D1, OAuth credentials, deployment, or external messages were used.
 ## Automated verification
 
 - `npx vitest run tests/worker/integration/teamInvitations.test.ts tests/worker/integration/teams.test.ts`: 22 tests passed.
-- `npm run check`: 447 tests across 35 files passed; frontend typecheck, Worker compilation, and Vite production build passed using Node 24.
+- `npx vitest run tests/frontend/teamInvitationDismissal.test.ts`: 5 tests passed.
+- `npm run check`: 454 tests across 37 files passed; frontend typecheck, Worker compilation, and Vite production build passed using Node 24.
 - `git diff --check`: passed.
 
 ## Browser verification
@@ -15,6 +16,7 @@ Playwright exercised the built frontend against the real local Worker/D1:
 
 - A pending invitation appears outside the Teams page.
 - Dismissal survives reload; the invitation remains accessible in Teams.
+- A later invitation re-shows the reminder in the same login session.
 - View invitations moves keyboard focus to the inbox heading.
 - Multiple invitations produce one notification with the correct plural count.
 - Decline changes the count from two to one.
