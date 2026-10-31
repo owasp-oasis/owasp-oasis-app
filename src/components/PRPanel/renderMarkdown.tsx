@@ -48,10 +48,33 @@ export function renderInline(text: string, key?: string): ReactNode {
 }
 
 /* ── Table renderer ─────────────────────────────────────────── */
+function splitMarkdownTableRow(line: string): string[] {
+  const row = line.trim()
+  const start = row.startsWith('|') ? 1 : 0
+  const end = row.endsWith('|') ? row.length - 1 : row.length
+  const cells: string[] = []
+  let cell = ''
+
+  for (let i = start; i < end; i++) {
+    if (row[i] === '\\' && row[i + 1] === '|') {
+      cell += '|'
+      i++
+    } else if (row[i] === '\\' && row[i + 1] === '\\') {
+      cell += '\\'
+      i++
+    } else if (row[i] === '|') {
+      cells.push(cell.trim())
+      cell = ''
+    } else {
+      cell += row[i]
+    }
+  }
+  cells.push(cell.trim())
+  return cells
+}
+
 function renderTable(rows: string[], startKey: number): ReactNode {
-  const cells = rows.map(r =>
-    r.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1)
-  )
+  const cells = rows.map(splitMarkdownTableRow)
   const header = cells[0]
   const body   = cells.slice(2) // index 1 is the separator row
   return (
