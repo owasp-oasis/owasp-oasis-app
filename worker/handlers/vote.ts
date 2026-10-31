@@ -28,6 +28,14 @@ import { ORG } from '../github.js';
 import { syncTeamBadges } from '../teamBadges.js';
 import { recordSubmittedVote } from '../analytics.js';
 
+/** Keep user-provided text inside a single Markdown table cell. */
+function markdownTableCell(value: string): string {
+  return value
+    .replace(/(?:\r\n?|\n)+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|');
+}
+
 /* ─── POST /api/vote ─────────────────────────────────────────── */
 export async function handleVote(request: Request, env: Env): Promise<Response> {
   // 1. CSRF
@@ -45,7 +53,11 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   // 4. Parse + validate body
   let body: Record<string, unknown>;
   try {
-    body = await request.json() as Record<string, unknown>;
+    const jsonBody: unknown = await request.json();
+    if (!jsonBody || typeof jsonBody !== 'object' || Array.isArray(jsonBody)) {
+      return jsonErr('JSON body must be an object', 400, request);
+    }
+    body = jsonBody as Record<string, unknown>;
   } catch {
     return jsonErr('Invalid JSON body', 400, request);
   }
@@ -198,7 +210,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
       `| Parent PR | #${parentPrNumber} |`,
-      `| Notes | ${notes || '—'} |`,
+      `| Notes | ${markdownTableCell(notes || '—')} |`,
     ].join('\n');
   } else if (decision === 'reject') {
     commentBody = [
@@ -207,9 +219,9 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| | |',
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
-      `| Reason | ${summary || '—'} |`,
-      `| Blocking issues | ${blockingIssues || '—'} |`,
-      `| To reconsider | ${toReconsider || '—'} |`,
+      `| Reason | ${markdownTableCell(summary || '—')} |`,
+      `| Blocking issues | ${markdownTableCell(blockingIssues || '—')} |`,
+      `| To reconsider | ${markdownTableCell(toReconsider || '—')} |`,
       ...assessmentSection,
     ].join('\n');
   } else {
@@ -220,8 +232,8 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
       `| Confidence | ${confidence} |`,
-      `| Summary | ${summary || '—'} |`,
-      `| Next step | ${nextStep || '—'} |`,
+      `| Summary | ${markdownTableCell(summary || '—')} |`,
+      `| Next step | ${markdownTableCell(nextStep || '—')} |`,
       ...assessmentSection,
     ].join('\n');
   }

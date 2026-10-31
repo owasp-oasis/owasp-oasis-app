@@ -22,6 +22,18 @@ export function assessmentQuestionsForDecision(decision: Decision): AssessmentKe
   if (decision === 'accept' || decision === 'modify' || decision === 'reject') return ['vulnerability_assessment', 'introduced_vulnerability', 'security_issue_addressed', 'breaks_codebase']
   return []
 }
+
+export function assessmentPayloadForDecision(
+  decision: Decision,
+  answers: AssessmentDraft,
+): Record<AssessmentKey, string | null> | null {
+  if (decision === 'duplicate') return null
+  const activeQuestions = new Set(assessmentQuestionsForDecision(decision))
+  return Object.fromEntries((Object.keys(emptyAssessmentAnswers) as AssessmentKey[]).map(key => [
+    key,
+    activeQuestions.has(key) ? answers[key] || null : null,
+  ])) as Record<AssessmentKey, string | null>
+}
 // Ephemeral and scoped to the signed-in account. Never written to analytics or disk.
 const drafts = new Map<string, Draft>()
 export const clearVoteDrafts = () => drafts.clear()
@@ -53,13 +65,8 @@ export default function VoteForm({pr,initialDecision,onClose,onSuccess,onSubmitt
     setSubmitting(true);onSubmittingChange?.(true);setError(null)
     try {
       const body:Record<string,unknown>={pr_id:pr.id,decision}
-      if (decision !== 'duplicate') {
-        const activeQuestions = new Set(assessmentQuestionsForDecision(decision))
-        Object.assign(body, Object.fromEntries(Object.keys(draft.assessment).map(name => [
-          name,
-          activeQuestions.has(name as AssessmentKey) ? draft.assessment[name as AssessmentKey] || null : null,
-        ])))
-      }
+      const assessmentPayload = assessmentPayloadForDecision(decision, draft.assessment)
+      if (assessmentPayload) Object.assign(body, assessmentPayload)
       if(draft.team)body.team_id=Number(draft.team)
       if(decision==='duplicate'){body.parent_pr_number=Number(draft.parent);body.notes=draft.comments}
       else if(decision==='reject'){body.summary=draft.comments;body.blocking_issues=draft.blocking;body.to_reconsider=draft.reconsider}

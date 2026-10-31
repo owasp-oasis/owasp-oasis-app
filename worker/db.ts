@@ -425,10 +425,18 @@ export async function syncVotesFromComments(db: D1Database): Promise<void> {
           WHEN user_votes.comment_id IS NULL THEN excluded.comment_id
           ELSE user_votes.comment_id
         END,
-        vulnerability_assessment = excluded.vulnerability_assessment,
-        introduced_vulnerability = excluded.introduced_vulnerability,
-        security_issue_addressed = excluded.security_issue_addressed,
-        breaks_codebase = excluded.breaks_codebase
+        vulnerability_assessment = CASE
+          WHEN user_votes.comment_id IS NULL OR user_votes.comment_id = excluded.comment_id
+          THEN excluded.vulnerability_assessment ELSE user_votes.vulnerability_assessment END,
+        introduced_vulnerability = CASE
+          WHEN user_votes.comment_id IS NULL OR user_votes.comment_id = excluded.comment_id
+          THEN excluded.introduced_vulnerability ELSE user_votes.introduced_vulnerability END,
+        security_issue_addressed = CASE
+          WHEN user_votes.comment_id IS NULL OR user_votes.comment_id = excluded.comment_id
+          THEN excluded.security_issue_addressed ELSE user_votes.security_issue_addressed END,
+        breaks_codebase = CASE
+          WHEN user_votes.comment_id IS NULL OR user_votes.comment_id = excluded.comment_id
+          THEN excluded.breaks_codebase ELSE user_votes.breaks_codebase END
     `).bind(
       comment.login,
       comment.pr_id,

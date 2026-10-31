@@ -135,7 +135,29 @@ export function parseDecision(body: string | null): 'accept' | 'modify' | 'rejec
   return null;
 }
 
-/** Parse only the structured assessment rows emitted by OASIS validation comments. */
+function parseMarkdownTableCells(line: string): string[] | null {
+  const row = line.trim();
+  if (!row.startsWith('|') || !row.endsWith('|')) return null;
+
+  const cells: string[] = [];
+  let cell = '';
+  for (let i = 1; i < row.length - 1; i++) {
+    const character = row[i];
+    if (character === '\\' && row[i + 1] === '|') {
+      cell += '|';
+      i++;
+    } else if (character === '|') {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+/** Parse only rows in the explicit, contiguous assessment table emitted by OASIS. */
 export function parseValidationAssessment(body: string | null): ValidationAssessment {
   const result: ValidationAssessment = {
     vulnerability_assessment: null,
@@ -144,6 +166,8 @@ export function parseValidationAssessment(body: string | null): ValidationAssess
     breaks_codebase: null,
   };
   if (!body) return result;
+  const decision = parseDecision(body);
+  if (decision !== 'accept' && decision !== 'modify' && decision !== 'reject') return result;
 
   const definitions = [
     ['Vulnerability assessment', 'vulnerability_assessment', {
@@ -159,13 +183,52 @@ export function parseValidationAssessment(body: string | null): ValidationAssess
     ['Breaks the codebase', 'breaks_codebase', { yes: 'yes', no: 'no', unknown: 'unknown' }],
   ] as const;
 
-  for (const [label, key, allowed] of definitions) {
-    const line = body.split('\n').find(candidate => {
-      const parts = candidate.match(/^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$/);
-      return parts?.[1]?.trim().toLowerCase() === label.toLowerCase();
-    });
-    const value = line?.match(/^\|\s*[^|]+?\s*\|\s*([^|]+?)\s*\|\s*$/)?.[1]?.trim().toLowerCase();
-    if (value && value in allowed) result[key] = allowed[value as keyof typeof allowed] as never;
+  const lines = body.split(/\r\n?|\n/);
+  const section = lines.findIndex(line => line.trim().toLowerCase() === 'security assessment:');
+  if (section < 0) return result;
+
+  let rowIndex = section + 1;
+  while (rowIndex < lines.length && !lines[rowIndex].trim()) rowIndex++;
+  const header = parseMarkdownTableCells(lines[rowIndex] ?? '');
+  if (!header || header.length !== 2 || header[0].toLowerCase() !== 'question' || header[1].toLowerCase() !== 'answer') {
+    return result;
+  }
+
+  rowIndex++;
+  const separator = parseMarkdownTableCells(lines[rowIndex] ?? '');
+  if (!separator || separator.length !== 2 || !separator.every(cell => /^:?-{2,}:?$/.test(cell))) {
+    return result;
+  }
+
+  rowIndex++;
+  const seen = new Set<string>();
+  for (; rowIndex < lines.length; rowIndex++) {
+    const line = lines[rowIndex].trim();
+    if (!line) break;
+    const cells = parseMarkdownTableCells(line);
+    if (!cells || cells.length !== 2) return {
+      vulnerability_assessment: null,
+      introduced_vulnerability: null,
+      security_issue_addressed: null,
+      breaks_codebase: null,
+    };
+
+    const label = cells[0].toLowerCase();
+    const definition = definitions.find(([expected]) => expected.toLowerCase() === label);
+    if (!definition) continue;
+    if (seen.has(label)) return {
+      vulnerability_assessment: null,
+      introduced_vulnerability: null,
+      security_issue_addressed: null,
+      breaks_codebase: null,
+    };
+    seen.add(label);
+
+    const value = cells[1].toLowerCase();
+    const allowed = definition[2] as Record<string, string>;
+    if (Object.prototype.hasOwnProperty.call(allowed, value)) {
+      result[definition[1]] = allowed[value] as never;
+    }
   }
   return result;
 }

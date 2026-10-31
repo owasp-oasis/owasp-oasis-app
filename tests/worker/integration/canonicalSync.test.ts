@@ -7,9 +7,11 @@ import {
   rebuildContributors,
   syncVotesFromComments,
   upsertComments,
+  upsertReactions,
 } from '../../../worker/db.js';
 import { applySchema, cleanDB, insertTestPR, insertTestRepo } from './helpers.js';
 import { fetchMock } from './fetchMock.js';
+import { parseValidationAssessment } from '../../../worker/github.js';
 
 describe('bounded canonical synchronization work', () => {
   beforeAll(async () => applySchema(env));
@@ -181,17 +183,152 @@ describe('bounded canonical synchronization work', () => {
     });
   });
 
+  it('keeps assessment answers attached to the vote comment across later comments and repeated syncs', async () => {
+    await insertTestRepo(env, { id: 111, name: 'assessment-comment-ownership' });
+    await insertTestPR(env, { id: 2011, repo_id: 111, repo_name: 'assessment-comment-ownership', number: 15 });
+    const timestamp = (minute: number) => `2026-10-10T12:${String(minute).padStart(2, '0')}:00.000Z`;
+    const answers = {
+      vulnerabilityAssessment: 'yes',
+      introducedVulnerability: 'no',
+      securityIssueAddressed: 'yes',
+      breaksCodebase: 'no',
+    };
+    const malformedAnswers = parseValidationAssessment([
+      'Validation summary:',
+      '| Decision | Accept |',
+      '',
+      'Security assessment:',
+      '| Question | Answer |',
+      '| :-- | :-- |',
+      '| Vulnerability assessment | maybe | extra |',
+    ].join('\n'));
+
+    // The original UI vote owns its structured answers. Later comments from
+    // the same reviewer may be legacy/manual summaries with no parsed answers.
+    const comments = [
+      { id: 3110, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'ui-reviewer', decision: 'accept', ...answers, createdAt: timestamp(1), prCreatedAt: timestamp(0) },
+      { id: 3111, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'ui-reviewer', decision: 'accept', createdAt: timestamp(2), prCreatedAt: timestamp(0) },
+      // Simulates a later comment whose assessment-looking Markdown was malformed
+      // and therefore parsed as no answer.
+      { id: 3112, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'ui-reviewer', decision: 'accept', ...malformedAnswers, createdAt: timestamp(3), prCreatedAt: timestamp(0) },
+      // A legacy row with no source linkage is linked to the first chronological
+      // comment; subsequent comments must not replace that comment's answers.
+      { id: 3120, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'legacy-reviewer', decision: 'modify', ...answers, createdAt: timestamp(1), prCreatedAt: timestamp(0) },
+      { id: 3121, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'legacy-reviewer', decision: 'modify', createdAt: timestamp(2), prCreatedAt: timestamp(0) },
+      // A populated vote row can be filled from its matching comment when its
+      // assessment is NULL, but not from a different comment.
+      { id: 3130, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'null-assessment-reviewer', decision: 'reject', ...answers, createdAt: timestamp(1), prCreatedAt: timestamp(0) },
+      { id: 3131, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'null-assessment-reviewer', decision: 'reject', createdAt: timestamp(2), prCreatedAt: timestamp(0) },
+      // Duplicate is still a distinct decision. A later malformed comment must
+      // not attach its assessment-looking content to the original Duplicate.
+      { id: 3140, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'duplicate-reviewer', decision: 'duplicate', createdAt: timestamp(1), prCreatedAt: timestamp(0) },
+      { id: 3141, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'duplicate-reviewer', decision: 'duplicate', ...answers, createdAt: timestamp(2), prCreatedAt: timestamp(0) },
+      // Comments created before structured assessments existed remain NULL.
+      { id: 3150, prId: 2011, repoName: 'assessment-comment-ownership', prNumber: 15,
+        login: 'historical-reviewer', decision: 'accept', createdAt: '2025-01-01T00:00:00.000Z', prCreatedAt: timestamp(0) },
+    ];
+    await upsertComments(env.DB, [...comments].reverse());
+
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at,
+         vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase)
+        VALUES ('ui-reviewer', 2011, 'assessment-comment-ownership', 15, 'accept', 3110, ?, 'yes', 'no', 'yes', 'no')`)
+        .bind(timestamp(1)),
+      env.DB.prepare(`INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+        VALUES ('legacy-reviewer', 2011, 'assessment-comment-ownership', 15, 'modify', NULL, ?)`)
+        .bind(timestamp(1)),
+      env.DB.prepare(`INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+        VALUES ('null-assessment-reviewer', 2011, 'assessment-comment-ownership', 15, 'reject', 3130, ?)`)
+        .bind(timestamp(1)),
+      env.DB.prepare(`INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+        VALUES ('duplicate-reviewer', 2011, 'assessment-comment-ownership', 15, 'duplicate', 3140, ?)`)
+        .bind(timestamp(1)),
+      env.DB.prepare(`INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+        VALUES ('historical-reviewer', 2011, 'assessment-comment-ownership', 15, 'accept', 3150, ?)`)
+        .bind('2025-01-01T00:00:00.000Z'),
+    ]);
+
+    // Deliberately reverse insertion order: sync must honor chronological order.
+    await syncVotesFromComments(env.DB);
+    await syncVotesFromComments(env.DB);
+
+    const votes = await env.DB.prepare(`SELECT github_login, decision, comment_id,
+      vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase
+      FROM user_votes WHERE pr_id = 2011 ORDER BY github_login`)
+      .all<Record<string, string | number | null>>();
+    expect(votes.results).toEqual([
+      { github_login: 'duplicate-reviewer', decision: 'duplicate', comment_id: 3140,
+        vulnerability_assessment: null, introduced_vulnerability: null, security_issue_addressed: null, breaks_codebase: null },
+      { github_login: 'historical-reviewer', decision: 'accept', comment_id: 3150,
+        vulnerability_assessment: null, introduced_vulnerability: null, security_issue_addressed: null, breaks_codebase: null },
+      { github_login: 'legacy-reviewer', decision: 'modify', comment_id: 3120,
+        vulnerability_assessment: 'yes', introduced_vulnerability: 'no', security_issue_addressed: 'yes', breaks_codebase: 'no' },
+      { github_login: 'null-assessment-reviewer', decision: 'reject', comment_id: 3130,
+        vulnerability_assessment: 'yes', introduced_vulnerability: 'no', security_issue_addressed: 'yes', breaks_codebase: 'no' },
+      { github_login: 'ui-reviewer', decision: 'accept', comment_id: 3110,
+        vulnerability_assessment: 'yes', introduced_vulnerability: 'no', security_issue_addressed: 'yes', breaks_codebase: 'no' },
+    ]);
+  });
+
+  it('updates assessment on the same edited vote comment without losing its reactions', async () => {
+    await insertTestRepo(env, { id: 112, name: 'assessment-comment-edit' });
+    await insertTestPR(env, { id: 2012, repo_id: 112, repo_name: 'assessment-comment-edit', number: 16 });
+    const comment = {
+      id: 3160, prId: 2012, repoName: 'assessment-comment-edit', prNumber: 16,
+      login: 'editing-reviewer', decision: 'accept' as const,
+      introducedVulnerability: 'no' as const, securityIssueAddressed: 'yes' as const,
+      breaksCodebase: 'no' as const, createdAt: '2026-10-11T12:00:00.000Z',
+      prCreatedAt: '2026-10-10T12:00:00.000Z',
+    };
+
+    await upsertComments(env.DB, [{ ...comment, vulnerabilityAssessment: 'yes' }]);
+    await syncVotesFromComments(env.DB);
+    await upsertReactions(env.DB, [{ commentId: comment.id, reactor: 'peer', content: '+1', isPositive: true }]);
+
+    // GitHub edits retain the comment ID, so assessment answers on that source
+    // comment should be refreshed while the existing reaction stays attached.
+    await upsertComments(env.DB, [{ ...comment, vulnerabilityAssessment: 'no' }]);
+    await syncVotesFromComments(env.DB);
+
+    const vote = await env.DB.prepare(`SELECT decision, comment_id, vulnerability_assessment,
+      introduced_vulnerability, security_issue_addressed, breaks_codebase
+      FROM user_votes WHERE github_login = 'editing-reviewer' AND pr_id = 2012`)
+      .first<Record<string, string | number | null>>();
+    const reactionCount = await env.DB.prepare('SELECT COUNT(*) AS count FROM comment_reactions WHERE comment_id = ?')
+      .bind(comment.id).first<{ count: number }>();
+    expect(vote).toEqual({ decision: 'accept', comment_id: 3160, vulnerability_assessment: 'no',
+      introduced_vulnerability: 'no', security_issue_addressed: 'yes', breaks_codebase: 'no' });
+    expect(reactionCount?.count).toBe(1);
+  });
+
   it('round-trips assessment values from a GitHub validation comment through canonical sync', async () => {
     const updatedAt = '2026-10-05T10:00:00.000Z';
     const commentBody = [
       'Validation summary:', '| Decision | Accept |',
       '| Confidence | Medium |', '| Summary | Candidate review |', '| Next step | Merge |',
-      '', 'Security assessment:', '| Question | Answer |',
+      '', 'Security assessment:', '| Question | Answer |', '| :-- | :-- |',
       '| Vulnerability assessment | Hardening |',
       '| Introduces new vulnerability | No |',
       '| Addresses the security issue | Yes |',
-      '| Breaks the codebase | Unknown |',
+      '| Breaks the codebase | No |',
     ].join('\n');
+    expect(commentBody).toContain('| Decision | Accept |');
+    expect(commentBody).toContain('| Confidence | Medium |');
+    expect(commentBody).toContain('| Summary | Candidate review |');
     fetchMock.when(request => request.url.includes('/orgs/owasp-oasis/repos'))
       .respondWith(Response.json([{ id: 109, name: 'assessment-sync', full_name: 'owasp-oasis/assessment-sync', description: '', language: 'TypeScript', stargazers_count: 2, fork: true }]));
     fetchMock.when(request => request.url === 'https://api.github.com/repos/owasp-oasis/assessment-sync')
@@ -210,7 +347,7 @@ describe('bounded canonical synchronization work', () => {
       .first<Record<string, string | null>>();
     expect(comment).toEqual({
       decision: 'accept', vulnerability_assessment: 'hardening', introduced_vulnerability: 'no',
-      security_issue_addressed: 'yes', breaks_codebase: 'unknown',
+      security_issue_addressed: 'yes', breaks_codebase: 'no',
     });
 
     await syncVotesFromComments(env.DB);

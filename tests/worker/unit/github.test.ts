@@ -109,6 +109,7 @@ describe('github.ts', () => {
         '| Decision | Accept |',
         'Security assessment:',
         '| Question | Answer |',
+        '| :-- | :-- |',
         '| Vulnerability assessment | Hardening |',
         '| Introduces new vulnerability | No |',
         '| Addresses the security issue | Yes |',
@@ -130,11 +131,89 @@ describe('github.ts', () => {
       });
     });
 
+    it('never parses assessment answers from a Duplicate validation comment', () => {
+      const duplicateWithAssessment = [
+        'Duplicate report:',
+        '| Decision | Duplicate |',
+        '| Parent PR | #1 |',
+        '',
+        'Security assessment:',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Vulnerability assessment | Hardening |',
+      ].join('\n');
+      expect(parseValidationAssessment(duplicateWithAssessment)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it.each(['constructor', '__proto__'])('does not accept inherited enum key %s', value => {
+      const body = [
+        'Validation summary:',
+        '| Decision | Accept |',
+        '',
+        'Security assessment:',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        `| Vulnerability assessment | ${value} |`,
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('ignores assessment-looking rows in validation metadata and unrelated Markdown tables', () => {
+      const body = [
+        'Validation summary:',
+        '| Decision | Accept |',
+        '| Vulnerability assessment | No |',
+        '',
+        '| Question | Answer |',
+        '| Breaks the codebase | Yes |',
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('does not continue parsing into a later table after a malformed assessment table', () => {
+      const body = [
+        'Validation summary:',
+        '| Decision | Accept |',
+        'Security assessment:',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Vulnerability assessment | No | extra |',
+        '',
+        '| Question | Answer |',
+        '| Vulnerability assessment | Hardening |',
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
     it.each(['Needs modification', 'Modify / needs modification'])(
       'parses %s as the existing needs_modification value', answer => {
         expect(parseValidationAssessment([
+          'Validation summary:',
+          '| Decision | Accept |',
+          '',
           'Security assessment:',
           '| Question | Answer |',
+          '| :-- | :-- |',
           `| Addresses the security issue | ${answer} |`,
         ].join('\n')).security_issue_addressed).toBe('needs_modification');
       },
