@@ -8,6 +8,7 @@ import type { Decision } from '../../components/VoteForm'
 import { useWorkspaceData } from './useWorkspaceData'
 import { finding, fixPath, fixStatus, matchesPreferences, matchesSearch, sortFixes, type CandidateFix } from './fixModel'
 import { SeverityChip } from './FixChips'
+import ReviewerOnboardingPrompt from './ReviewerOnboardingPrompt'
 
 const DECISION_LABELS: Record<Decision, string> = { accept: 'Accept', modify: 'Modify', reject: 'Reject', duplicate: 'Duplicate' }
 
@@ -122,6 +123,7 @@ export default function PRsTab({ data, loading }: { data: CandidateFix[]; loadin
     ? 'Preferences off'
     : `My preferences${preferences.repositories.length ? ` · ${preferences.repositories.length} repos` : ''}${preferences.cwes.length ? ` · ${preferences.cwes.length} CWEs` : ''}`
   return <>
+    <ReviewerOnboardingPrompt />
     <div className="ws-toolbar">
       <div className="ws-toolbar-main">
         <div className={`ws-preferences-toggle ${bypass ? 'is-off' : 'is-active'}`}>

@@ -1,0 +1,32 @@
+.guide-page { min-height:60vh; padding:32px 20px 64px; background:var(--paper) }
+.guide-container { width:min(820px,100%); margin:0 auto }
+.guide-nav { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 22px; border-bottom:1px solid var(--line); padding-bottom:12px }
+.guide-nav a { display:inline-flex; align-items:center; min-height:40px; padding:8px 13px; border-radius:7px; color:var(--ink-soft); font-weight:600 }
+.guide-nav a:hover { background:var(--blue-soft); text-decoration:none }
+.guide-nav a[aria-current=page] { background:var(--blue-soft); color:var(--blue-dark) }
+.guide-content { padding:clamp(22px,5vw,44px); border:1px solid var(--line); border-radius:12px; background:var(--white); box-shadow:var(--shadow-card,0 2px 10px rgba(20,35,55,.04)) }
+.guide-content h1 { margin:0 0 18px; color:var(--blue-dark); font:400 clamp(2rem,5vw,2.8rem)/1.12 var(--serif) }
+.guide-content h2 { margin:34px 0 12px; color:var(--blue-dark); font-size:1.35rem }
+.guide-content h3 { margin:24px 0 8px; color:var(--blue-dark); font-size:1.08rem }
+.guide-content h4 { margin:20px 0 8px; color:var(--blue-dark); font-size:1rem }
+.guide-content p,.guide-content li { color:var(--gray-700,var(--gray-600)); font-size:1rem; line-height:1.75 }
+.guide-content p { margin:0 0 14px }
+.guide-content ul,.guide-content ol { margin:0 0 18px; padding-left:24px }
+.guide-content li { padding-left:4px; margin:6px 0 }
+.guide-content a { font-weight:600; text-decoration:underline; text-underline-offset:2px }
+.guide-content a:focus-visible,.guide-nav a:focus-visible,.guide-next a:focus-visible { outline:3px solid var(--blue); outline-offset:3px }
+.guide-content code { padding:2px 5px; border-radius:4px; background:var(--gray-100); font: .9em var(--mono) }
+.guide-next { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-top:20px }
+.guide-next>a:first-child { display:flex; flex-direction:column; gap:3px; padding:14px 18px; border:1px solid var(--line); border-radius:8px; background:var(--white); color:var(--ink); min-width:min(280px,100%) }
+.guide-next>a:first-child:hover { border-color:var(--line-strong); text-decoration:none }
+.guide-next span { color:var(--muted); font:700 10px var(--mono); letter-spacing:.1em; text-transform:uppercase }
+.guide-next strong { color:var(--blue-dark); font-size:15px }
+.guide-next .guide-browse { padding:10px 14px; border-radius:7px; background:var(--blue); color:var(--white); font-weight:600 }
+.guide-next .guide-browse:hover { text-decoration:none; opacity:.92 }
+@media(max-width:600px) {
+  .guide-page { padding:20px 14px 40px }
+  .guide-content { padding:22px 18px }
+  .guide-content h2 { margin-top:28px }
+  .guide-next { align-items:stretch }
+  .guide-next>a:first-child,.guide-next .guide-browse { width:100%; text-align:center }
+}
