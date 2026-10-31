@@ -6,8 +6,22 @@ import './VoteModal.css'
 export type Decision = 'accept' | 'modify' | 'reject' | 'duplicate'
 export interface VoteFormPR { id: number; repo_name: string; number: number; title: string }
 interface Props { pr: VoteFormPR; initialDecision: Decision; onClose: () => void; onSuccess: (decision: Decision) => void; onSubmittingChange?: (busy: boolean) => void }
-interface Draft { confidence: string; comments: string; nextStep: string; blocking: string; reconsider: string; parent: string; team: string }
-const blank: Draft = { confidence: 'Medium', comments: '', nextStep: 'Merge', blocking: '', reconsider: '', parent: '', team: '' }
+type AssessmentKey = 'vulnerability_assessment' | 'introduced_vulnerability' | 'security_issue_addressed' | 'breaks_codebase'
+type AssessmentDraft = Record<AssessmentKey, string>
+interface Draft { confidence: string; comments: string; nextStep: string; blocking: string; reconsider: string; parent: string; team: string; assessment: AssessmentDraft }
+export const emptyAssessmentAnswers: AssessmentDraft = { vulnerability_assessment: '', introduced_vulnerability: '', security_issue_addressed: '', breaks_codebase: '' }
+const blank: Draft = { confidence: 'Medium', comments: '', nextStep: 'Merge', blocking: '', reconsider: '', parent: '', team: '', assessment: { ...emptyAssessmentAnswers } }
+export const ASSESSMENT_FIELDS: Record<AssessmentKey, { label: string; options: [string, string][]; help?: string }> = {
+  vulnerability_assessment: { label: 'Is this a vulnerability?', options: [['yes', 'Yes'], ['no', 'No'], ['hardening', 'Hardening'], ['not_enough_information', 'Not enough information'], ['duplicate', 'Duplicate']], help: 'Hardening means the evidence does not demonstrate a vulnerability, while the change may still be a worthwhile security improvement.' },
+  introduced_vulnerability: { label: 'Does this PR introduce a new vulnerability?', options: [['yes', 'Yes'], ['no', 'No'], ['unknown', 'Unknown']] },
+  security_issue_addressed: { label: 'Does this PR address the security issue?', options: [['yes', 'Yes'], ['no', 'No'], ['needs_modification', 'Needs modification'], ['not_enough_information', 'Not enough information']] },
+  breaks_codebase: { label: 'Does this PR break the codebase?', options: [['yes', 'Yes'], ['no', 'No'], ['unknown', 'Unknown']] },
+}
+
+export function assessmentQuestionsForDecision(decision: Decision): AssessmentKey[] {
+  if (decision === 'accept' || decision === 'modify' || decision === 'reject') return ['vulnerability_assessment', 'introduced_vulnerability', 'security_issue_addressed', 'breaks_codebase']
+  return []
+}
 // Ephemeral and scoped to the signed-in account. Never written to analytics or disk.
 const drafts = new Map<string, Draft>()
 export const clearVoteDrafts = () => drafts.clear()
@@ -39,6 +53,13 @@ export default function VoteForm({pr,initialDecision,onClose,onSuccess,onSubmitt
     setSubmitting(true);onSubmittingChange?.(true);setError(null)
     try {
       const body:Record<string,unknown>={pr_id:pr.id,decision}
+      if (decision !== 'duplicate') {
+        const activeQuestions = new Set(assessmentQuestionsForDecision(decision))
+        Object.assign(body, Object.fromEntries(Object.keys(draft.assessment).map(name => [
+          name,
+          activeQuestions.has(name as AssessmentKey) ? draft.assessment[name as AssessmentKey] || null : null,
+        ])))
+      }
       if(draft.team)body.team_id=Number(draft.team)
       if(decision==='duplicate'){body.parent_pr_number=Number(draft.parent);body.notes=draft.comments}
       else if(decision==='reject'){body.summary=draft.comments;body.blocking_issues=draft.blocking;body.to_reconsider=draft.reconsider}
@@ -53,6 +74,22 @@ export default function VoteForm({pr,initialDecision,onClose,onSuccess,onSubmitt
     <fieldset disabled={submitting}>
       <div className="vm-field"><label className="vm-label" htmlFor="vf-team">Credit this validation</label><select id="vf-team" className="vm-input" value={draft.team} onChange={e=>change({team:e.target.value})}><option value="">Personal only</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><p className="vm-help">Your work stays yours. Team credit is locked when you submit.</p>{teamsError&&<p className="vm-error" role="alert">Teams could not be loaded. <button type="button" onClick={()=>setRetry(n=>n+1)}>Retry</button></p>}</div>
       {(decision==='accept'||decision==='modify')&&<><div className="vm-field"><span className="vm-label">Confidence</span><div className="ws-segmented" aria-label="Confidence">{['Low','Medium','High'].map(c=><button key={c} type="button" aria-pressed={draft.confidence===c} onClick={()=>change({confidence:c})}>{c}</button>)}</div></div><div className="vm-field"><label className="vm-label" htmlFor="vf-next">Recommended action</label><select id="vf-next" className="vm-input" value={draft.nextStep} onChange={e=>change({nextStep:e.target.value})}>{['Merge','Revise','Re-review','Close'].map(n=><option key={n}>{n}</option>)}</select></div></>}
+      {assessmentQuestionsForDecision(decision).length > 0 && <section className="vm-assessment" aria-labelledby="vf-assessment-title">
+        <h3 id="vf-assessment-title">Assessment</h3>
+        <p className="vm-assessment-intro">Record only what you can support. These answers add context and do not determine your final decision.</p>
+        {assessmentQuestionsForDecision(decision).map(key => {
+          const field = ASSESSMENT_FIELDS[key]
+          const id = `vf-${key}`
+          return <div className="vm-field" key={key}>
+            <label className="vm-label" htmlFor={id}>{field.label}</label>
+            <select id={id} className="vm-input" value={draft.assessment[key]} onChange={event => change({ assessment: { ...draft.assessment, [key]: event.target.value } })}>
+              <option value="">Not answered</option>
+              {field.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            {field.help && <p className="vm-help">{field.help}</p>}
+          </div>
+        })}
+      </section>}
       <div className="vm-field"><label className="vm-label" htmlFor="vf-comments">Comments <span className="vm-required">*</span></label><textarea id="vf-comments" className="vm-textarea" required rows={3} maxLength={2000} value={draft.comments} onChange={e=>change({comments:e.target.value})} placeholder="Explain your assessment and what should happen next…" /></div>
       {decision==='duplicate'&&<div className="vm-field"><label className="vm-label" htmlFor="vf-parent">Parent PR number <span className="vm-required">*</span></label><input id="vf-parent" type="number" className="vm-input" required min={1} step={1} value={draft.parent} onChange={e=>change({parent:e.target.value})}/><p className="vm-help">Required for Duplicate. Choose a different PR in this repository.</p></div>}
       {decision==='reject'&&<details><summary>Additional context</summary><div className="vm-field"><label className="vm-label" htmlFor="vf-blocking">Blocking issues</label><input id="vf-blocking" className="vm-input" value={draft.blocking} maxLength={500} onChange={e=>change({blocking:e.target.value})}/></div><div className="vm-field"><label className="vm-label" htmlFor="vf-reconsider">To reconsider</label><input id="vf-reconsider" className="vm-input" maxLength={500} value={draft.reconsider} onChange={e=>change({reconsider:e.target.value})}/></div></details>}

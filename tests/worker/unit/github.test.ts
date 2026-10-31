@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseDecision,
+  parseValidationAssessment,
   parseDuplicateParent,
   parseDetectionTool,
   normaliseToolName,
@@ -99,6 +100,45 @@ describe('github.ts', () => {
       `;
       expect(parseDecision(body)).toBe('reject');
     });
+  });
+
+  describe('parseValidationAssessment()', () => {
+    it('recovers only the explicitly recorded assessment rows', () => {
+      const body = [
+        'Validation summary:',
+        '| Decision | Accept |',
+        'Security assessment:',
+        '| Question | Answer |',
+        '| Vulnerability assessment | Hardening |',
+        '| Introduces new vulnerability | No |',
+        '| Addresses the security issue | Yes |',
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: 'hardening',
+        introduced_vulnerability: 'no',
+        security_issue_addressed: 'yes',
+        breaks_codebase: null,
+      });
+    });
+
+    it('returns NULL for historical comments without assessment rows', () => {
+      expect(parseValidationAssessment('Validation summary:\n| Decision | Accept |')).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it.each(['Needs modification', 'Modify / needs modification'])(
+      'parses %s as the existing needs_modification value', answer => {
+        expect(parseValidationAssessment([
+          'Security assessment:',
+          '| Question | Answer |',
+          `| Addresses the security issue | ${answer} |`,
+        ].join('\n')).security_issue_addressed).toBe('needs_modification');
+      },
+    );
   });
 
   describe('parseDuplicateParent()', () => {

@@ -155,6 +155,10 @@ CREATE TABLE IF NOT EXISTS pr_comments (
   pr_number     INTEGER NOT NULL,
   login         TEXT    NOT NULL,
   decision      TEXT,                  -- 'accept'|'modify'|'reject'|'duplicate'|NULL
+  vulnerability_assessment TEXT CHECK (vulnerability_assessment IN ('yes', 'no', 'hardening', 'not_enough_information', 'duplicate')),
+  introduced_vulnerability TEXT CHECK (introduced_vulnerability IN ('yes', 'no', 'unknown')),
+  security_issue_addressed TEXT CHECK (security_issue_addressed IN ('yes', 'no', 'needs_modification', 'not_enough_information')),
+  breaks_codebase TEXT CHECK (breaks_codebase IN ('yes', 'no', 'unknown')),
   duplicate_of  INTEGER DEFAULT NULL,  -- cited parent PR id (pre-resolution, for chain walking)
   created_at    TEXT    NOT NULL,      -- ISO-8601: when the comment was posted
   pr_created_at TEXT    NOT NULL,      -- ISO-8601: when the PR was created (denorm, for bonus calc)
@@ -305,6 +309,10 @@ CREATE TABLE IF NOT EXISTS user_votes (
   repo_name    TEXT    NOT NULL,
   pr_number    INTEGER NOT NULL,
   decision     TEXT    NOT NULL,   -- 'accept' | 'modify' | 'reject' | 'duplicate'
+  vulnerability_assessment TEXT CHECK (vulnerability_assessment IN ('yes', 'no', 'hardening', 'not_enough_information', 'duplicate')),
+  introduced_vulnerability TEXT CHECK (introduced_vulnerability IN ('yes', 'no', 'unknown')),
+  security_issue_addressed TEXT CHECK (security_issue_addressed IN ('yes', 'no', 'needs_modification', 'not_enough_information')),
+  breaks_codebase TEXT CHECK (breaks_codebase IN ('yes', 'no', 'unknown')),
   parent_pr_id INTEGER DEFAULT NULL,  -- cited parent PR id (for duplicate votes; null for others)
   team_id      INTEGER DEFAULT NULL,  -- optional Team attribution, immutable once submitted
   comment_id   INTEGER,            -- GitHub comment ID (null if GitHub post failed)
