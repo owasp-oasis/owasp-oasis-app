@@ -1,0 +1,58 @@
+.contribution-signup-roles{border:0;min-width:0;padding:0;margin:3px 0}
+.contribution-signup-roles legend{font-size:.9rem;font-weight:600;color:var(--gray-800);margin-bottom:4px}
+.contribution-signup-roles>p{font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+.contribution-signup-choice{display:flex;align-items:flex-start;gap:9px;padding:9px 0;cursor:pointer}
+.contribution-signup-choice input{flex:none;width:16px;height:16px;margin-top:2px;accent-color:var(--blue)}
+.contribution-signup-choice span{display:flex;flex-direction:column;gap:2px}
+.contribution-signup-choice b{font-size:13px;font-weight:600;color:var(--ink-soft)}
+.contribution-signup-choice small{font-size:11px;color:var(--muted);line-height:1.5}
+.contribution-signup-roles details{margin:6px 0 12px}
+.contribution-signup-roles summary{font-size:12px;color:var(--blue);cursor:pointer;padding:4px 0}
+.contribution-signup-roles p.contribution-help{font-size:11px;margin:10px 0 0}
+.contribution-count{font:11px var(--mono);color:var(--muted);white-space:nowrap;padding-top:4px}
+.ws-preferences .contribution-section>header{padding:0 0 14px}
+.ws-preferences .contribution-choices{grid-template-columns:repeat(2,minmax(0,1fr));max-height:none;overflow:visible}
+.ws-preferences .contribution-choices .ws-choice-tile{align-items:flex-start;padding:12px}
+.contribution-choices input{margin-top:2px}
+.contribution-choices .ws-choice-tile span{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.contribution-choices .ws-choice-tile b{white-space:normal;font-size:13px}
+.contribution-choices .ws-choice-tile small{white-space:normal;font:12px/1.5 var(--sans)}
+.contribution-interest-footer{display:flex;flex-direction:column;gap:7px}
+.contribution-interest-footer p,.contribution-section p.contribution-help{font-size:12px;line-height:1.6}
+.contribution-interest-footer>span{font:11px var(--mono);color:var(--muted)}
+.contribution-assignments{display:grid}
+.contribution-assignments article{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:14px 0;border-bottom:1px solid var(--gray-200)}
+.contribution-assignments article:first-child{padding-top:0}
+.contribution-assignments article>div{display:flex;flex-direction:column;gap:7px}
+.contribution-assignments strong{font-size:14px}
+.contribution-repo{display:flex;align-items:center;gap:6px;color:var(--blue-dark);font:12px var(--mono)}
+.contribution-assignments small{font-size:11px;color:var(--muted)}
+.contribution-status{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:100px;background:var(--green-soft);color:var(--green-ink);font:10px var(--mono)}
+
+.contribution-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.contribution-other-interest{display:grid;gap:7px;margin:12px 0;color:var(--ink-soft);font-size:13px;font-weight:600}
+.contribution-other-interest textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--line-strong);border-radius:6px;padding:9px 10px;background:var(--white);color:var(--ink);font:13px/1.5 var(--sans)}
+.contribution-other-interest textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.contribution-other-interest .optional,.contribution-signup-roles .optional{font-size:11px;font-weight:400;color:var(--muted)}
+.home-register-card .contribution-other-interest{color:var(--white)}.home-register-card .contribution-other-interest .optional{color:#dceaff}
+/* The existing homepage signup card uses the brand blue background. */
+.home-register-card .contribution-signup-roles legend,
+.home-register-card .contribution-signup-choice b,
+.home-register-card .contribution-signup-roles summary{color:var(--white)}
+.home-register-card .contribution-signup-roles .optional,
+.home-register-card .contribution-signup-roles p,
+.home-register-card .contribution-signup-choice small{color:#dceaff}
+.home-register-card .contribution-signup-choice input{accent-color:var(--green-bright)}
+.home-register-card .contribution-signup-roles{border-top:1px solid rgba(255,255,255,.25);padding-top:12px}
+.home-register-card .contribution-signup-roles legend{float:left;width:100%;margin-bottom:4px}
+.home-register-card .contribution-signup-roles>p:first-of-type{clear:both}
+.home-register-card .contribution-signup-roles :is(input,summary):focus-visible{outline-color:var(--white)}
+
+.contribution-save{display:flex;align-items:center;justify-content:space-between;gap:16px}.contribution-save>span{font-size:12px;color:var(--muted)}
+.contribution-assignment-actions{align-items:flex-end!important}.contribution-assignment-actions button{font-size:12px}
+.contribution-history{font-size:12px;color:var(--muted)}.contribution-history summary{cursor:pointer;padding:8px 0}.contribution-history p{margin:8px 0}
+.contribution-prompt{margin-bottom:18px}.contribution-prompt>a{justify-self:start}
+.contribution-admin{max-width:800px;display:grid;gap:20px}.contribution-admin label{font-size:13px;display:grid;gap:7px}.contribution-admin input,.contribution-admin select{min-height:42px;border:1px solid var(--line-strong);border-radius:6px;padding:8px 10px;background:var(--white);color:var(--ink);font:14px var(--sans);width:100%}.contribution-admin .contribution-form{display:grid;gap:16px}.contribution-admin fieldset{border:0;display:grid;gap:16px}.contribution-confirm{border:1px solid var(--line-strong);background:var(--blue-soft);padding:16px;border-radius:7px}.contribution-confirm>div{display:flex;gap:10px;margin-top:10px}.contribution-admin button:disabled{opacity:.6;cursor:default}
+.contribution-section{scroll-margin-top:190px}.contribution-section :is(input,button):focus-visible,.contribution-admin :is(input,select,button):focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+@media(max-width:767px){.ws-preferences .contribution-choices{grid-template-columns:1fr}.contribution-save{flex-direction:column;align-items:stretch}.contribution-signup-choice{padding:12px 0}.contribution-signup-roles summary{min-height:44px;align-content:center}.contribution-assignments article{flex-wrap:wrap}}
+.contribution-admin label.contribution-agreement{display:flex;align-items:flex-start;gap:10px;line-height:1.6}.contribution-admin .contribution-agreement input{width:17px;min-height:17px;height:17px;flex:none;margin-top:3px;accent-color:var(--blue)}

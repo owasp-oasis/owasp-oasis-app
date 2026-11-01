@@ -123,6 +123,17 @@ parallel implementations.
 - Outside a user's own profile or contributor panel, analytics and engagement
   reporting must not identify individual users.
 
+### Contribution role interests and assignments
+
+Signup and Workspace Preferences let members select multiple optional role
+interests. They are signals of intent, independent of application access. Repo
+steward and maintainer contact responsibilities are assigned separately to an
+immutable GitHub user ID and repository, require administrator authorization
+and CSRF validation, and retain ended assignment history. Signup interests link
+to an account only through its verified OAuth email. Existing users start with
+no inferred interests. See [AUTHORIZATION.md](AUTHORIZATION.md) for access
+roles and [DEPLOY.md](DEPLOY.md#contribution-roles) for the isolated walkthrough.
+
 ### D1 schemas and migrations
 
 - Add a forward migration in `migrations/` and update `schema.sql` so fresh

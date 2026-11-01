@@ -2,6 +2,7 @@
  * POST /api/register — user registration handler.
  */
 
+import { validateOtherInterest, validateRoleInterests } from '../contributionRoles.js';
 import type { Env } from '../types.js';
 import { validateCSRF, checkRateLimit, jsonOk, jsonErr } from '../security.js';
 import { vEmail, vName, vGitHubAccount, vRole, parseBody, hashString } from '../validation.js';
@@ -35,6 +36,11 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
   const roleRes = vRole(roleVal);
   if (!roleRes.ok) return jsonErr(roleRes.error, 400, request);
 
+  const interests = validateRoleInterests(body['interests'] ?? []);
+  if (!interests) return jsonErr('Invalid role interests', 400, request);
+  const otherInterest = validateOtherInterest(body['other_interest'], interests.includes('other'));
+  if (!otherInterest.ok) return jsonErr(otherInterest.error, 400, request);
+
   const ghRes = await vGitHubAccount(body['github'] ?? '', env.GITHUB_TOKEN);
   if (!ghRes.ok) return jsonErr(ghRes.error, ghRes.status ?? 400, request);
 
@@ -49,6 +55,7 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
     submitted_at: submittedAt,
   };
 
+  if (!env.DB) return jsonErr('Registration temporarily unavailable — please try again.', 503, request);
   const isDuplicate = await isEmailRegistered(env.DB, emailRes.val);
   if (isDuplicate) {
     try {
@@ -57,7 +64,7 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
     } catch {
       console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
     }
-    return jsonOk({ message: "You're already registered. We'll be in touch!" }, request);
+    return jsonOk({ message: "You're already registered. We'll be in touch!", role_interests_saved: false }, request);
   }
 
   if (env.DB) {
@@ -66,24 +73,26 @@ export async function handleRegister(request: Request, env: Env, ctx: ExecutionC
         env.DB.prepare(
           `INSERT INTO registrations (name, email, github, role, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
         ).bind(nameRes.val, emailRes.val, ghRes.val, roleRes.val, await hashString(ip), submittedAt),
+        env.DB.prepare(`INSERT INTO registration_role_interests (registration_id, interests, other_interest)
+          SELECT id, ?, ? FROM registrations WHERE email = ?`).bind(JSON.stringify(interests), otherInterest.val, emailRes.val),
         prepareHubSpotEnqueue(env.DB, { ...submission, welcome_environment: env.ENVIRONMENT }, new Date(submittedAt)),
       ]);
       scheduleHubSpotSync(ctx, env);
     } catch (err) {
       const msg = (err as Error)?.message ?? '';
-      if (msg.includes('UNIQUE') || msg.includes('constraint')) {
+      if ((msg.includes('UNIQUE') || msg.includes('constraint')) && await isEmailRegistered(env.DB, emailRes.val)) {
         try {
           await enqueueHubSpotSync(env.DB, submission, new Date(submittedAt));
           scheduleHubSpotSync(ctx, env);
         } catch {
           console.error(JSON.stringify({ event: 'hubspot_enqueue_failed', source: 'registration' }));
         }
-        return jsonOk({ message: "You're already registered. We'll be in touch!" }, request);
+        return jsonOk({ message: "You're already registered. We'll be in touch!", role_interests_saved: false }, request);
       }
-      console.error('DB error (register):', msg);
+      console.error(JSON.stringify({ event: 'registration_write_failed' }));
       return jsonErr('Registration failed — please try again.', 500, request);
     }
   }
 
-  return jsonOk({ message: "Registered successfully. We'll be in touch!" }, request);
+  return jsonOk({ message: "Registered successfully. We'll be in touch!", role_interests_saved: !!env.DB }, request);
 }

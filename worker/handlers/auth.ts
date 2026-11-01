@@ -8,6 +8,7 @@
  *   POST /api/auth/logout  → delete session, clear cookie
  */
 
+import { linkContributionProfile } from '../contributionIdentity.js';
 import type { Env } from '../types.js';
 import { prepareHubSpotEnqueue, scheduleHubSpotSync } from '../hubspot.js';
 import {
@@ -153,6 +154,7 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
     return redirectWithError('/workspace/fixes', 'GitHub user fetch error');
   }
 
+  let verifiedEmails: string[] = [];
   // Fetch user emails to get primary verified email for mailing list registration
   try {
     const emailRes = await fetch('https://api.github.com/user/emails', {
@@ -168,6 +170,7 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
       const primary = emails.find((e) => e.primary && e.verified);
       const verified = emails.find((e) => e.verified);
       const any = emails[0];
+      verifiedEmails = emails.filter((entry) => entry.verified === true && typeof entry.email === 'string').map((entry) => entry.email!);
       email = primary?.email ?? verified?.email ?? any?.email ?? '';
     }
   } catch {
@@ -225,6 +228,13 @@ export async function handleCallback(request: Request, env: Env, ctx?: Execution
   } catch {
     // Registration upsert failed — not fatal, continue with session creation
     console.error('Failed to upsert registration during OAuth');
+  }
+
+  // Only verified email ownership can carry signup interests into an account.
+  try {
+    await linkContributionProfile(env.DB, githubUserId, login, verifiedEmails);
+  } catch {
+    console.error(JSON.stringify({ event: 'contribution_profile_link_failed' }));
   }
 
   // Encrypt the OAuth token for storage in a separate HttpOnly cookie.
