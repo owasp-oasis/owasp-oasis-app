@@ -283,7 +283,6 @@ node export-db.js
 | `registrations` | Email sign-ups from the registration form |
 | `registration_role_interests` | Signup interests awaiting a matching verified GitHub email |
 | `contribution_profiles` | Role interests keyed by immutable GitHub user ID |
-| `contribution_assignments` | Repository-scoped steward/contact designations, end state, and assigning admin |
 | `applications` | Extended sign-up form data (org, why, role) |
 | `hubspot_sync_queue` | Durable registration/application contact outbox with retry state |
 | `repos` | GitHub repos in the `owasp-oasis` org, synced by cron |
@@ -339,9 +338,8 @@ Migration `0017_contribution_roles.sql` stores optional role interests separatel
 from application permissions. Signup selections transfer only when OAuth returns
 a verified email matching the registration; a typed GitHub name never claims a
 registration. Existing accounts start with no interests and can choose them in
-Workspace → Preferences. Repo steward and maintainer contact assignments are tied
-to a repository and GitHub ID, changed by admins with CSRF checks, and recorded
-in `privileged_action_audit`. Ending an assignment preserves its history.
+Workspace → Preferences. These choices are user preferences and do not grant
+permissions or configure repository assignments.
 
 Preview and production share D1, so applying migration 0017 for preview also
 changes the production database. Review and explicitly authorize that migration
@@ -352,9 +350,9 @@ drop the tables or restore D1 without a separately reviewed data recovery plan.
 
 For an isolated local walkthrough, run `npm run preview:roles`. It binds to
 127.0.0.1:5193, stores its demo D1 data under `.wrangler/role-walkthrough`, and
-simulates three GitHub identities. The walkthrough blocks outbound network
-requests and persists only fictional signup, preference, session, repository, and
-assignment data. Use its **Reset local data** button to clear the local D1 tables
+simulates GitHub identities. The walkthrough blocks outbound network
+requests and persists only fictional signup, preference, session, and repository
+data. Use its **Reset local data** button to clear the local D1 tables
 and rate-limit keys, then reseed the sample members and repositories.
 
 ## Observability

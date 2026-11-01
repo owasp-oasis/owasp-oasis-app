@@ -1,4 +1,3 @@
-import ContributionAdmin from './pages/ContributionAdmin'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
@@ -73,7 +72,6 @@ function AppShell() {
           <Route path="/workspace/status/runs/:runId" element={<LegacySyncRunLink />} />
           <Route path="/workspace/sync/runs/:runId" element={<WorkspaceLayout title="Sync run"><SyncRunDetail /></WorkspaceLayout>} />
           {/* Listed only for authenticated administrators in the account menu. */}
-          <Route path="/admin/contribution-roles" element={<ContributionAdmin />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/analytics" element={<AdminAnalytics />} />
           <Route path="/support" element={<Support />} />

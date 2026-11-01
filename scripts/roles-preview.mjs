@@ -11,7 +11,6 @@ const origin = `http://127.0.0.1:${port}`
 const people = {
   newcomer: { id: 91001, login: 'demo-newcomer', email: 'new@oasis-demo.internal' },
   member: { id: 91002, login: 'demo-member', email: 'member@oasis-demo.internal' },
-  admin: { id: 91003, login: 'demo-lead', email: 'lead@oasis-demo.internal' },
 }
 const state = resolve(root, '.wrangler/role-walkthrough')
 await mkdir(state, { recursive: true })
@@ -48,35 +47,13 @@ for (const table of ['contribution_profiles', 'registration_role_interests']) {
   const columns = (await db.prepare(`PRAGMA table_info("${table}")`).all()).results.map(row => row.name)
   if (!columns.includes('other_interest')) await db.prepare(`ALTER TABLE "${table}" ADD COLUMN other_interest TEXT NOT NULL DEFAULT ''`).run()
 }
-// Earlier local walkthroughs used one row per assignment. Preserve their data
-// while allowing a new active row after a previous assignment has ended.
-const assignmentIndexes = (await db.prepare('PRAGMA index_list("contribution_assignments")').all()).results
-if (assignmentIndexes.some(index => index.origin === 'u')) {
-  await db.batch([
-    db.prepare(`CREATE TABLE contribution_assignments_rebuild (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      github_user_id INTEGER NOT NULL REFERENCES contribution_profiles(github_user_id),
-      repo_id INTEGER NOT NULL REFERENCES repos(id),
-      role TEXT NOT NULL CHECK(role IN ('steward', 'contact')),
-      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'ended')),
-      assigned_by INTEGER NOT NULL, assigned_at TEXT NOT NULL, ended_at TEXT, ended_by INTEGER
-    )`),
-    db.prepare('INSERT INTO contribution_assignments_rebuild SELECT * FROM contribution_assignments'),
-    db.prepare('DROP TABLE contribution_assignments'),
-    db.prepare('ALTER TABLE contribution_assignments_rebuild RENAME TO contribution_assignments'),
-    db.prepare('CREATE INDEX idx_contribution_assignments_member ON contribution_assignments(github_user_id, status)'),
-    db.prepare("CREATE UNIQUE INDEX idx_contribution_active_assignment ON contribution_assignments(github_user_id, repo_id, role) WHERE status = 'active'"),
-  ])
-}
 async function seedDemoData() {
 const now = new Date().toISOString()
-for (const person of [people.member, people.admin]) {
+for (const person of [people.member]) {
   await db.prepare(`INSERT OR IGNORE INTO registrations (name,email,github,role,ip_hash,created_at) VALUES (?, ?, ?, 'general', 'local-demo', ?)`)
     .bind(person.login, person.email, person.login, now).run()
   await db.prepare('INSERT OR IGNORE INTO contribution_profiles (github_user_id,github_login,created_at) VALUES (?,?,?)').bind(person.id, person.login, now).run()
 }
-await db.prepare(`INSERT OR IGNORE INTO user_roles (github_user_id, github_login, role, assigned_by_github_user_id, created_at, updated_at) VALUES (?, ?, 'admin', ?, ?, ?)`)
-  .bind(people.admin.id, people.admin.login, people.admin.id, now, now).run()
 for (const [id, name, language] of [[92001, 'atlas-api', 'TypeScript'], [92002, 'beacon-web', 'Python']]) {
   await db.prepare('INSERT OR IGNORE INTO repos (id, name, full_name, language, description, synced_at) VALUES (?,?,?,?,?,?)').bind(id, name, 'demo-org/' + name, language, 'Fictional repository for the role walkthrough.', now).run()
 }
@@ -121,7 +98,7 @@ function sendHeaders(res, response) {
   if (cookies.length) res.setHeader('set-cookie', cookies.map(cookie => cookie.replace(/; Secure/gi, '')))
   res.setHeader('cache-control','no-store')
 }
-const toolbar = `<aside style="background:#07111f;color:white;padding:10px 16px;font:12px system-ui;display:flex;gap:16px;flex-wrap:wrap;align-items:center"><strong>LOCAL ROLE WALKTHROUGH</strong><span>Saved locally · simulated GitHub · no external writes</span><a style="color:#9fd0ff" href="/__walkthrough/signup">1. New signup</a><a style="color:#9fd0ff" href="/__walkthrough/login?as=member">2. Existing member</a><a style="color:#9fd0ff" href="/__walkthrough/login?as=admin">3. Administrator</a><a style="color:#9fd0ff" href="/__walkthrough/login?as=newcomer">Return as new member</a><details><summary style="cursor:pointer">Walkthrough steps</summary><p>Sign up using any name and <b>new@oasis-demo.internal</b>; leave GitHub blank or enter any syntactically valid username; GitHub account checks are simulated locally. Select interests, submit, then Continue with GitHub to use the demo-newcomer identity and link by the verified demo email.</p><p>Existing member: edit role interests in Preferences. Administrator: select demo-newcomer or demo-member, choose a repository and role, confirm the agreement, then assign it. Switch back to that member to see the assignment. Return as administrator to end it. Data survives page refresh and server restart.</p><p><a style="color:#9fd0ff" href="/workspace/preferences">My preferences</a> · <a style="color:#9fd0ff" href="/admin/contribution-roles">Assignment management</a></p></details><form method="post" action="/__walkthrough/reset"><button style="color:#fff;background:#8f3030;border:0;border-radius:5px;padding:7px 10px;cursor:pointer">Reset local data</button></form></aside>`
+const toolbar = `<aside style="background:#07111f;color:white;padding:10px 16px;font:12px system-ui;display:flex;gap:16px;flex-wrap:wrap;align-items:center"><strong>LOCAL ROLE WALKTHROUGH</strong><span>Saved locally · simulated GitHub · no external writes</span><a style="color:#9fd0ff" href="/__walkthrough/signup">1. New signup</a><a style="color:#9fd0ff" href="/__walkthrough/login?as=member">2. Existing member</a><a style="color:#9fd0ff" href="/__walkthrough/login?as=newcomer">Return as new member</a><details><summary style="cursor:pointer">Walkthrough steps</summary><p>Sign up using any name and <b>new@oasis-demo.internal</b>; leave GitHub blank or enter any syntactically valid username; GitHub account checks are simulated locally. Select interests, submit, then go to the workspace and sign in to use the demo-newcomer identity and link by the verified demo email.</p><p>Existing member: edit role interests in Preferences. Data survives page refresh and server restart.</p><p><a style="color:#9fd0ff" href="/workspace/preferences">My preferences</a></p></details><form method="post" action="/__walkthrough/reset"><button style="color:#fff;background:#8f3030;border:0;border-radius:5px;padding:7px 10px;cursor:pointer">Reset local data</button></form></aside>`
 const server = createServer(async (req,res) => {
   try {
     // Bind to loopback and reject cross-origin requests to the demo login controls.
@@ -158,7 +135,7 @@ const server = createServer(async (req,res) => {
       for await (const chunk of req) chunks.push(chunk)
       const response=await runtime.dispatchFetch(url.href,{method:req.method,headers:headersFor(req),redirect:'manual',body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)})
       sendHeaders(res,response)
-      if (url.pathname === '/api/auth/callback' && response.status === 302 && !response.headers.get('location')?.includes('auth_error')) res.setHeader('location', url.searchParams.get('code') === 'admin' ? '/admin/contribution-roles' : '/workspace/preferences#my-roles')
+      if (url.pathname === '/api/auth/callback' && response.status === 302 && !response.headers.get('location')?.includes('auth_error')) res.setHeader('location', '/workspace/preferences#my-roles')
       res.writeHead(response.status);res.end(Buffer.from(await response.arrayBuffer()));return
     }
     if (url.pathname === '/mockups/member-roles') {res.writeHead(302,{location:url.searchParams.get('view')==='profile'?'/__walkthrough/login?as=member':'/__walkthrough/signup'});res.end();return}

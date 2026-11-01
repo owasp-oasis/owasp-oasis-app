@@ -58,7 +58,7 @@ export default function Nav(_props: { onOpenOnboarding?: () => void }) {
           <div className="nav-account-header"><strong>@{user.login}</strong><span>{profile ? `Validator · Rank ${profile.rank ? '#' + profile.rank : '—'} · ${profile.reputation.toFixed(1)} rep` : 'Validator'}</span></div>
           <NavLink to="/workspace/preferences" role="menuitem" onClick={close}><Settings2 size={16} />Preferences</NavLink>
           <NavLink to="/workspace/sync" role="menuitem" onClick={close}><Activity size={16} />Sync status</NavLink>
-          {user.role === 'admin' && <><NavLink to="/admin" role="menuitem" onClick={close}><Shield size={16} />User access</NavLink><NavLink to="/admin/contribution-roles" role="menuitem" onClick={close}><Shield size={16} />Contribution roles</NavLink><NavLink to="/admin/analytics" role="menuitem" onClick={close}><ChartNoAxesCombined size={16} />Analytics</NavLink></>}
+          {user.role === 'admin' && <><NavLink to="/admin" role="menuitem" onClick={close}><Shield size={16} />User access</NavLink><NavLink to="/admin/analytics" role="menuitem" onClick={close}><ChartNoAxesCombined size={16} />Analytics</NavLink></>}
           <hr /><button role="menuitem" onClick={() => { void logout(); close() }}><LogOut size={16} />Sign out</button>
         </div>}
       </div> : <><a href="/api/auth/login" className="nav-signin">Sign in</a><a href="/#register-form" className="nav-cta">Join Team OASIS</a></>)}

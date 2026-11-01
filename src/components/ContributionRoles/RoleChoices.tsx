@@ -15,6 +15,6 @@ export default function RoleChoices({ selected, change, otherInterest = '', chan
     {choices(CONTRIBUTION_ROLES.slice(0, 3))}
     <details><summary>More ways to contribute{selected.filter(id => CONTRIBUTION_ROLES.slice(3).some(role => role.id === id)).length > 0 ? ' · ' + selected.filter(id => CONTRIBUTION_ROLES.slice(3).some(role => role.id === id)).length + ' selected' : ''}</summary>{choices(CONTRIBUTION_ROLES.slice(3))}</details>
     {otherField}
-    <p className="contribution-help">You can update these later in Preferences. Repository assignments are confirmed separately.</p>
+    <p className="contribution-help">You can update these later in Preferences.</p>
   </fieldset> : <fieldset disabled={disabled}><legend className="contribution-sr">My role interests</legend><div className="ws-choice-list contribution-choices">{choices(CONTRIBUTION_ROLES)}</div>{otherField}</fieldset>
 }
