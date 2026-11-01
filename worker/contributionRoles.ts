@@ -7,7 +7,7 @@ export const CONTRIBUTION_ROLES = [
   { id: 'advocate', name: 'Evangelist & advocate', description: 'Bring people into the OASIS community.' },
   { id: 'scout', name: 'Repo scout', description: 'Find repositories where OASIS can help.' },
   { id: 'mentor', name: 'Application security mentor', description: 'Help contributors build security skills.' },
-  { id: 'tooling', name: 'Tooling & metrics', description: 'Improve OASIS tools and insights.' },
+  { id: 'tooling', name: 'Tooling and Metrics Scout', description: 'Improve OASIS tools and insights.' },
   { id: 'other', name: 'Other', description: 'Share another way you would like to contribute.' },
 ] as const;
 export type ContributionRole = typeof CONTRIBUTION_ROLES[number]['id'];
