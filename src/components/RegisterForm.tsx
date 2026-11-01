@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import './RegisterForm.css'
+import RoleChoices from './ContributionRoles/RoleChoices'
+import type { ContributionRole } from '../../worker/contributionRoles'
 
 type FormType = 'validator' | 'sponsor'
 type FormState = 'idle' | 'loading' | 'success' | 'error'
@@ -8,6 +10,7 @@ type FormState = 'idle' | 'loading' | 'success' | 'error'
 interface Props {
   type: FormType
   successMessage?: string
+  onSuccess?: () => void
 }
 
 async function fetchCsrfToken(): Promise<string> {
@@ -23,7 +26,12 @@ async function fetchCsrfToken(): Promise<string> {
 export default function RegisterForm({
   type,
   successMessage = "You're in. Together we'll secure open source's future.",
+  onSuccess,
 }: Props) {
+  const [interests, setInterests] = useState<ContributionRole[]>([])
+  const [otherInterest, setOtherInterest] = useState('')
+  const [message, setMessage] = useState('')
+  const [interestsSaved, setInterestsSaved] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [github, setGithub] = useState('')
@@ -46,13 +54,16 @@ export default function RegisterForm({
           'Content-Type': 'application/json',
           'X-CSRF-Token': csrfToken,
         },
-        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), github: github.trim(), type, role: type }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), github: github.trim(), type, role: type, interests, other_interest: otherInterest }),
       })
 
-      const data = await res.json() as { ok?: boolean; error?: string; message?: string }
+      const data = await res.json() as { ok?: boolean; error?: string; message?: string; role_interests_saved?: boolean }
 
       if (res.ok) {
+        setMessage(data.message ?? successMessage)
+        setInterestsSaved(data.role_interests_saved === true)
         setState('success')
+        onSuccess?.()
       } else {
         setErrorMsg(data.error ?? 'Something went wrong. Please try again.')
         setState('error')
@@ -67,7 +78,11 @@ export default function RegisterForm({
     return (
       <div className="register-success">
         <div className="register-success-icon" aria-hidden="true">✓</div>
-        <p>{successMessage}</p>
+        <p>{message || successMessage}</p>
+        {type === 'validator' && <p>{interestsSaved
+          ? 'Your role interests are saved. From the workspace, sign in with GitHub using the same verified email to manage them and carry over these choices.'
+          : 'To choose or update your role interests, sign in from the workspace and visit Preferences.'}</p>}
+        <a className="btn btn-primary" href="/workspace">Go to Workspace</a>
         <p className="register-success-slack">
           Come introduce yourself on Slack:{' '}
           <a href="https://owasp.slack.com/archives/C0BJACRTT0T" target="_blank" rel="noopener noreferrer">
@@ -128,6 +143,8 @@ export default function RegisterForm({
         />
       </div>
 
+      {type === 'validator' && <RoleChoices compact selected={interests} change={next => { setInterests(next); if (!next.includes('other')) setOtherInterest('') }} otherInterest={otherInterest} changeOtherInterest={setOtherInterest} disabled={state === 'loading'} />}
+
       {state === 'error' && (
         <p className="register-error" role="alert">{errorMsg}</p>
       )}
@@ -141,8 +158,7 @@ export default function RegisterForm({
       </button>
 
       <p className="register-note">
-        No commitment. You'll receive update emails at the address you provide.<br />
-        Thank you for your support.
+        No commitment. You'll receive update emails at the address you provide. Thank you for your support.
       </p>
     </form>
   )

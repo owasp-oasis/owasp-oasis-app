@@ -1,3 +1,4 @@
+import MyRoles from '../../components/ContributionRoles/MyRoles'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
@@ -24,6 +25,7 @@ export default function Preferences() {
       <Link className="ws-button" to="/workspace/fixes">Back to candidate fixes</Link>
     </div>
     <section className="ws-card ws-profile-card"><div className="ws-profile-avatar">{user.avatar_url ? <img src={user.avatar_url} alt="" /> : user.login.slice(0,2).toUpperCase()}</div><div><h2>{user.login}</h2><p>Signed in with GitHub · avatar and name sync from your GitHub profile</p></div><a href="https://github.com/settings/profile" target="_blank" rel="noreferrer">Edit on GitHub ↗</a></section>
+    <MyRoles key={user.login} />
     <div className="ws-preference-summary"><span>⌕</span>{fixes.data.filter(pr=>pr.state==='open').length} open candidate fixes match your preferences, {fixes.data.filter(pr=>pr.state==='open'&&!preferences.repositories.length).length} still need your vote.<Link className="ws-button ws-button--primary" to="/workspace/fixes">View matching fixes</Link></div>
     {error && <div className="ws-error" role="alert">{error} <button className="ws-button" onClick={retry}>Retry loading preferences</button><p>Your last change was not confirmed. Retry it after loading.</p></div>}
     {loading && <p role="status">Loading preferences…</p>}

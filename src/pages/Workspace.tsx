@@ -1,3 +1,4 @@
+import { RolePrompt } from '../components/ContributionRoles/MyRoles'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import type { Decision } from '../components/VoteForm'
@@ -22,6 +23,7 @@ export default function Workspace({ activeTab }: { activeTab: WorkspaceTab }) {
   const voteMap = new Map((votes.data.votes ?? []).map(v => [v.pr_id, v.decision]))
   return <WorkspaceLayout title={titles[activeTab]} queue={activeTab === 'queue'} isPRs={activeTab === 'prs'}>
     {error ? <div className="ws-error" role="alert"><h2>Could not load {titles[activeTab].toLowerCase()}</h2><p>{error}</p><button className="ws-button" onClick={retry}>Retry</button></div> : <>
+      {activeTab === 'queue' && <RolePrompt />}
       {activeTab === 'queue' && <MyQueue data={data} loading={loading || votes.loading} votes={voteMap} voteError={votes.error} retryVotes={votes.retry} />}
       {activeTab === 'prs' && <PRsTab data={data} loading={loading} />}
       {activeTab === 'projects' && <ProjectsTab data={data} loading={loading} myVotes={voteMap} onNavigateToPRs={id => navigate('/workspace/fixes?repo=' + id)} />}

@@ -1,3 +1,4 @@
+import { handleMyContributionRoles } from './handlers/contributionRoles.js';
 import { handleWorkspacePreferences } from './handlers/workspacePreferences.js';
 /**
  * OWASP OASIS — Cloudflare Worker entry point.
@@ -152,6 +153,8 @@ export default {
        if (method === 'GET'  && url.pathname === '/api/auth/callback') return await handleCallback(request, env, ctx);
        if (method === 'GET'  && url.pathname === '/api/auth/me')       return await handleMe(request, env);
        if (method === 'POST' && url.pathname === '/api/auth/logout')   return await handleLogout(request, env);
+
+       if (['GET', 'PUT'].includes(method) && url.pathname === '/api/contribution-roles/mine') return await handleMyContributionRoles(request, env);
 
        /* ── User Preferences ───────────────────────────────────────── */
        if ((method === 'GET' || method === 'PUT') && url.pathname === '/api/preferences/workspace') return await handleWorkspacePreferences(request, env);

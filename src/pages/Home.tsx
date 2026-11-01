@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import RegisterForm from '../components/RegisterForm'
 import QuotesCarousel from '../components/QuotesCarousel'
 import type { Quote } from '../components/QuotesCarousel'
@@ -140,6 +141,7 @@ const reasons = [
 ]
 
 export default function Home() {
+  const [registrationSuccess, setRegistrationSuccess] = useState(false)
   return (
     <div className="home">
       <a className="skip-link" href="#register-form">Skip to registration</a>
@@ -180,15 +182,14 @@ export default function Home() {
           </div>
 
           {/* Right: registration card */}
-          <aside className="home-register-card" id="register-form" aria-labelledby="register-title">
-            <div className="home-register-head">
+          <aside className="home-register-card" id="register-form" aria-labelledby={registrationSuccess ? undefined : 'register-title'} aria-label={registrationSuccess ? 'Registration complete' : undefined}>
+            {!registrationSuccess && <div className="home-register-head">
               <ShieldSVG />
               <div>
                 <h2 id="register-title">Sign Up Now!</h2>
-                <p>Help make OWASP-OASIS a reality.</p>
               </div>
-            </div>
-            <RegisterForm type="validator" />
+            </div>}
+            <RegisterForm type="validator" onSuccess={() => setRegistrationSuccess(true)} />
           </aside>
         </div>
       </section>
