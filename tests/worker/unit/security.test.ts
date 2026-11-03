@@ -221,6 +221,7 @@ describe('security.ts', () => {
       const result = secHeaders(response);
 
       expect(result.headers.get('Content-Security-Policy')).toBeTruthy();
+      expect(result.headers.get('Content-Security-Policy')).toContain('frame-src https://calendar.google.com');
       expect(result.headers.get('X-Frame-Options')).toBe('DENY');
       expect(result.headers.get('X-Content-Type-Options')).toBe('nosniff');
       expect(result.headers.get('X-XSS-Protection')).toBe('0');
