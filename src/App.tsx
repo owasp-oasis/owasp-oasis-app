@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
+import AwardBanner from './components/AwardBanner'
 import OnboardingModal from './components/OnboardingModal/OnboardingModal'
 import Home from './pages/Home'
 import About from './pages/About'
@@ -43,6 +44,7 @@ function AppShell() {
       <AnalyticsTracker />
       {!isStandalone && <PreviewBanner />}
       {!isStandalone && <Nav onOpenOnboarding={() => setOnboardingOpen(true)} />}
+      <AwardBanner />
       <main id="main-content" tabIndex={-1}>
         <Routes>
           <Route path="/" element={<Home />} />
