@@ -361,8 +361,14 @@ Validation summary:
 | :-- | :-- |
 | Decision | Accept |
 | Confidence | High |
-| Summary | ... |
-| Next step | ... |
+
+### Summary
+
+...
+
+### Next step
+
+...
 ```
 
 Reject votes post:
@@ -372,10 +378,24 @@ Rejection summary:
 |  |  |
 | :-- | :-- |
 | Decision | Reject |
-| Reason | ... |
-| Blocking issues | ... |
-| To reconsider | ... |
+
+### Reason
+
+...
+
+### Blocking issues
+
+...
+
+### To reconsider
+
+...
 ```
+
+Duplicate votes keep Decision and Parent PR in the table, followed by a Notes
+section. Free-text sections preserve paragraphs and Markdown code blocks;
+empty optional sections display an em dash. Only structured metadata goes in
+table cells, so multiline feedback cannot break the generated table.
 
 ---
 
