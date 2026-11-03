@@ -28,6 +28,12 @@ import { ORG } from '../github.js';
 import { syncTeamBadges } from '../teamBadges.js';
 import { recordSubmittedVote } from '../analytics.js';
 
+// Free text belongs outside GFM table cells so paragraphs, pipes, and code
+// blocks render in both GitHub and the Workspace comment viewer.
+function commentSection(label: string, text: string): string {
+  return `### ${label}\n\n${text.replace(/\r\n?/g, '\n') || '—'}`;
+}
+
 /* ─── POST /api/vote ─────────────────────────────────────────── */
 export async function handleVote(request: Request, env: Env): Promise<Response> {
   // 1. CSRF
@@ -151,7 +157,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 7. Build OASIS comment body matching comment_templates.md
   const decisionLabel = decision === 'accept' ? 'Accept' : decision === 'modify' ? 'Modify' : decision === 'reject' ? 'Reject' : 'Duplicate';
-   let commentBody: string;
+  let commentBody: string;
   if (decision === 'duplicate') {
     commentBody = [
       'Duplicate report:',
@@ -160,7 +166,8 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
       `| Parent PR | #${parentPrNumber} |`,
-      `| Notes | ${notes || '—'} |`,
+      '',
+      commentSection('Notes', notes),
     ].join('\n');
   } else if (decision === 'reject') {
     commentBody = [
@@ -169,9 +176,12 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| | |',
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
-      `| Reason | ${summary || '—'} |`,
-      `| Blocking issues | ${blockingIssues || '—'} |`,
-      `| To reconsider | ${toReconsider || '—'} |`,
+      '',
+      commentSection('Reason', summary),
+      '',
+      commentSection('Blocking issues', blockingIssues),
+      '',
+      commentSection('To reconsider', toReconsider),
     ].join('\n');
   } else {
     commentBody = [
@@ -181,8 +191,10 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
       '| :-- | :-- |',
       `| Decision | ${decisionLabel} |`,
       `| Confidence | ${confidence} |`,
-      `| Summary | ${summary || '—'} |`,
-      `| Next step | ${nextStep || '—'} |`,
+      '',
+      commentSection('Summary', summary),
+      '',
+      commentSection('Next step', nextStep),
     ].join('\n');
   }
 
