@@ -183,27 +183,32 @@ export function parseValidationAssessment(body: string | null): ValidationAssess
     ['Breaks the codebase', 'breaks_codebase', { yes: 'yes', no: 'no', unknown: 'unknown' }],
   ] as const;
 
+  // OASIS emits the assessment table directly after the decision table and
+  // before the first free-text `### ` section. Anything after that heading is
+  // voter-supplied text, so a "Security assessment:" table there is ignored.
   const lines = body.split(/\r\n?|\n/);
-  const section = lines.findIndex(line => line.trim().toLowerCase() === 'security assessment:');
+  const firstSection = lines.findIndex(line => /^#{1,6}\s/.test(line.trim()));
+  const structuredLines = firstSection < 0 ? lines : lines.slice(0, firstSection);
+  const section = structuredLines.findIndex(line => line.trim().toLowerCase() === 'security assessment:');
   if (section < 0) return result;
 
   let rowIndex = section + 1;
-  while (rowIndex < lines.length && !lines[rowIndex].trim()) rowIndex++;
-  const header = parseMarkdownTableCells(lines[rowIndex] ?? '');
+  while (rowIndex < structuredLines.length && !structuredLines[rowIndex].trim()) rowIndex++;
+  const header = parseMarkdownTableCells(structuredLines[rowIndex] ?? '');
   if (!header || header.length !== 2 || header[0].toLowerCase() !== 'question' || header[1].toLowerCase() !== 'answer') {
     return result;
   }
 
   rowIndex++;
-  const separator = parseMarkdownTableCells(lines[rowIndex] ?? '');
+  const separator = parseMarkdownTableCells(structuredLines[rowIndex] ?? '');
   if (!separator || separator.length !== 2 || !separator.every(cell => /^:?-{2,}:?$/.test(cell))) {
     return result;
   }
 
   rowIndex++;
   const seen = new Set<string>();
-  for (; rowIndex < lines.length; rowIndex++) {
-    const line = lines[rowIndex].trim();
+  for (; rowIndex < structuredLines.length; rowIndex++) {
+    const line = structuredLines[rowIndex].trim();
     if (!line) break;
     const cells = parseMarkdownTableCells(line);
     if (!cells || cells.length !== 2) return {

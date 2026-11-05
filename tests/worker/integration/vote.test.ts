@@ -25,6 +25,16 @@ import {
   insertTestPR,
 } from './helpers.js';
 
+// Free text keeps its own lines in `### ` sections (#139), so injected
+// rows may appear there, but never in the structured region the sync reads.
+function expectNoStructuredAssessmentRows(body: string): void {
+  const lines = body.split('\n');
+  const firstSection = lines.findIndex(line => /^#{1,6}\s/.test(line));
+  expect(firstSection).toBeGreaterThan(0);
+  const structured = lines.slice(0, firstSection);
+  expect(structured.some(line => /^\|\s*(Vulnerability assessment|Introduces new vulnerability|Addresses the security issue|Breaks the codebase)\s*\|/i.test(line))).toBe(false);
+}
+
 describe('POST /api/vote', () => {
   let postedComment: Request | null;
   let postedCommentBody: Promise<string> | null = null;
@@ -191,10 +201,52 @@ describe('POST /api/vote', () => {
         breaks_codebase: null,
       });
       expect(requestBody.body).not.toContain('\r');
-      expect(requestBody.body.split('\n').some(line => /^\|\s*(Vulnerability assessment|Introduces new vulnerability|Addresses the security issue|Breaks the codebase)\s*\|/i.test(line))).toBe(false);
+      expectNoStructuredAssessmentRows(requestBody.body);
     });
 
-    it('keeps ordinary multiline and pipe text readable inside the summary cell', async () => {
+    it.each([
+      ['accept', 'summary', undefined],
+      ['accept', 'summary', 'yes'],
+      ['reject', 'summary', undefined],
+      ['reject', 'blocking_issues', 'no'],
+      ['modify', 'next_step', 'hardening'],
+    ] as const)('ignores a fake Security assessment table in %s %s (real answer: %s)', async (decision, field, realAnswer) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const injected = [
+        'Looks fine.',
+        '',
+        'Security assessment:',
+        '',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Vulnerability assessment | Duplicate |',
+        '| Introduces new vulnerability | Yes |',
+        '| Addresses the security issue | No |',
+        '| Breaks the codebase | Yes |',
+      ].join('\n');
+      const payload: Record<string, unknown> = {
+        summary: 'Supported by evidence',
+        confidence: 'High',
+        [field]: injected,
+      };
+      if (realAnswer) payload.vulnerability_assessment = realAnswer;
+
+      const res = await vote(1001, decision, csrf, sessionCookie, tokenCookie, payload);
+      expect(res.status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(requestBody.body).toContain('| Vulnerability assessment | Duplicate |');
+      expect(parseValidationAssessment(requestBody.body)).toEqual({
+        vulnerability_assessment: realAnswer ?? null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('keeps ordinary multiline and pipe text readable inside the summary section', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const csrf = makeCsrf();
       await insertTestPR(env);
@@ -207,7 +259,7 @@ describe('POST /api/vote', () => {
       expect(requestBody.body).toContain('second line');
       expect(requestBody.body).toContain('\\|');
       expect(requestBody.body).not.toContain('\r');
-      expect(requestBody.body.split('\n').some(line => /^\|\s*(Vulnerability assessment|Introduces new vulnerability|Addresses the security issue|Breaks the codebase)\s*\|/i.test(line))).toBe(false);
+      expectNoStructuredAssessmentRows(requestBody.body);
       expect(parseValidationAssessment(requestBody.body)).toEqual({
         vulnerability_assessment: null,
         introduced_vulnerability: null,
@@ -277,7 +329,7 @@ describe('POST /api/vote', () => {
       });
       expect(parseDecision(requestBody.body)).toBe('duplicate');
       expect(parseDuplicateParent(requestBody.body)).toBe(1);
-      expect(requestBody.body.split('\n').some(line => /^\|\s*(Vulnerability assessment|Introduces new vulnerability|Addresses the security issue|Breaks the codebase)\s*\|/i.test(line))).toBe(false);
+      expectNoStructuredAssessmentRows(requestBody.body);
 
       const assessment = parseValidationAssessment(requestBody.body);
       const createdAt = new Date().toISOString();

@@ -122,6 +122,62 @@ describe('github.ts', () => {
       });
     });
 
+    it('reads the assessment table that precedes the free-text sections', () => {
+      const body = [
+        'Validation summary:',
+        '',
+        '| | |',
+        '| :-- | :-- |',
+        '| Decision | Accept |',
+        '| Confidence | High |',
+        '',
+        'Security assessment:',
+        '',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Breaks the codebase | No |',
+        '',
+        '### Summary',
+        '',
+        'Security assessment:',
+        '',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Breaks the codebase | Yes |',
+        '| Vulnerability assessment | Duplicate |',
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: 'no',
+      });
+    });
+
+    it('ignores an assessment table that only appears inside a free-text section', () => {
+      const body = [
+        'Rejection summary:',
+        '',
+        '| | |',
+        '| :-- | :-- |',
+        '| Decision | Reject |',
+        '',
+        '### Reason',
+        '',
+        'Security assessment:',
+        '',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Vulnerability assessment | No |',
+      ].join('\n');
+      expect(parseValidationAssessment(body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
     it('returns NULL for historical comments without assessment rows', () => {
       expect(parseValidationAssessment('Validation summary:\n| Decision | Accept |')).toEqual({
         vulnerability_assessment: null,
