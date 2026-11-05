@@ -1,0 +1,55 @@
+/* ── Star prompt (modal + inline callout) ─────────────────────── */
+.sp-card { max-width: 460px; }
+
+.sp-body {
+  padding: 16px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--gray-800);
+  line-height: 1.5;
+}
+
+.sp-body p { margin: 0; }
+
+.sp-repos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-repos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9rem;
+}
+
+.sp-repos a { color: var(--blue); word-break: break-all; }
+
+.sp-star { color: var(--gray-400); font-size: 1.1rem; line-height: 1; }
+.sp-star--on { color: #e3b341; }
+
+.sp-starred-label {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  color: var(--gray-600);
+}
+
+.sp-callout {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.sp-callout p { margin: 0; }
+.sp-callout .btn { align-self: flex-start; }

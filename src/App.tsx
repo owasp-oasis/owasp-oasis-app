@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
+import { StarPromptProvider } from './context/StarPromptContext'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
@@ -92,9 +93,11 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter><WorkspaceProvider>
-        <AppShell />
-      </WorkspaceProvider></BrowserRouter>
+      <StarPromptProvider>
+        <BrowserRouter><WorkspaceProvider>
+          <AppShell />
+        </WorkspaceProvider></BrowserRouter>
+      </StarPromptProvider>
     </AuthProvider>
   )
 }
