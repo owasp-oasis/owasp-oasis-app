@@ -349,6 +349,7 @@ Validators can submit their OASIS validation decision directly from the workspac
 - One vote per user per PR (enforced in both D1 and the UI)
 - Voting only permitted on open PRs
 - Reject votes require a `summary` (reason); Accept/Modify require `confidence` (Low/Medium/High) and a `summary`
+- Accept, Modify, and Reject may include optional answers about vulnerability validity, security regressions, remediation, and functional regressions. Hardening is one vulnerability-classification answer, never a final vote. Reject's required Summary and optional Blocking issues / To reconsider fields explain why the proposal should not proceed. Duplicate keeps its parent-PR workflow and has no assessment questions.
 - All text fields capped at 2000 characters
 
 ### Comment format
@@ -362,6 +363,12 @@ Validation summary:
 | Decision | Accept |
 | Confidence | High |
 
+Security assessment:
+
+| Question | Answer |
+| :-- | :-- |
+| Vulnerability assessment | Yes |
+
 ### Summary
 
 ...
@@ -370,6 +377,14 @@ Validation summary:
 
 ...
 ```
+
+When supplied, Accept, Modify, and Reject comments also include a **Security
+assessment** table with only the questions the reviewer answered, placed
+directly after the decision table and before the first `###` section.
+Unanswered questions remain absent from the comment and NULL in D1; they are
+not converted to an unknown answer. The sync only reads an assessment table
+that appears before the first `###` heading, so text inside the free-text
+sections can never be read back as assessment answers.
 
 Reject votes post:
 ```
