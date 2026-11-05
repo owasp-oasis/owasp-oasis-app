@@ -21,6 +21,7 @@ export default function Footer() {
           <NavLink to="/about">About</NavLink>
           <NavLink to="/overview">Overview</NavLink>
           <NavLink to="/workspace/fixes">Workspace</NavLink>
+          <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/quick-start">Quick Start</NavLink>
           <NavLink to="/reviewer-guide">Reviewer Guide</NavLink>
           <NavLink to="/worked-example">Worked Example</NavLink>
