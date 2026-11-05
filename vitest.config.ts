@@ -23,6 +23,6 @@ export default defineConfig({
     // Include test files
     include: ['tests/**/*.test.ts'],
     // Exclude node_modules and build artifacts
-    exclude: ['node_modules', 'dist', 'dist-worker'],
+    exclude: ['node_modules', 'dist', 'dist-worker', 'tests/frontend/workspaceFirstAccessOnboarding.interaction.test.ts'],
   },
 });

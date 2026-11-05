@@ -23,6 +23,8 @@ import FixCostCalculator from './pages/FixCostCalculator'
 import Admin from './pages/Admin'
 import AdminAnalytics from './pages/AdminAnalytics'
 import AnalyticsTracker from './components/AnalyticsTracker'
+import { guideRoutes } from './pages/GuideRoutes'
+import WorkspaceFirstAccessOnboarding from './pages/workspace/WorkspaceFirstAccessOnboarding'
 
 function LegacyWorkspaceLink({ path }: { path: string }) {
   const { search, hash } = useLocation()
@@ -48,6 +50,7 @@ function AppShell() {
       <main id="main-content" tabIndex={-1}>
         <TeamInvitationNotice />
         <Routes>
+          {guideRoutes}
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Navigate to="/" replace />} />
           <Route path="/about" element={<About />} />
@@ -86,6 +89,7 @@ function AppShell() {
       </main>
       {!isStandalone && !isWorkspace && <Footer />}
       {!isStandalone && <OnboardingModal isOpen={onboardingOpen} onClose={() => setOnboardingOpen(false)} />}
+      {!isStandalone && <WorkspaceFirstAccessOnboarding anotherOnboardingOpen={onboardingOpen} />}
     </>
   )
 }

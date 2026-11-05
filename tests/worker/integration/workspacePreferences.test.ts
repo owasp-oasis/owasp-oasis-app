@@ -38,7 +38,16 @@ describe('Workspace preferences',()=>{
     expect((await(await first.get()).json()).preferences.layout).toBe('focus')
     expect((await(await second.get()).json()).preferences.layout).toBe('table')
   })
-  it.each([null,[],{layout:['split']},{layout:'grid'},{repositories:[-1]},{repositories:['42']},{repositories:Array(501).fill(1)},{cwes:['<script>']},{hideClosed:'yes'},{minimumSeverity:'extreme'},{role:'admin'},{show_team_badges:true},{toString:true}])('rejects invalid or unrelated input %j',async patch=>{
+  it('persists reviewer onboarding dismissal for only the signed-in account',async()=>{
+    const first=await client('first');const second=await client('second')
+    await first.put({layout:'focus'})
+    expect((await first.put({reviewerOnboardingDismissed:true})).status).toBe(200)
+    expect((await(await first.get()).json()).preferences).toMatchObject({layout:'focus',reviewerOnboardingDismissed:true})
+    await first.put({repositories:[],cwes:[],minimumSeverity:'low',hideClosed:true,hideVoted:true,keyboardShortcuts:true,layout:'split',diffView:'split'})
+    expect((await(await first.get()).json()).preferences.reviewerOnboardingDismissed).toBe(true)
+    expect((await(await second.get()).json()).preferences).not.toHaveProperty('reviewerOnboardingDismissed')
+  })
+  it.each([null,[],{layout:['split']},{layout:'grid'},{repositories:[-1]},{repositories:['42']},{repositories:Array(501).fill(1)},{cwes:['<script>']},{hideClosed:'yes'},{minimumSeverity:'extreme'},{reviewerOnboardingDismissed:'yes'},{role:'admin'},{show_team_badges:true},{toString:true}])('rejects invalid or unrelated input %j',async patch=>{
     const c=await client();expect((await c.put(patch)).status).toBe(400)
   })
   it('rejects malformed and oversized JSON',async()=>{
