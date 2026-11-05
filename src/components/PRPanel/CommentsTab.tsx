@@ -25,7 +25,7 @@ interface Comment {
   body: string
   created_at: string
   reactions: Reactions
-  oasis_decision: 'accept' | 'modify' | 'reject' | null
+  oasis_decision: 'accept' | 'modify' | 'reject' | 'duplicate' | null
 }
 
 interface Props {
