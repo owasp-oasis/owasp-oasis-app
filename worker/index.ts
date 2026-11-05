@@ -44,6 +44,7 @@ import { handleFeedback } from './handlers/feedback.js';
 import { handleLogin, handleCallback, handleMe, handleLogout } from './handlers/auth.js';
 import { handleGetPreferences, handlePutPreferences } from './handlers/preferences.js';
 import { handleVote, handleMyVotes } from './handlers/vote.js';
+import { handleStarStatus, handleStarRepos } from './handlers/stars.js';
 import { handlePRDetails, handlePRFiles, handlePRComments, handlePRCommentCreate, handlePRReact } from './handlers/prPanel.js';
 import {
   handleCreateTeam,
@@ -161,6 +162,10 @@ export default {
        /* ── Voting ─────────────────────────────────────────────────── */
        if (method === 'POST' && url.pathname === '/api/vote')          return await handleVote(request, env);
        if (method === 'GET'  && url.pathname === '/api/votes/mine')    return await handleMyVotes(request, env);
+
+       /* ── Repository stars (explicit user click only) ────────────── */
+       if (method === 'GET'  && url.pathname === '/api/github/stars')  return await handleStarStatus(request, env);
+       if (method === 'POST' && url.pathname === '/api/github/stars')  return await handleStarRepos(request, env);
 
        /* ── Community Teams ───────────────────────────────────────── */
        if (method === 'GET'  && url.pathname === '/api/teams')             return await handleTeams(env, request);

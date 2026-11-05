@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
+import { StarPromptProvider } from './context/StarPromptContext'
 import Nav from './components/Nav'
 import { MyTeamsProvider } from './context/MyTeamsContext'
 import TeamInvitationNotice from './components/TeamInvitationNotice'
@@ -97,9 +98,11 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter><MyTeamsProvider><WorkspaceProvider>
-        <AppShell />
-      </WorkspaceProvider></MyTeamsProvider></BrowserRouter>
+      <StarPromptProvider>
+        <BrowserRouter><MyTeamsProvider><WorkspaceProvider>
+          <AppShell />
+        </WorkspaceProvider></MyTeamsProvider></BrowserRouter>
+      </StarPromptProvider>
     </AuthProvider>
   )
 }

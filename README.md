@@ -455,6 +455,8 @@ The PR Panel is a slide-out side panel that loads live GitHub data for any PR in
 | `/api/pr-panel/:id/files` | GET | Changed files list with unified patch hunks |
 | `/api/pr-panel/:id/comments` | GET | All GitHub issue comments with reactions and OASIS decision parsing |
 | `/api/pr-panel/:id/react` | POST | Add a GitHub reaction to a comment using the user's OAuth token (requires auth) |
+| `/api/github/stars` | GET | Whether the signed-in user has starred `OWASP/oasis` and `owasp-oasis/project-overview` (requires auth) |
+| `/api/github/stars` | POST | Star those two repositories with the user's OAuth token; only called from an explicit button click (requires auth + CSRF) |
 
 All endpoints look up `repo_name` and PR `number` from D1 by the internal `id`, then proxy the relevant GitHub REST API endpoint using the server-side `GITHUB_TOKEN`. The `react` endpoint uses the user's session token so reactions appear as the authenticated user.
 
