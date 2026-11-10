@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { useHoldStarPrompt } from '../../context/StarPromptContext'
 import { renderGuideMarkdown } from '../../components/GuideDocument'
 import quickStartMarkdown from '../../../docs/quick-start.md?raw'
 import { completeReviewerOnboardingDismissal, shouldShowReviewerOnboarding, type ReviewerOnboardingDismissalPath } from './workspaceOnboarding'
@@ -36,6 +37,7 @@ export default function WorkspaceFirstAccessOnboarding({ anotherOnboardingOpen =
     dismissedForSession,
     anotherOnboardingOpen,
   })
+  useHoldStarPrompt(open)
 
   useEffect(() => {
     const generation = ++dismissalGeneration.current
