@@ -20,6 +20,7 @@ export interface Team {
   id: number
   name: string
   description: string
+  created_at: string
   logo_key: TeamLogoKey
   logo_image_data?: string | null
   banner_image_data?: string | null
@@ -32,6 +33,7 @@ export interface Team {
 export interface MyTeam extends Omit<Team, 'member_count' | 'attributed_validations' | 'accepted_outcome_reviews'> { role: TeamRole }
 export interface TeamOffer { id: number; team_id: number; team_name: string }
 export interface MyTeams {
+  notification_session?: string
   teams: MyTeam[]
   invites: TeamOffer[]
   join_requests: TeamOffer[]

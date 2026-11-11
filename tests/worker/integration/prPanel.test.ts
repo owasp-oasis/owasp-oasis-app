@@ -172,7 +172,7 @@ describe('PR Panel endpoints', () => {
             JSON.stringify([
               {
                 id: 123456,
-                body: '## validation summary: This is valid\n\n| decision | accept |',
+                body: 'Validation summary:\n\n| Decision | Accept |\n| Confidence | Medium |\n| Summary | Reviewed candidate |\n| Next step | Review |\n\nSecurity assessment:\n\n| Question | Answer |\n| :-- | :-- |\n| Vulnerability assessment | Hardening |\n| Introduces new vulnerability | No |',
                 user: { login: 'validator' },
                 created_at: new Date().toISOString(),
               },
@@ -205,7 +205,7 @@ describe('PR Panel endpoints', () => {
       );
 
       const body = await res.json();
-      expect(body.comments[0].body).toContain('validation summary');
+      expect(body.comments[0].body).toContain('Validation summary');
     });
 
     it('returns 404 for non-existent PR', async () => {

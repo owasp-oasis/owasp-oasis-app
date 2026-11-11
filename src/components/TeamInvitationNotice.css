@@ -1,0 +1,33 @@
+.team-invitation-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  border-bottom: 1px solid var(--line-strong);
+  font: 14px/1.5 var(--sans);
+}
+.team-invitation-notice > svg { flex-shrink: 0; }
+.team-invitation-notice p { flex: 1; margin: 0; }
+.team-invitation-notice a { color: inherit; font-weight: 600; text-decoration: underline; }
+.team-invitation-notice button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.team-invitation-notice button:hover { background: var(--white); }
+.team-invitation-notice :is(a, button):focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .team-invitation-notice { display: grid; grid-template-columns: 20px 1fr 44px; gap: 4px 10px; padding: 10px 16px; }
+  .team-invitation-notice a { grid-column: 2; min-height: 44px; display: flex; align-items: center; }
+  .team-invitation-notice button { grid-column: 3; grid-row: 1 / 3; }
+}

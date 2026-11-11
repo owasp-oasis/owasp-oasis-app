@@ -9,13 +9,16 @@ export const WORKSPACE_DEFAULTS = {
   layout: 'split' as 'split' | 'table' | 'focus',
   diffView: 'split' as 'split' | 'unified',
 }
-export type WorkspacePreferences = typeof WORKSPACE_DEFAULTS
+export type WorkspacePreferences = typeof WORKSPACE_DEFAULTS & {
+  /** Optional onboarding suppression; omitted from resettable Workspace defaults. */
+  reviewerOnboardingDismissed?: boolean
+}
 
 export function validateWorkspacePreferences(input: unknown): Partial<WorkspacePreferences> | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const output: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
-    if (!Object.prototype.hasOwnProperty.call(WORKSPACE_DEFAULTS,key)) return null
+    if (!Object.prototype.hasOwnProperty.call(WORKSPACE_DEFAULTS,key) && key !== 'reviewerOnboardingDismissed') return null
     if (key === 'repositories') {
       if (!Array.isArray(value) || value.length > 500 || !value.every(id => Number.isSafeInteger(id) && id > 0)) return null
       output[key] = [...new Set(value)]
@@ -30,6 +33,9 @@ export function validateWorkspacePreferences(input: unknown): Partial<WorkspaceP
       output[key] = value
     } else if (key === 'diffView') {
       if (typeof value !== 'string' || !['split', 'unified'].includes(String(value))) return null
+      output[key] = value
+    } else if (key === 'reviewerOnboardingDismissed') {
+      if (typeof value !== 'boolean') return null
       output[key] = value
     } else {
       if (typeof value !== 'boolean') return null

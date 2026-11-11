@@ -17,6 +17,12 @@
 .ws-screen-header--queue h1 { font:700 20px/1.3 var(--sans) }
 .ws-header-layout{display:flex;align-items:center;gap:8px;margin-left:auto}.ws-header-layout>span{font:700 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.ws-layout-switch{display:flex;gap:2px;padding:3px;background:var(--gray-100);border-radius:9px}.ws-layout-switch button{display:flex;align-items:center;gap:6px;padding:5px 10px;border:0;border-radius:7px;background:transparent;color:var(--gray-600);font-size:13px;font-weight:600;cursor:pointer}.ws-layout-switch button[aria-pressed=true]{background:var(--white);color:var(--blue-dark);box-shadow:0 0 0 1px var(--line)}.ws-layout-switch b{font:700 10px var(--mono);background:var(--blue-dark);color:var(--white);border-radius:4px;padding:1px 4px}
 .ws-content { width:100%; max-width:1240px; padding:28px; }
+.ws-reviewer-guide { display:flex; align-items:center; gap:10px; margin:0 0 16px; padding:11px 14px; border:1px solid var(--line); border-radius:8px; background:var(--white); color:var(--ink-soft) }
+.ws-reviewer-guide>svg { flex:none; color:var(--blue) }
+.ws-reviewer-guide p { margin:0; line-height:1.5 }
+.ws-reviewer-guide strong { color:var(--ink) }
+.ws-reviewer-guide a { font-weight:600; text-decoration:underline; text-underline-offset:2px }
+.ws-reviewer-guide a:focus-visible { outline:2px solid var(--blue); outline-offset:3px }
 .ws-mobile-toggle { display:none!important }
 .ws-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; padding:8px 14px; font:600 14px var(--sans); background:var(--white); color:var(--blue-dark); border:1px solid var(--line-strong); border-radius:7px; cursor:pointer; text-decoration:none }
 .ws-button--primary { background:var(--green-bright); border-color:var(--green-bright); color:var(--blue-dark) }

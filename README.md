@@ -301,6 +301,32 @@ The OAuth callback URL registered in the GitHub app must be `https://preview.owa
 
 ---
 
+## Team invitation notifications
+
+Signed-in users with pending Team invitations see one dismissible notification
+with the invitation count. **View invitations** opens **Workspace → Teams →
+Your teams**, where each invitation can be accepted or declined. Invitations to
+inactive Teams and resolved invitations are excluded. OASIS does not currently
+expire invitations automatically.
+
+Dismissing the notification leaves invitations pending and hides the reminder
+for the current login session, including page reloads and other tabs on the same
+origin. The dismissal covers invitations through the highest dismissed invite
+ID, so a later invitation shows the reminder again. The browser stores only
+this numeric watermark under a non-authenticating session-digest key; invitation
+details and session credentials are not stored in local storage. If browser
+storage is unavailable, dismissal lasts until the page reloads. Invitation state
+refreshes on login, window focus, and responses from Your teams.
+
+The existing authenticated `/api/teams/mine` endpoint supplies invitation state
+and a UI-only `notification_session` digest with `Cache-Control: no-store`.
+`POST /api/teams/:id/members` accepts `decline_invite` alongside `accept_invite`;
+both require the invitee's session, CSRF protection, and a pending invitation to
+an active Team. Acceptance resolves the invitation and creates membership in
+one database transaction. No schema migration is required.
+
+---
+
 ## Voting system
 
 Validators can submit their OASIS validation decision directly from the workspace PR panel.
@@ -323,6 +349,7 @@ Validators can submit their OASIS validation decision directly from the workspac
 - One vote per user per PR (enforced in both D1 and the UI)
 - Voting only permitted on open PRs
 - Reject votes require a `summary` (reason); Accept/Modify require `confidence` (Low/Medium/High) and a `summary`
+- Accept, Modify, and Reject may include optional answers about vulnerability validity, security regressions, remediation, and functional regressions. Hardening is one vulnerability-classification answer, never a final vote. Reject's required Summary and optional Blocking issues / To reconsider fields explain why the proposal should not proceed. Duplicate keeps its parent-PR workflow and has no assessment questions.
 - All text fields capped at 2000 characters
 
 ### Comment format
@@ -335,9 +362,29 @@ Validation summary:
 | :-- | :-- |
 | Decision | Accept |
 | Confidence | High |
-| Summary | ... |
-| Next step | ... |
+
+Security assessment:
+
+| Question | Answer |
+| :-- | :-- |
+| Vulnerability assessment | Yes |
+
+### Summary
+
+...
+
+### Next step
+
+...
 ```
+
+When supplied, Accept, Modify, and Reject comments also include a **Security
+assessment** table with only the questions the reviewer answered, placed
+directly after the decision table and before the first `###` section.
+Unanswered questions remain absent from the comment and NULL in D1; they are
+not converted to an unknown answer. The sync only reads an assessment table
+that appears before the first `###` heading, so text inside the free-text
+sections can never be read back as assessment answers.
 
 Reject votes post:
 ```
@@ -346,10 +393,24 @@ Rejection summary:
 |  |  |
 | :-- | :-- |
 | Decision | Reject |
-| Reason | ... |
-| Blocking issues | ... |
-| To reconsider | ... |
+
+### Reason
+
+...
+
+### Blocking issues
+
+...
+
+### To reconsider
+
+...
 ```
+
+Duplicate votes keep Decision and Parent PR in the table, followed by a Notes
+section. Free-text sections preserve paragraphs and Markdown code blocks;
+empty optional sections display an em dash. Only structured metadata goes in
+table cells, so multiline feedback cannot break the generated table.
 
 ---
 

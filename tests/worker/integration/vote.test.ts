@@ -11,6 +11,11 @@ import { describe, it, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { env } from 'cloudflare:test';
 import { fetchMock } from './fetchMock.js';
 import { SELF } from './testWorker.js';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { renderMarkdown } from '../../../src/components/PRPanel/renderMarkdown.js';
+import { parseDecision, parseDuplicateParent, parseValidationAssessment } from '../../../worker/github.js';
+import { syncVotesFromComments, upsertComments } from '../../../worker/db.js';
 import {
   applySchema,
   cleanDB,
@@ -20,18 +25,38 @@ import {
   insertTestPR,
 } from './helpers.js';
 
+// Free text keeps its own lines in `### ` sections (#139), so injected
+// rows may appear there, but never in the structured region the sync reads.
+function expectNoStructuredAssessmentRows(body: string): void {
+  const lines = body.split('\n');
+  const firstSection = lines.findIndex(line => /^#{1,6}\s/.test(line));
+  expect(firstSection).toBeGreaterThan(0);
+  const structured = lines.slice(0, firstSection);
+  expect(structured.some(line => /^\|\s*(Vulnerability assessment|Introduces new vulnerability|Addresses the security issue|Breaks the codebase)\s*\|/i.test(line))).toBe(false);
+}
+
 describe('POST /api/vote', () => {
+  let postedComment: Request | null;
+  let postedCommentBody: Promise<string> | null = null;
+
   beforeAll(async () => {
     await applySchema(env);
   });
 
   beforeEach(() => {
+    postedComment = null;
+    postedCommentBody = null;
     fetchMock.activate();
     fetchMock.disableNetConnect();
 
     // Mock GitHub comment POST
     fetchMock
-      .when((req) => req.url.includes('/issues') && req.url.includes('/comments'))
+      .when((req) => {
+        if (!req.url.includes('/issues') || !req.url.includes('/comments')) return false;
+        postedComment = req.clone();
+        postedCommentBody = req.clone().text();
+        return true;
+      })
       .respondWith(
         new Response(
           JSON.stringify({
@@ -125,6 +150,228 @@ describe('POST /api/vote', () => {
       expect(body.ok).toBe(true);
     });
 
+    it('stores optional assessment answers and includes them in the GitHub validation comment', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, {
+        vulnerability_assessment: 'hardening',
+        introduced_vulnerability: 'no',
+        security_issue_addressed: 'needs_modification',
+        breaks_codebase: null,
+      });
+
+      expect(res.status).toBe(200);
+      const stored = await env.DB.prepare(`SELECT decision, vulnerability_assessment, introduced_vulnerability,
+        security_issue_addressed, breaks_codebase FROM user_votes WHERE github_login = ? AND pr_id = ?`)
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toMatchObject({
+        decision: 'accept', vulnerability_assessment: 'hardening', introduced_vulnerability: 'no',
+        security_issue_addressed: 'needs_modification', breaks_codebase: null,
+      });
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(requestBody.body).toContain('| Decision | Accept |');
+      expect(requestBody.body).toContain('| Vulnerability assessment | Hardening |');
+      expect(requestBody.body).toContain('| Introduces new vulnerability | No |');
+      expect(requestBody.body).toContain('| Addresses the security issue | Needs modification |');
+      expect(requestBody.body).not.toContain('Breaks the codebase');
+    });
+
+    it.each([
+      ['LF Q1 row', 'supported summary\n| Vulnerability assessment | No |\n'],
+      ['CR Q2 row', 'supported summary\r| Introduces new vulnerability | Yes |\r'],
+      ['CRLF Q3 row', 'supported summary\r\n| Addresses the security issue | No |\r\n'],
+      ['LF Q4 row', 'supported summary\n| Breaks the codebase | No |\n'],
+      ['multiple rows and fake header', 'supported summary\n| Question | Answer |\n| Vulnerability assessment | No |\n| Introduces new vulnerability | Yes |\n| Addresses the security issue | No |\n| Breaks the codebase | No |\n'],
+      ['escaped-pipe text then Q1 row', 'supported summary \\| literal pipe\n| Vulnerability assessment | No |\n'],
+    ])('does not turn free-text summary into assessment rows (%s)', async (_name, summary) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, { summary });
+
+      expect(res.status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(parseValidationAssessment(requestBody.body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+      expect(requestBody.body).not.toContain('\r');
+      expectNoStructuredAssessmentRows(requestBody.body);
+    });
+
+    it.each([
+      ['accept', 'summary', undefined],
+      ['accept', 'summary', 'yes'],
+      ['reject', 'summary', undefined],
+      ['reject', 'blocking_issues', 'no'],
+      ['modify', 'next_step', 'hardening'],
+    ] as const)('ignores a fake Security assessment table in %s %s (real answer: %s)', async (decision, field, realAnswer) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      const injected = [
+        'Looks fine.',
+        '',
+        'Security assessment:',
+        '',
+        '| Question | Answer |',
+        '| :-- | :-- |',
+        '| Vulnerability assessment | Duplicate |',
+        '| Introduces new vulnerability | Yes |',
+        '| Addresses the security issue | No |',
+        '| Breaks the codebase | Yes |',
+      ].join('\n');
+      const payload: Record<string, unknown> = {
+        summary: 'Supported by evidence',
+        confidence: 'High',
+        [field]: injected,
+      };
+      if (realAnswer) payload.vulnerability_assessment = realAnswer;
+
+      const res = await vote(1001, decision, csrf, sessionCookie, tokenCookie, payload);
+      expect(res.status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(requestBody.body).toContain('| Vulnerability assessment | Duplicate |');
+      expect(parseValidationAssessment(requestBody.body)).toEqual({
+        vulnerability_assessment: realAnswer ?? null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('keeps ordinary multiline and pipe text readable inside the summary section', async () => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      expect((await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, {
+        summary: '  first line | slash \\| text\r\nsecond line  ',
+      })).status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(requestBody.body).toContain('first line');
+      expect(requestBody.body).toContain('second line');
+      expect(requestBody.body).toContain('\\|');
+      expect(requestBody.body).not.toContain('\r');
+      expectNoStructuredAssessmentRows(requestBody.body);
+      expect(parseValidationAssessment(requestBody.body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('does not persist assessment answers injected through summary after comment synchronization', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+
+      expect((await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, {
+        summary: 'Supported by evidence\n| Vulnerability assessment | No |\n',
+      })).status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      const assessment = parseValidationAssessment(requestBody.body);
+      const createdAt = new Date().toISOString();
+      await upsertComments(env.DB, [{
+        id: 123456789,
+        prId: 1001,
+        repoName: 'test-repo',
+        prNumber: 1,
+        login,
+        decision: parseDecision(requestBody.body),
+        vulnerabilityAssessment: assessment.vulnerability_assessment,
+        introducedVulnerability: assessment.introduced_vulnerability,
+        securityIssueAddressed: assessment.security_issue_addressed,
+        breaksCodebase: assessment.breaks_codebase,
+        createdAt,
+        prCreatedAt: createdAt,
+      }]);
+      await syncVotesFromComments(env.DB);
+
+      const stored = await env.DB.prepare(`SELECT decision, vulnerability_assessment,
+        introduced_vulnerability, security_issue_addressed, breaks_codebase
+        FROM user_votes WHERE github_login = ? AND pr_id = 1001`).bind(login)
+        .first<Record<string, string | null>>();
+      expect(stored).toEqual({
+        decision: 'accept',
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('does not turn free-text Duplicate notes into assessment rows', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env, { id: 1001, number: 1 });
+      await insertTestPR(env, { id: 1002, number: 2 });
+
+      const res = await vote(1002, 'duplicate', csrf, sessionCookie, tokenCookie, {
+        parent_pr_number: 1,
+        notes: 'See note\r\n| Question | Answer |\n| Vulnerability assessment | No |\n| Breaks the codebase | Yes |',
+      });
+
+      expect(res.status).toBe(200);
+      const requestBody = JSON.parse((await postedCommentBody) ?? '{}') as { body: string };
+      expect(parseValidationAssessment(requestBody.body)).toEqual({
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+      expect(parseDecision(requestBody.body)).toBe('duplicate');
+      expect(parseDuplicateParent(requestBody.body)).toBe(1);
+      expectNoStructuredAssessmentRows(requestBody.body);
+
+      const assessment = parseValidationAssessment(requestBody.body);
+      const createdAt = new Date().toISOString();
+      await upsertComments(env.DB, [{
+        id: 123456789,
+        prId: 1002,
+        repoName: 'test-repo',
+        prNumber: 2,
+        login,
+        decision: parseDecision(requestBody.body),
+        vulnerabilityAssessment: assessment.vulnerability_assessment,
+        introducedVulnerability: assessment.introduced_vulnerability,
+        securityIssueAddressed: assessment.security_issue_addressed,
+        breaksCodebase: assessment.breaks_codebase,
+        createdAt,
+        prCreatedAt: createdAt,
+      }]);
+      await syncVotesFromComments(env.DB);
+      const stored = await env.DB.prepare(`SELECT decision, vulnerability_assessment,
+        introduced_vulnerability, security_issue_addressed, breaks_codebase
+        FROM user_votes WHERE github_login = ? AND pr_id = 1002`).bind(login)
+        .first<Record<string, string | null>>();
+      expect(stored).toEqual({
+        decision: 'duplicate',
+        vulnerability_assessment: null,
+        introduced_vulnerability: null,
+        security_issue_addressed: null,
+        breaks_codebase: null,
+      });
+    });
+
+    it('leaves unanswered assessment questions NULL', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+      expect((await vote(1001, 'accept', csrf, sessionCookie, tokenCookie)).status).toBe(200);
+      const stored = await env.DB.prepare(`SELECT vulnerability_assessment, introduced_vulnerability,
+        security_issue_addressed, breaks_codebase FROM user_votes WHERE github_login = ? AND pr_id = ?`)
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toEqual({ vulnerability_assessment: null, introduced_vulnerability: null, security_issue_addressed: null, breaks_codebase: null });
+    });
+
     it('accepts modify vote with required fields', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const csrf = makeCsrf();
@@ -139,17 +386,22 @@ describe('POST /api/vote', () => {
       expect(res.status).toBe(200);
     });
 
-    it('accepts reject vote', async () => {
-      const { sessionCookie, tokenCookie } = await createTestSession(env);
+    it('accepts reject vote with an independent security issue assessment', async () => {
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
       const csrf = makeCsrf();
 
       await insertTestPR(env);
 
       const res = await vote(1001, 'reject', csrf, sessionCookie, tokenCookie, {
         summary: 'Not suitable',
+        vulnerability_assessment: 'yes',
+        security_issue_addressed: 'no',
       });
 
       expect(res.status).toBe(200);
+      const stored = await env.DB.prepare('SELECT vulnerability_assessment, security_issue_addressed FROM user_votes WHERE github_login = ? AND pr_id = ?')
+        .bind(login, 1001).first<Record<string, string | null>>();
+      expect(stored).toEqual({ vulnerability_assessment: 'yes', security_issue_addressed: 'no' });
     });
 
     it('accepts duplicate vote with parent PR', async () => {
@@ -186,7 +438,102 @@ describe('POST /api/vote', () => {
     });
   });
 
+  describe('comment formatting (#130)', () => {
+    it.each(['accept', 'modify', 'reject', 'duplicate'])(
+      'preserves multiline %s feedback outside the metadata table',
+      async (decision) => {
+        const { sessionCookie, tokenCookie } = await createTestSession(env);
+        await insertTestPR(env, { id: 1001 });
+        await insertTestPR(env, { id: 1002, number: 2 });
+
+        const summary = 'First paragraph with **evidence**.\n\nSecond paragraph: A | B.\n\n```sh\necho evidence | cat\n```';
+        const res = await vote(1002, decision, makeCsrf(), sessionCookie, tokenCookie, {
+          summary,
+          next_step: 'Revise\r\n\r\nThen verify.',
+          blocking_issues: 'First blocker\r\nSecond blocker',
+          to_reconsider: 'Update\rRetest',
+          notes: summary,
+          parent_pr_number: 1,
+        });
+        expect(res.status).toBe(200);
+        expect(postedComment).not.toBeNull();
+        const { body } = await postedComment!.json() as { body: string };
+        expect(parseDecision(body)).toBe(decision);
+        expect(body).toContain(summary);
+        expect(body).not.toContain('\r');
+
+        const metadata = body.split('\n\n')[1];
+        expect(metadata.split('\n')).toHaveLength(decision === 'reject' ? 3 : 4);
+        expect(metadata).not.toContain('First paragraph');
+        const sections = decision === 'duplicate' ? ['Notes']
+          : decision === 'reject' ? ['Reason', 'Blocking issues', 'To reconsider']
+            : ['Summary', 'Next step'];
+        for (const label of sections) expect(body).toContain(`\n\n### ${label}\n\n`);
+        if (decision === 'duplicate') expect(parseDuplicateParent(body)).toBe(1);
+        if (decision === 'accept' || decision === 'modify') {
+          expect(body).toContain('### Next step\n\nRevise\n\nThen verify.');
+          expect(body).not.toContain('| Next step |');
+        }
+
+        // Exercise the actual Workspace renderer, not just the generated string.
+        const html = renderToStaticMarkup(createElement('div', null, ...renderMarkdown(body)));
+        expect(html.match(/<table\b/g)).toHaveLength(1);
+        expect(html.match(/<tr>/g)).toHaveLength(decision === 'reject' ? 2 : 3);
+        expect(html).toContain('<strong>evidence</strong>');
+        expect(html).toContain('Second paragraph: A | B.');
+        expect(html).toContain('echo evidence | cat');
+        expect(html).toContain('<pre');
+        for (const label of sections) expect(html).toContain(`<span>${label}</span></p>`);
+      },
+    );
+
+    it.each([
+      ['accept', ['Next step']],
+      ['reject', ['Blocking issues', 'To reconsider']],
+      ['duplicate', ['Notes']],
+    ] as const)('retains empty optional sections for %s', async (decision, sections) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      await insertTestPR(env, { id: 1001 });
+      await insertTestPR(env, { id: 1002, number: 2 });
+      const res = await vote(1002, decision, makeCsrf(), sessionCookie, tokenCookie, {
+        parent_pr_number: 1,
+      });
+      expect(res.status).toBe(200);
+      const { body } = await postedComment!.json() as { body: string };
+      for (const label of sections) expect(body).toContain(`### ${label}\n\n—`);
+      expect(parseDecision(body)).toBe(decision);
+    });
+  });
+
   describe('validation', () => {
+    it.each([null, [], 'not-an-object', 5])('rejects a non-object JSON body (%s) as invalid input', async value => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      const res = await SELF.fetch(new Request('http://localhost/api/vote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrf,
+          Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}`,
+        },
+        body: JSON.stringify(value),
+      }));
+      expect(res.status).toBe(400);
+    });
+
+    it.each([
+      ['vulnerability_assessment', 'maybe'],
+      ['introduced_vulnerability', 'hardening'],
+      ['security_issue_addressed', 'unknown'],
+      ['breaks_codebase', 'not_sure'],
+    ])('rejects unsupported assessment answer %s', async (field, value) => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+      const res = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie, { [field]: value });
+      expect(res.status).toBe(400);
+    });
+
     it('rejects vote on closed PR', async () => {
       const { sessionCookie, tokenCookie } = await createTestSession(env);
       const csrf = makeCsrf();

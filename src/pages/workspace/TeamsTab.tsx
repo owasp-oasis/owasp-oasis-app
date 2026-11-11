@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useMyTeams } from '../../context/MyTeamsContext'
 import TeamWorkspace from './TeamWorkspace'
-import { createTeamWithMedia, emptyMyTeams, errorMessage, teamGet, teamPost, type MembershipMode, type MyTeams, type Team, type TeamLogoKey } from './teamApi'
+import { createTeamWithMedia, errorMessage, teamGet, teamPost, type MembershipMode, type Team, type TeamLogoKey } from './teamApi'
 import TeamLogoChoice, { type LogoSource } from './TeamLogoChoice'
 import TeamAvatar from './TeamAvatar'
 import TeamMediaUpload from './TeamMediaUpload'
@@ -18,9 +19,9 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const teamId = Number(params.get('team'))
   const creating = params.get('create') === '1'
   const view = params.get('view') === 'explore' || !user ? 'explore' : 'mine'
-  const [mine, setMine] = useState<MyTeams>(emptyMyTeams)
-  const [mineLoading, setMineLoading] = useState(true)
-  const [mineError, setMineError] = useState<string | null>(null)
+  const { mine, loading: mineLoading, error: mineError, refresh: loadMine } = useMyTeams()
+  const inboxHeading = useRef<HTMLHeadingElement>(null)
+  const showInvitations = params.get('invitations') === '1'
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
@@ -39,15 +40,7 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
   const nameInput = useRef<HTMLInputElement>(null)
 
-  const loadMine = useCallback(async () => {
-    if (!user) { setMine(emptyMyTeams); setMineLoading(false); return }
-    setMineError(null)
-    try { setMine(await teamGet<MyTeams>('/api/teams/mine')) }
-    catch (caught) { setMineError(errorMessage(caught)) }
-    finally { setMineLoading(false) }
-  }, [user])
-
-  useEffect(() => { setMine(emptyMyTeams); setMineLoading(true); void loadMine() }, [loadMine])
+  useEffect(() => { if (showInvitations && !mineLoading) inboxHeading.current?.focus() }, [showInvitations, mineLoading])
   useEffect(() => { if (creating) nameInput.current?.focus() }, [creating])
   useEffect(() => { if (!creating) { setLogoFile(null); setBannerFile(null); setLogoSource('builtin') } }, [creating])
   const openTeam = (id: number) => setParams({ view: 'mine', team: String(id) })
@@ -85,8 +78,16 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     if (busy) return
     setBusy(true); setError(null)
     try { await teamPost('/api/teams/' + team + '/members', body); openTeam(team); refreshed() }
-    catch (caught) { setError(errorMessage(caught)) }
+    catch (caught) { setError(errorMessage(caught)); void loadMine() }
     finally { setBusy(false) }
+  }
+
+  async function decline(team: number, inviteId: number) {
+    if (busy) return
+    setBusy(true); setError(null)
+    try { await teamPost('/api/teams/' + team + '/members', { action: 'decline_invite', invite_id: inviteId }) }
+    catch (caught) { setError(errorMessage(caught)) }
+    finally { await loadMine(); setBusy(false) }
   }
 
   if (authLoading) return <p className="team-empty" role="status">Loading Teams…</p>
@@ -128,9 +129,10 @@ export default function TeamsTab({ data, loading, onCreated }: Props) {
     </nav>
     {view === 'mine' && <>
       {mineError && <div className="team-error" role="alert">{mineError} <button className="team-link" onClick={() => void loadMine()}>Retry</button></div>}
-      {(mine.invites.length > 0 || mine.ownership_transfers.length > 0 || mine.join_requests.length > 0) && <section className="team-surface team-inbox" aria-label="Invitations and requests">
-        <h3>Invitations & requests</h3>
-        {mine.invites.map(invite => <div className="team-row" key={'invite-' + invite.id}><div><strong>{invite.team_name}</strong><p>You’re invited to join this team.</p></div><button disabled={busy} className="team-button team-button--primary" onClick={() => void accept(invite.team_id, { action: 'accept_invite', invite_id: invite.id })}>Accept invitation</button></div>)}
+      {(showInvitations || mine.invites.length > 0 || mine.ownership_transfers.length > 0 || mine.join_requests.length > 0) && <section className="team-surface team-inbox" aria-label="Invitations and requests">
+        <h3 ref={inboxHeading} tabIndex={-1}>Invitations & requests</h3>
+        {showInvitations && !mineLoading && !mineError && mine.invites.length === 0 && <p role="status">You have no pending Team invitations.</p>}
+        {mine.invites.map(invite => <div className="team-row" key={'invite-' + invite.id}><div><strong>{invite.team_name}</strong><p>You’re invited to join this team.</p></div><div className="team-actions"><button disabled={busy} className="team-button team-button--primary" onClick={() => void accept(invite.team_id, { action: 'accept_invite', invite_id: invite.id })}>Accept invitation</button><button disabled={busy} className="team-button" onClick={() => void decline(invite.team_id, invite.id)}>Decline invitation</button></div></div>)}
         {mine.ownership_transfers.map(transfer => <div className="team-row" key={'transfer-' + transfer.id}><div><strong>{transfer.team_name}</strong><p>You’ve been offered ownership. The current owner becomes a member when you accept.</p></div><button disabled={busy} className="team-button" onClick={() => void accept(transfer.team_id, { action: 'accept_transfer', transfer_id: transfer.id })}>Accept ownership</button></div>)}
         {mine.join_requests.map(request => <div className="team-row" key={'request-' + request.id}><div><strong>{request.team_name}</strong><p>Your join request is awaiting approval.</p></div><span className="team-badge">Pending</span></div>)}
       </section>}
