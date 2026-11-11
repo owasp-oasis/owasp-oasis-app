@@ -59,6 +59,7 @@ function AppShell() {
           <Route path="/workspace/contributors" element={<LegacyWorkspaceLink path="/workspace/validators" />} />
           <Route path="/workspace/validators" element={<Workspace activeTab="contributors" />} />
           <Route path="/workspace/maintainers" element={<Workspace activeTab="maintainers" />} />
+          <Route path="/workspace/maintainer-workspace" element={<Workspace activeTab="maintainer-workspace" />} />
           <Route path="/workspace/teams" element={<Workspace activeTab="teams" />} />
           {/* Intentionally unlisted: available by direct link, but omitted from Workspace navigation. */}
           <Route path="/workspace/tools" element={<LegacyWorkspaceLink path="/workspace/fix-automation" />} />

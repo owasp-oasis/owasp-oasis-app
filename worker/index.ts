@@ -31,6 +31,7 @@ import { ManualSyncJobWorkflow } from './manualSyncJobWorkflow.js';
 import {
   handleMeta,
   handleRepos,
+  handleRepoCatalog,
   handleRepoDetail,
   handlePRs,
   handleContributors,
@@ -60,7 +61,16 @@ import {
   handleTeamSettings,
   handleTeamMedia,
 } from './handlers/teams.js';
-import { handlePRWorkflow, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
+import { handlePRWorkflow, handleValidationEvidence, handleMaintainerDecision, handleSubmitUpstream } from './handlers/workflow.js';
+import { handleVerifiedMaintainers } from './handlers/verifiedMaintainers.js';
+import {
+  handleRepoManagement,
+  handleStewardshipInbox,
+  handleReviewStewardshipRequest,
+  handleEndRepoStewardship,
+  handleRepoRoleAssignment,
+  handleRemoveRegisteredMaintainer,
+} from './handlers/repoManagement.js';
 import { handleSyncRunDetail, handleSyncStatus } from './handlers/syncStatus.js';
 import { handleRetrySyncJob } from './handlers/syncRetry.js';
 import { handleCancelSyncRun } from './handlers/syncCancel.js';
@@ -318,6 +328,31 @@ export default {
          return await handleMeta(env, request);
        if (method === 'GET' && url.pathname === '/api/workspace/repos')
          return await handleRepos(env, request, url);
+       if (method === 'GET' && url.pathname === '/api/workspace/repo-catalog')
+         return await handleRepoCatalog(env, request);
+       if (method === 'GET' && url.pathname === '/api/workspace/stewardship-requests')
+         return await handleStewardshipInbox(request, env);
+
+       const repoManagementMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)\/management$/);
+       if (repoManagementMatch && (method === 'GET' || method === 'POST')) {
+         return await handleRepoManagement(request, env, Number(repoManagementMatch[1]));
+       }
+       const stewardshipReviewMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)\/stewardship-requests\/([0-9a-f-]+)$/i);
+       if (method === 'POST' && stewardshipReviewMatch) {
+         return await handleReviewStewardshipRequest(request, env, Number(stewardshipReviewMatch[1]), stewardshipReviewMatch[2]);
+       }
+       const endStewardshipMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)\/steward$/);
+       if (method === 'POST' && endStewardshipMatch) {
+         return await handleEndRepoStewardship(request, env, Number(endStewardshipMatch[1]));
+       }
+       const repoRoleMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)\/roles(?:\/([0-9a-f-]+))?$/i);
+       if (method === 'POST' && repoRoleMatch) {
+         return await handleRepoRoleAssignment(request, env, Number(repoRoleMatch[1]), repoRoleMatch[2]);
+       }
+       const removeMaintainerMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)\/maintainers\/(\d+)$/);
+       if (method === 'POST' && removeMaintainerMatch) {
+         return await handleRemoveRegisteredMaintainer(request, env, Number(removeMaintainerMatch[1]), Number(removeMaintainerMatch[2]));
+       }
 
        /* ── Repo detail (for ProjectPanel slide-out) ────────────────── */
        const repoDetailMatch = url.pathname.match(/^\/api\/workspace\/repos\/(\d+)$/);
@@ -338,9 +373,16 @@ export default {
        }
 
        /* ── Maintainer disposition and upstream submission ─────────── */
+       if (url.pathname === '/api/maintainer/repositories' && (method === 'GET' || method === 'POST')) {
+         return await handleVerifiedMaintainers(request, env);
+       }
        const workflowMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/workflow$/);
        if (method === 'GET' && workflowMatch) {
          return await handlePRWorkflow(request, env, Number(workflowMatch[1]));
+       }
+       const validationEvidenceMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/validation-evidence$/);
+       if (method === 'GET' && validationEvidenceMatch) {
+         return await handleValidationEvidence(request, env, Number(validationEvidenceMatch[1]));
        }
        const maintainerDecisionMatch = url.pathname.match(/^\/api\/pr-panel\/(\d+)\/maintainer-decision$/);
        if (method === 'POST' && maintainerDecisionMatch) {

@@ -298,3 +298,29 @@ workflow shell steps with synthetic contact data and a mock HTTP client.
 These checks verify that success and failure paths never print contact data,
 that only aggregate counts are reported, and that failed registration fetches
 stop the step. GitHub validation runs this check separately from `npm run check`.
+
+## Repository management and maintainer workflow
+
+The stewardship and maintainer integration tests live in:
+
+- `tests/worker/integration/repoManagement.test.ts`
+- `tests/worker/integration/verifiedMaintainers.test.ts`
+- `tests/worker/integration/workflow.test.ts`
+- `tests/worker/integration/vote.test.ts`
+
+Run the focused Worker boundary tests with:
+
+```bash
+npx vitest run tests/worker/integration/repoManagement.test.ts \
+  tests/worker/integration/verifiedMaintainers.test.ts \
+  tests/worker/integration/workflow.test.ts \
+  tests/worker/integration/vote.test.ts
+```
+
+The GitHub requests in these tests are mocked. They verify authorization,
+revision checks, repository IDs, retries, and audit records, but they do not
+replace preview testing with an OAuth account and a controlled GitHub
+repository. `npm run db:seed` applies the current `schema.sql` snapshot and
+development seed data to the local D1 database; upgrade behavior must be
+validated by applying ordered files from `migrations/` to a separate empty
+local database. Never use the seed command against a remote database.

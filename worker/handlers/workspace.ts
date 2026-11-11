@@ -32,15 +32,21 @@ const WORKFLOW_FIELDS = `
              WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision,
            (SELECT md.created_at FROM maintainer_decisions md
              WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision_at,
+           (SELECT md.head_sha FROM maintainer_decisions md
+             WHERE md.pr_id = p.id ORDER BY md.created_at DESC, md.id DESC LIMIT 1) AS maintainer_decision_head_sha,
            (SELECT us.status FROM upstream_submissions us
              WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_status,
+           (SELECT us.validated_head_sha FROM upstream_submissions us
+             WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_head_sha,
            (SELECT us.upstream_pr_url FROM upstream_submissions us
              WHERE us.source_pr_id = p.id ORDER BY us.created_at DESC, us.id DESC LIMIT 1) AS upstream_pr_url`;
 
 const EMPTY_WORKFLOW_FIELDS = `
            NULL AS maintainer_decision,
            NULL AS maintainer_decision_at,
+           NULL AS maintainer_decision_head_sha,
            NULL AS upstream_status,
+           NULL AS upstream_head_sha,
            NULL AS upstream_pr_url`;
 
 async function getRepoPRRows(db: D1Database, repoId: number): Promise<D1Result<Record<string, unknown>>> {
@@ -107,6 +113,15 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
   return lbResponse(results, req);
 }
 
+/** Small read-only catalog used by signed-in maintainers to connect an OASIS fork. */
+export async function handleRepoCatalog(env: Env, req: Request): Promise<Response> {
+  const rows = await env.DB.prepare(`
+    SELECT id, name, full_name, description, language, upstream_url
+      FROM repos WHERE active = 1 ORDER BY full_name COLLATE NOCASE
+  `).all();
+  return lbResponse(rows.results ?? [], req);
+}
+
 /**
  * GET /api/workspace/repos/:id
  * Returns detailed project info for the ProjectPanel slide-out:
@@ -171,7 +186,8 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
     'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const base = `
-    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url, r.language,
+    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url, p.head_sha,
+           r.full_name AS oasis_repo_full_name, r.upstream_url, r.language,
            comment_count,
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,

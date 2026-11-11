@@ -11,6 +11,7 @@ import './ProjectPanel.css';
 import type { Decision } from '../VoteForm';
 import PRPanel from '../PRPanel/PRPanel';
 import ContributorPanel from '../ContributorPanel/ContributorPanel';
+import RepoStewardshipAbout from './RepoStewardshipAbout';
 
 /* ─── Types ───────────────────────────────────────────────────── */
 interface Repo {
@@ -75,6 +76,7 @@ interface Props {
   onClose: () => void;
   onNavigateToPRs?: (repoId: number) => void;
   myVotes: Map<number, Decision>;
+  mockup?: boolean;
 }
 
 /* ─── Skeleton shimmer (matching ContributorPanel) ─────────────── */
@@ -164,8 +166,40 @@ function LangBadge({ lang }: { lang: string | null }) {
   );
 }
 
+function ProjectOverviewSummary({ repo }: { repo: Repo }) {
+  return (
+    <>
+      <div className="pp-overview-header">
+        <h2>{repo.full_name}</h2>
+        {repo.language && <LangBadge lang={repo.language} />}
+      </div>
+
+      {repo.description && <p className="pp-overview-description">{repo.description}</p>}
+
+      <div className="pp-overview-stats">
+        <div className="stat"><span className="stat-value">{repo.open_prs}</span><span className="stat-label">Open PRs</span></div>
+        <div className="stat"><span className="stat-value">{repo.total_prs}</span><span className="stat-label">Total PRs</span></div>
+        <div className="stat"><span className="stat-value">{repo.contributors}</span><span className="stat-label">Contributors</span></div>
+      </div>
+
+      {repo.stars > 0 && <div className="pp-overview-stars"><span>⭐ {repo.stars.toLocaleString()} stars</span></div>}
+
+      {repo.upstream_url && <div className="pp-overview-upstream"><a href={repo.upstream_url} target="_blank" rel="noopener noreferrer">↗ View upstream repo</a></div>}
+
+      <div className="pp-overview-consensus">
+        <div className="consensus-labels">
+          <span className="cl-accept">✓ {repo.total_accept} Accept</span>
+          <span className="cl-modify">~ {repo.total_modify} Modify</span>
+          <span className="cl-reject">✕ {repo.total_reject} Reject</span>
+        </div>
+        <ConsensusBar accept={repo.total_accept} modify={repo.total_modify} reject={repo.total_reject} />
+      </div>
+    </>
+  );
+}
+
 /* ─── Main panel ─────────────────────────────────────────────── */
-export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
+export default function ProjectPanel({ repo, onClose, myVotes, mockup = false }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('overview');
   const [panelData, setPanelData] = useState<RepoDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -201,6 +235,15 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
     if (!repo) return;
     setLoading(true);
     setError(null);
+    if (mockup) {
+      setPanelData({
+        repo: { ...repo, full_name: `owasp-oasis/${repo.name}` },
+        prs: [],
+        top_contributors: [],
+      });
+      setLoading(false);
+      return;
+    }
     fetch(`/api/workspace/repos/${repo.id}`)
       .then((r) => r.json() as Promise<{ ok: boolean; error?: string } & Partial<RepoDetailResponse>>)
       .then((d) => {
@@ -212,7 +255,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
       })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, [repo]);
+  }, [repo, mockup]);
 
   useEffect(() => {
     fetchData();
@@ -297,7 +340,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
 
         {/* Tab bar */}
         <div className="pp-tab-bar" role="tablist">
-          {(['overview', 'prs', 'contributors'] as PanelTab[]).map((tab) => (
+          {(['prs', 'contributors', 'overview'] as PanelTab[]).map((tab) => (
             <button
               key={tab}
               id={`pp-tab-${tab}`}
@@ -307,7 +350,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
               className={`pp-tab${activeTab === tab ? ' pp-tab--active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'overview' ? 'About' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -333,56 +376,8 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
                 <SkeletonOverviewTab />
               ) : panelData ? (
                 <>
-                  <div className="pp-overview-header">
-                    <h2>{panelData.repo.full_name}</h2>
-                    {panelData.repo.language && <LangBadge lang={panelData.repo.language} />}
-                  </div>
-
-                  {panelData.repo.description && (
-                    <p className="pp-overview-description">{panelData.repo.description}</p>
-                  )}
-
-                  <div className="pp-overview-stats">
-                    <div className="stat">
-                      <span className="stat-value">{panelData.repo.open_prs}</span>
-                      <span className="stat-label">Open PRs</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-value">{panelData.repo.total_prs}</span>
-                      <span className="stat-label">Total PRs</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-value">{panelData.repo.contributors}</span>
-                      <span className="stat-label">Contributors</span>
-                    </div>
-                  </div>
-
-                  {panelData.repo.stars > 0 && (
-                    <div className="pp-overview-stars">
-                      <span>⭐ {panelData.repo.stars.toLocaleString()} stars</span>
-                    </div>
-                  )}
-
-                  {panelData.repo.upstream_url && (
-                    <div className="pp-overview-upstream">
-                      <a href={panelData.repo.upstream_url} target="_blank" rel="noopener noreferrer">
-                        ↗ View upstream repo
-                      </a>
-                    </div>
-                  )}
-
-                  <div className="pp-overview-consensus">
-                    <div className="consensus-labels">
-                      <span className="cl-accept">✓ {panelData.repo.total_accept} Accept</span>
-                      <span className="cl-modify">~ {panelData.repo.total_modify} Modify</span>
-                      <span className="cl-reject">✕ {panelData.repo.total_reject} Reject</span>
-                    </div>
-                    <ConsensusBar
-                      accept={panelData.repo.total_accept}
-                      modify={panelData.repo.total_modify}
-                      reject={panelData.repo.total_reject}
-                    />
-                  </div>
+                  {!mockup && <ProjectOverviewSummary repo={panelData.repo} />}
+                  <RepoStewardshipAbout repoId={panelData.repo.id} repoName={panelData.repo.name} repoFullName={panelData.repo.full_name} />
                 </>
               ) : null}
             </div>
