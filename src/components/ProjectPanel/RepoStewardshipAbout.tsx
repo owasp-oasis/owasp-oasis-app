@@ -11,6 +11,36 @@ type Management = {
   maintainers: Maintainer[]
   viewer: { github_user_id: number | null; github_login: string | null; is_admin: boolean; is_steward: boolean; request: { id: string; status: string; requested_at: string; reviewed_at: string | null } | null; open_request_exists: boolean; pending_request: StewardRequest | null }
 }
+type DemoView = 'contributor' | 'reviewer' | 'steward' | 'appointed'
+
+function demoManagement(view: DemoView): Management {
+  const hasSteward = view === 'steward' || view === 'appointed'
+  const steward = hasSteward ? view === 'appointed' ? {
+    github_user_id: 9102, github_login: 'jordan-oss-demo', github_name: 'Jordan OSS', assigned_at: '2026-11-11T00:00:00.000Z',
+  } : {
+    github_user_id: 9101, github_login: 'alex-security-demo', github_name: 'Alex Security', assigned_at: '2026-10-01T00:00:00.000Z',
+  } : null
+  const applicant: StewardRequest = {
+    id: 'demo-request-1', requester_github_user_id: 9102, requester_login: 'jordan-oss-demo', requester_name: 'Jordan OSS', requested_at: '2026-11-10T00:00:00.000Z', status: 'pending',
+  }
+  return {
+    steward,
+    role_assignments: hasSteward ? [
+      { id: 'demo-role-1', github_user_id: 9103, github_login: 'riley-review-demo', github_name: 'Riley Review', role_name: 'Security Reviewer', role_description: 'Reviews generated fixes and checks regression coverage.' },
+      { id: 'demo-role-2', github_user_id: 9104, github_login: 'sam-fix-demo', github_name: 'Sam Fix', role_name: 'Fix Editor', role_description: 'Coordinates fix preparation and follow-up.' },
+    ] : [],
+    maintainers: hasSteward ? [
+      { github_user_id: 9105, github_login: 'pat-maintainer-demo', github_name: 'Pat Maintainer', github_permission: 'maintain', verified_at: '2026-11-01T00:00:00.000Z' },
+    ] : [],
+    viewer: {
+      github_user_id: hasSteward ? steward!.github_user_id : view === 'reviewer' ? 9001 : 9102,
+      github_login: hasSteward ? steward!.github_login : view === 'reviewer' ? 'oasis-admin-demo' : 'jordan-oss-demo',
+      is_admin: view === 'reviewer', is_steward: hasSteward,
+      request: view === 'contributor' ? null : view === 'reviewer' ? null : null,
+      open_request_exists: view === 'reviewer', pending_request: view === 'reviewer' ? applicant : null,
+    },
+  }
+}
 
 const roleDefinitions: Record<string, string> = {
   'OASIS Repo Security Steward': 'OASIS management is federated. A Security Steward coordinates security work within this OASIS fork and manages the repo-specific OASIS role assignments.',
@@ -40,7 +70,7 @@ function RoleInfo({ role, description }: { role: string; description?: string })
   return <span className="pp-role-info"><button type="button" aria-label={`About the ${role} role`} aria-expanded={open} onClick={() => setOpen(value => !value)}><Info size={13} /></button>{open && <span className="pp-role-info-popover" role="dialog" aria-label={`${role} role definition`}><button className="pp-role-info-close" type="button" aria-label="Close role information" onClick={() => setOpen(false)}><X size={13} /></button><strong>{role}</strong><span>{text}</span></span>}</span>
 }
 
-export default function RepoStewardshipAbout({ repoId, repoName, repoFullName }: { repoId: number; repoName: string; repoFullName: string }) {
+export default function RepoStewardshipAbout({ repoId, repoName, repoFullName, demo = false }: { repoId: number; repoName: string; repoFullName: string; demo?: boolean }) {
   const [management, setManagement] = useState<Management | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -52,6 +82,7 @@ export default function RepoStewardshipAbout({ repoId, repoName, repoFullName }:
   const [roleName, setRoleName] = useState('')
   const [description, setDescription] = useState('')
   const [removeTarget, setRemoveTarget] = useState<{ kind: 'role' | 'maintainer' | 'steward'; id: string | number; label: string; login: string } | null>(null)
+  const [demoView, setDemoView] = useState<DemoView>('steward')
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setError('')
@@ -60,9 +91,40 @@ export default function RepoStewardshipAbout({ repoId, repoName, repoFullName }:
     finally { if (!signal?.aborted) setLoading(false) }
   }, [repoId])
 
-  useEffect(() => { const controller = new AbortController(); void reload(controller.signal); return () => controller.abort() }, [reload])
+  useEffect(() => {
+    if (demo) {
+      setManagement(demoManagement(demoView)); setError(''); setLoading(false)
+      return
+    }
+    const controller = new AbortController(); void reload(controller.signal); return () => controller.abort()
+  }, [reload, demo, demoView])
 
   async function mutate(path: string, body: unknown, success: string): Promise<boolean> {
+    if (demo) {
+      const payload = body as { login?: string; role_name?: string; role_description?: string; decision?: 'approve' | 'decline'; action?: 'remove' }
+      if (path.includes('/stewardship-requests/') && payload.decision === 'approve') {
+        setDemoView('appointed'); setManagement(demoManagement('appointed'))
+        setNotice(`${success} Demo only; no changes were saved.`); setError(''); return true
+      }
+      setManagement(current => {
+        if (!current) return current
+        if (path.endsWith('/management')) return { ...current, viewer: { ...current.viewer, open_request_exists: true, request: { id: 'demo-request-1', status: 'pending', requested_at: new Date().toISOString(), reviewed_at: null } } }
+        if (path.includes('/stewardship-requests/')) {
+          return { ...current, viewer: { ...current.viewer, pending_request: null, open_request_exists: false } }
+        }
+        if (path.endsWith('/steward')) return { ...current, steward: null, viewer: { ...current.viewer, is_steward: false } }
+        if (path.includes('/maintainers/')) { const parts = path.split('/'); return { ...current, maintainers: current.maintainers.filter(item => item.github_user_id !== Number(parts[parts.length - 1])) } }
+        if (path.includes('/roles')) {
+          const parts = path.split('/')
+          const id = parts[parts.length - 1]
+          if (payload.action === 'remove') return { ...current, role_assignments: current.role_assignments.filter(item => item.id !== id) }
+          const next = { id: id && id !== 'roles' ? id : `demo-role-${Date.now()}`, github_user_id: Date.now(), github_login: payload.login ?? 'new-member-demo', github_name: payload.login ?? 'New Member', role_name: payload.role_name ?? 'Repo Role', role_description: payload.role_description ?? '' }
+          return { ...current, role_assignments: id && id !== 'roles' ? current.role_assignments.map(item => item.id === id ? { ...item, ...next, id } : item) : [...current.role_assignments, next] }
+        }
+        return current
+      })
+      setNotice(`${success} Demo only; no changes were saved.`); setError(''); return true
+    }
     setWorking(true); setError(''); setNotice('')
     try { await postJSON(path, body); setNotice(success); await reload(); return true }
     catch (caught) { setError((caught as Error).message); return false }
@@ -91,7 +153,8 @@ export default function RepoStewardshipAbout({ repoId, repoName, repoFullName }:
   const discussionBody = encodeURIComponent(`Repository: ${repoFullName}\n\nUse this public issue to coordinate OASIS security work with the Repo Security Steward.`)
   const discussionUrl = `https://github.com/${repoFullName}/issues/new?title=${encodeURIComponent('OASIS repo coordination')}&body=${discussionBody}`
 
-  return <section className="pp-stewardship-about" aria-labelledby="pp-repo-management-heading">
+  return <section className={`pp-stewardship-about${demo ? ' pp-stewardship-about--demo' : ''}`} aria-labelledby="pp-repo-management-heading">
+    {demo && <div className="pp-stewardship-demo-controls"><div><strong>Demo state</strong><span>Sample identities · changes reset on refresh</span></div><div role="group" aria-label="Preview the stewardship flow">{(['contributor', 'reviewer', 'steward'] as const).map(view => <button type="button" key={view} aria-pressed={demoView === view || (view === 'steward' && demoView === 'appointed')} onClick={() => { setDemoView(view); setNotice(''); setError('') }}>{view === 'contributor' ? 'Requestor' : view === 'reviewer' ? 'OASIS reviewer' : 'Steward'}</button>)}</div></div>}
     <div className="pp-stewardship-heading-row"><div><span className="pp-section-eyebrow"><ShieldCheck size={14} /> OASIS project roles</span><h3 id="pp-repo-management-heading">OASIS Repo Management Team</h3><p>See who coordinates OASIS security work on <code>{repoName}</code>. Assignments organize work; anyone may contribute or validate fixes.</p></div></div>
     <section className="pp-role-assignments" aria-labelledby="pp-role-assignments-heading">
       <div className="pp-role-assignments-title"><h4 id="pp-role-assignments-heading">Role assignments</h4><div className="pp-role-assignment-tools"><span>{repoName}</span>{viewer.is_steward && <button type="button" onClick={() => openRoleForm()}>Add Repo Role</button>}</div></div>

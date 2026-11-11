@@ -377,7 +377,7 @@ export default function ProjectPanel({ repo, onClose, myVotes, mockup = false }:
               ) : panelData ? (
                 <>
                   {!mockup && <ProjectOverviewSummary repo={panelData.repo} />}
-                  <RepoStewardshipAbout repoId={panelData.repo.id} repoName={panelData.repo.name} repoFullName={panelData.repo.full_name} />
+                  <RepoStewardshipAbout repoId={panelData.repo.id} repoName={panelData.repo.name} repoFullName={panelData.repo.full_name} demo={mockup} />
                 </>
               ) : null}
             </div>
