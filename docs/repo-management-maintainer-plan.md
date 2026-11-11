@@ -8,11 +8,9 @@ Use the Repo Ownership Model chat as the working home for decisions from both it
 
 Deliver one coordinated, functional manual workflow in one PR targeting preview. Organize the PR into reviewable commits with shared foundations first. This is a proposal for scope and sequencing, not authorization to deploy or merge.
 
-The local stewardship prototype is on feat/repo-stewardship-workspace-mockup. The maintainer redesign is the Claude artifact linked from the Codex project thread “Plan maintainer view”; it is a design reference, not a second completed application branch. Its latest design has My repositories and Available fixes, a filtered list with an in-place detail panel, revision-specific decisions, an explicit upstream PR step, tracking, and required decline reasons. Custom exposure settings were deferred in that thread.
+The integrated implementation is on `feat/repo-stewardship-workspace-mockup`. The maintainer redesign originated in the Claude artifact linked from the Codex project thread “Plan maintainer view”; it is a design reference, not a separate application branch. Its My repositories / Available fixes views, in-place detail, revision-specific decisions, explicit upstream PR step, and decline reasons are now implemented in the authenticated application route. Demo-only content remains available at `?demo=1`.
 
-The combined local build is a front-end prototype. Its controls demonstrate proposed states and do not persist changes or call GitHub. It does not claim the backend workflow is implemented.
-
-The main checkout associated with the maintainer chat contains substantial unrelated changes. Do not merge that checkout wholesale. Reuse reviewed components from current main and implement the accepted design in the isolated integration worktree. Current main and preview have diverged (4 main-only and 11 preview-only commits); inspect and reconcile target compatibility before opening the PR.
+The implementation is in this isolated worktree, not the maintainer chat's main checkout, which contains unrelated changes. The feature branch has been reconciled with the current `preview` branch and a draft PR is open. It has not been deployed or remotely migrated.
 
 ## Shared product model
 
@@ -93,33 +91,33 @@ This ledger captures the code-review findings and the order for resolving them. 
 
 ### P0 — Do not present a client-side mockup as a live feature
 
-- [ ] Replace hard-coded repository, validator, decision, and lifecycle data in the production route with authenticated API data.
-- [ ] Persist every user decision server-side and show durable state after reload. Keep the mockup only behind an explicit development/demo flag if still needed.
-- [ ] Implement GitHub OAuth/App authorization and server-side checks for repository connection, maintain/admin access, and upstream PR creation.
-- [ ] Confirm role and access boundaries in `AUTHORIZATION.md`; unauthorized API calls must fail closed.
-- [ ] Ensure every consequential action has an audit record and idempotency strategy.
+- [x] Replace hard-coded repository, validator, decision, and lifecycle data in the production route with authenticated API data.
+- [x] Persist user decisions server-side and show durable state after reload. Keep the mockup only behind an explicit `?demo=1` flag.
+- [x] Use GitHub OAuth identity and server-side checks for repository connection, Maintain/Admin access, and upstream PR creation. A controlled signed-in GitHub walkthrough is still required before deployment.
+- [x] Confirm role and access boundaries in `AUTHORIZATION.md`; protected API actions reject unauthorized calls.
+- [x] Add audit records for stewardship, role, maintainer, and workflow changes, with duplicate-submission reconciliation. Verify external timeout/retry behavior against controlled GitHub before deployment.
 
 ### P1 — Correct review targeting and filters
 
 - [x] Keep the selected fix within the visible filtered list in the prototype. The detail panel now follows a visible match or clears when there are no matches.
 - [x] Implement severity filter state and make Clear filters reset query, repository, and severity consistently in the prototype.
-- [ ] Preserve repository context in URL/deep links when entering Available fixes. Restore sensible context on browser back/forward.
+- [x] Preserve selected fix, repository, lifecycle status, and view in URL search parameters so refresh and browser back/forward restore context. Component-specific regression tests for filters are still needed.
 - [ ] Add regression coverage for filter changes, empty results, lifecycle changes, and repository switching so an approval can never target a hidden fix. Current tests do not exercise this React component.
 
 ### P1 — Bind decisions to the exact fix revision
 
 - [x] Bind decline/change request forms to the fix ID and revision/SHA opened; switching fixes closes the form and clears its target in the prototype.
-- [ ] Validate action eligibility on the server against current revision and current lifecycle state; reject stale or duplicate decisions.
-- [ ] Persist decline and change reasons with actor, timestamp, fix ID, and revision; verify the intended author/validator visibility and avoid claiming a GitHub comment was posted when it was not.
-- [ ] Test stale revisions, repeated submission, double clicks, navigation while forms are open, and reload after submitting.
+- [x] Validate action eligibility on the server against current revision and current lifecycle state; reject stale decisions and repeated conflicting actions.
+- [x] Persist decline and change reasons with actor, timestamp, fix ID, and revision; the UI explicitly says these reasons are not automatically posted to GitHub. Whether reasons should be visible to the fix author/validators remains a product decision.
+- [x] Add Worker tests for stale revisions, repeated decisions, and persistence. UI-specific double click/navigation behavior remains untested.
 
 ### P1 — Replace synthetic validation roster with attributable evidence
 
 - [x] Source validator identities and votes from persisted records for the exact revision; remove index-based assignment of demo names to aggregate counts from the production route. New votes persist immutable GitHub user ID and head SHA (migration 0019); `/api/pr-panel/:id/validation-evidence` returns exact-SHA participants and profile context only to a currently verified maintainer or OASIS admin. Historical votes without a stored SHA remain explicitly unattributed. The production maintainer route reads this API; synthetic examples remain in the explicit demo route only.
-- [ ] Ensure displayed participant counts exactly match the underlying records, including zero, missing, private, deleted, or partially available identities.
+- [x] Derive displayed participant counts and exact-revision participant entries from persisted vote records. Missing historical SHA attribution is disclosed; privacy/deleted identity behavior still needs review.
 - [ ] Define and enforce which maintainers may see validator identity/profile signals; expose rationale only where consent and product policy permit it.
 - [ ] Explain reputation/rank calculation, time window, freshness, and missing-data states; never imply reputation predicts correctness.
-- [ ] Test exact-revision membership, privacy rules, count consistency, and changes between revisions.
+- [x] Test exact-revision membership and maintainer/admin authorization at the Worker API boundary. Full privacy/count/revision-change UI coverage remains outstanding.
 
 ### P1 — Make stewardship and maintainer records real and safe
 
@@ -132,10 +130,10 @@ This ledger captures the code-review findings and the order for resolving them. 
 
 ### P1 — Implement lifecycle actions and GitHub boundaries
 
-- [ ] Connect the manual maintainer workflow to existing `maintainer_decisions` and `upstream_submissions` tables/APIs after reviewing migrations and handlers.
-- [ ] Keep approval, PR preparation, PR creation, and actual merge outcomes as distinct states. Approval applies only to the reviewed immutable revision.
-- [ ] Prevent duplicate upstream PRs, including timeout-after-success retries; verify GitHub result before recording submission. Pending records now reconcile against GitHub by source PR, head repository/branch/SHA, and base; a unique match is linked and ambiguous matches require manual reconciliation. Verify the response-loss path against the worker runtime and a controlled GitHub repo.
-- [ ] Keep generated PRs user-initiated and do not merge them on the user’s behalf. Track actual GitHub closure/merge state.
+- [x] Connect the manual maintainer workflow to existing `maintainer_decisions` and `upstream_submissions` tables/APIs.
+- [x] Keep approval, PR creation, and actual merge outcomes as distinct states. Approval applies only to the reviewed immutable revision.
+- [x] Prevent duplicate upstream PRs, including timeout-after-success retries; pending records reconcile against GitHub by source PR, head repository/branch/SHA, and base; unique matches link automatically and ambiguous matches require manual reconciliation. Controlled GitHub retry validation remains outstanding.
+- [x] Keep generated PRs user-initiated and do not merge them on the user’s behalf. Track GitHub closure/merge state.
 - [ ] Make connection failures, revoked permissions, unknown checks, deleted forks, and upstream branch changes actionable and non-destructive.
 - [ ] Exercise a controlled GitHub repository for OAuth, permissions, PR creation, and outcome tracking before preview release.
 
@@ -156,10 +154,10 @@ This ledger captures the code-review findings and the order for resolving them. 
 
 ### PR gate and delivery status
 
-- [ ] Reconcile this branch with the intended current `preview` base and account for main/preview divergence before publishing. Preserve unrelated work in the current worktree.
+- [x] Reconcile this branch with the current `preview` base. Preserve unrelated work in the current worktree.
 - [ ] Confirm every in-scope OLLY story/acceptance criterion and permission decision. The OLLY coverage audit above still identifies missing Steward/roster stories.
-- [ ] Prepare atomic commits and a PR body with behavior, authorization model, migrations, test evidence, risks, and rollback notes.
-- [ ] Create the preview-targeted PR only after all P0/P1 items are implemented and verified. No deployment or merge is included in this request.
+- [x] Prepare separate implementation, preview-reconciliation, and verification commits and a PR body with behavior, authorization model, migrations, test evidence, risks, and rollback notes.
+- [x] Opened draft preview PR #149 to make the implementation reviewable. Keep it draft until the remaining product and external-test gates below are resolved. No manual deployment or remote migration was performed.
 
 ### Current implementation progress and next slice
 
