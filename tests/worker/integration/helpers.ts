@@ -269,6 +269,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 
 CREATE TABLE IF NOT EXISTS user_votes (
   github_login TEXT    NOT NULL,
+  github_user_id INTEGER,
   pr_id        INTEGER NOT NULL,
   repo_name    TEXT    NOT NULL,
   pr_number    INTEGER NOT NULL,
@@ -280,11 +281,13 @@ CREATE TABLE IF NOT EXISTS user_votes (
   parent_pr_id INTEGER DEFAULT NULL,
   team_id      INTEGER DEFAULT NULL,
   comment_id   INTEGER,
+  head_sha     TEXT,
   voted_at     TEXT    NOT NULL,
   PRIMARY KEY (github_login, pr_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_votes_pr_revision ON user_votes(pr_id, head_sha, decision);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
@@ -438,6 +441,68 @@ CREATE TABLE IF NOT EXISTS upstream_submissions (
 );
 CREATE INDEX IF NOT EXISTS idx_upstream_submissions_source_updated
   ON upstream_submissions(source_pr_id, updated_at DESC);
+CREATE TABLE IF NOT EXISTS verified_upstream_maintainers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  oasis_repo_id INTEGER NOT NULL,
+  upstream_repo_github_id INTEGER NOT NULL,
+  upstream_full_name TEXT NOT NULL,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL,
+  github_name TEXT,
+  github_permission TEXT NOT NULL CHECK (github_permission IN ('maintain', 'admin')),
+  verified_at TEXT NOT NULL,
+  removed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id),
+  UNIQUE(oasis_repo_id, github_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_verified_maintainers_active ON verified_upstream_maintainers(oasis_repo_id, removed_at, github_user_id);
+CREATE TABLE IF NOT EXISTS repository_stewards (
+  oasis_repo_id INTEGER PRIMARY KEY,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL COLLATE NOCASE,
+  github_name TEXT,
+  assigned_by_github_user_id INTEGER NOT NULL,
+  assigned_by_login TEXT NOT NULL COLLATE NOCASE,
+  assigned_at TEXT NOT NULL,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id)
+);
+CREATE TABLE IF NOT EXISTS repository_stewardship_requests (
+  id TEXT PRIMARY KEY,
+  oasis_repo_id INTEGER NOT NULL,
+  requester_github_user_id INTEGER NOT NULL,
+  requester_login TEXT NOT NULL COLLATE NOCASE,
+  requester_name TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'declined')),
+  reviewed_by_github_user_id INTEGER,
+  reviewed_by_login TEXT COLLATE NOCASE,
+  requested_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_stewardship_one_pending ON repository_stewardship_requests(oasis_repo_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_repo_stewardship_requester ON repository_stewardship_requests(requester_github_user_id, requested_at DESC);
+CREATE TABLE IF NOT EXISTS repository_role_assignments (
+  id TEXT PRIMARY KEY,
+  oasis_repo_id INTEGER NOT NULL,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL COLLATE NOCASE,
+  github_name TEXT,
+  role_name TEXT NOT NULL COLLATE NOCASE,
+  role_description TEXT NOT NULL DEFAULT '',
+  assigned_by_github_user_id INTEGER NOT NULL,
+  assigned_by_login TEXT NOT NULL COLLATE NOCASE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  removed_at TEXT,
+  removed_by_github_user_id INTEGER,
+  removed_by_login TEXT COLLATE NOCASE,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id),
+  CHECK (length(role_name) BETWEEN 2 AND 80)
+);
+CREATE INDEX IF NOT EXISTS idx_repository_role_assignments_repo ON repository_role_assignments(oasis_repo_id, role_name COLLATE NOCASE, removed_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repository_role_assignments_active_unique ON repository_role_assignments(oasis_repo_id, github_user_id, role_name COLLATE NOCASE) WHERE removed_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_active_source
   ON upstream_submissions(source_pr_id)
   WHERE status IN ('pending', 'open', 'changes_requested');
@@ -539,6 +604,9 @@ CREATE TABLE IF NOT EXISTS analytics_event_receipts (
  */
 export async function cleanDB(env: Env): Promise<void> {
   const tables = [
+    'repository_role_assignments',
+    'repository_stewardship_requests',
+    'repository_stewards',
     'team_badges',
     'team_badge_settings',
     'team_ownership_transfers',
@@ -562,6 +630,7 @@ export async function cleanDB(env: Env): Promise<void> {
     'welcome_email_deliveries',
     'user_votes',
     'validation_requests',
+    'verified_upstream_maintainers',
     'upstream_submissions',
     'maintainer_decisions',
     'user_preferences', 'workspace_preferences',
@@ -743,8 +812,8 @@ export async function insertTestPR(
 
   await env.DB.prepare(`
     INSERT INTO pull_requests
-    (id, repo_id, repo_name, number, title, state, html_url, created_at, updated_at, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, repo_id, repo_name, number, title, state, html_url, head_sha, created_at, updated_at, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'test-head-sha', ?, ?, ?)
   `).bind(
     id,
     repo_id,

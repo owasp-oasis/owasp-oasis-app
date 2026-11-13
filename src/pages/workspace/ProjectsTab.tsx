@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import './tabs.css'
 import ProjectPanel, { type Repo } from '../../components/ProjectPanel/ProjectPanel'
 import type { Decision } from '../../components/VoteForm'
@@ -61,11 +62,20 @@ interface Props {
   loading: boolean
   myVotes: Map<number, Decision>
   onNavigateToPRs: (repoId: number) => void
+  mockup?: boolean
 }
 
-export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }: Props) {
+export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs, mockup = false }: Props) {
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [langFilter, setLangFilter] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    const repoId = Number(searchParams.get('repoId'))
+    if (!Number.isSafeInteger(repoId) || repoId <= 0 || !data.length) return
+    const repo = data.find(item => item.id === repoId)
+    if (repo) setSelectedRepo(repo)
+  }, [data, searchParams])
 
   if (loading) return <div className="tab-loading">Loading projects…</div>
   if (data.length === 0) return <div className="tab-empty">No project data yet. Sync will populate this shortly.</div>
@@ -77,9 +87,15 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
     <>
       <ProjectPanel
         repo={selectedRepo}
-        onClose={() => setSelectedRepo(null)}
+        onClose={() => {
+          setSelectedRepo(null)
+          const next = new URLSearchParams(searchParams)
+          next.delete('repoId')
+          setSearchParams(next, { replace: true })
+        }}
         onNavigateToPRs={onNavigateToPRs}
         myVotes={myVotes}
+        mockup={mockup}
       />
 
       <div className="projects-tab">
@@ -93,21 +109,15 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
 
         <div className="projects-grid">
           {filteredData.map(repo => (
-            <button
+            <article
               key={repo.id}
               className="project-card"
-              onClick={() => setSelectedRepo(repo)}
             >
               <div className="project-card-header">
                 <div className="project-card-name">
-                  <a
-                    href={`https://github.com/owasp-oasis/${repo.name}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <button type="button" className="project-card-title" onClick={() => setSelectedRepo(repo)}>
                     {repo.name}
-                  </a>
+                  </button>
                   {repo.upstream_url && (
                     <a
                       href={repo.upstream_url}
@@ -165,6 +175,14 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                 </button>
               </div>
 
+              {mockup && (
+                <div className="project-card-summary" aria-label="Project summary">
+                  {repo.stars > 0 && <span>⭐ {repo.stars.toLocaleString()} stars</span>}
+                  <span>{repo.total_prs.toLocaleString()} total PRs</span>
+                  <span>{repo.contributors.toLocaleString()} contributors</span>
+                </div>
+              )}
+
               <div className="project-card-consensus">
                 <ConsensusBar
                   accept={repo.total_accept}
@@ -173,10 +191,11 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                 />
                 <button className="consensus-labels" onClick={(e) => { e.stopPropagation(); onNavigateToPRs(repo.id) }}>Review {repo.name} fixes →</button>
               </div>
-            </button>
+            </article>
           ))}
         </div>
       </div>
+
     </>
   )
 }

@@ -31,6 +31,20 @@ function requestWithSession(
   });
 }
 
+function mockLiveCandidatePR(initialSha: string): (sha: string) => void {
+  let sha = initialSha;
+  fetchMock.when(req => req.method === 'GET' && req.url === 'https://api.github.com/repos/owasp-oasis/test-repo/pulls/1')
+    .respondWith(() => new Response(JSON.stringify({
+      number: 1,
+      title: 'Fix SQL injection',
+      state: 'open',
+      html_url: 'https://github.com/owasp-oasis/test-repo/pull/1',
+      body: 'Candidate fix',
+      head: { sha, ref: 'fix/sql-injection', repo: { full_name: 'owasp-oasis/test-repo' } },
+    }), { headers: { 'Content-Type': 'application/json' } }));
+  return current => { sha = current; };
+}
+
 describe('maintainer and upstream workflow', () => {
   beforeAll(async () => applySchema(env));
 
@@ -65,6 +79,7 @@ describe('maintainer and upstream workflow', () => {
 
   it('hides error_summary from public GET but exposes it to admin POST responses', async () => {
     await insertTestPR(env);
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'test-head-sha' WHERE id = 1001").run();
     const now = new Date().toISOString();
     await env.DB.prepare(`
       INSERT INTO upstream_submissions (
@@ -82,6 +97,7 @@ describe('maintainer and upstream workflow', () => {
     expect(publicBody.upstream_submission.error_summary).toBeNull();
 
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    mockLiveCandidatePR('test-head-sha');
     const csrf = makeCsrf();
     await env.DB.prepare(`INSERT INTO maintainer_decisions (id, pr_id, decision, reason, head_sha, github_user_id, github_login, created_at) VALUES ('d1', 1001, 'accepted', 'ready', null, 7505051, 'humor4fun', ?)`).bind(now).run();
 
@@ -106,6 +122,7 @@ describe('maintainer and upstream workflow', () => {
     expect(forbidden.status).toBe(403);
 
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const setLiveSha = mockLiveCandidatePR('before-revision');
     const accepted = await SELF.fetch(requestWithSession(
       '/api/pr-panel/1001/maintainer-decision', admin, csrf,
       { decision: 'accepted', reason: 'Community consensus is strong.' },
@@ -126,6 +143,7 @@ describe('maintainer and upstream workflow', () => {
     expect((await revised.json()).status).toBe('Changes Requested');
 
     await env.DB.prepare("UPDATE pull_requests SET head_sha = 'after-revision' WHERE id = 1001").run();
+    setLiveSha('after-revision');
     const returnedToReview = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/workflow'));
     expect((await returnedToReview.json()).status).toBe('Maintainer Review');
 
@@ -141,14 +159,30 @@ describe('maintainer and upstream workflow', () => {
     const audit = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM privileged_action_audit WHERE action = 'maintainer_decision'",
     ).first<{ count: number }>();
-    expect(audit?.count).toBe(3);
+    expect(audit?.count).toBe(4);
+  });
+
+  it('rejects a decision when GitHub has a newer revision than the synchronized candidate', async () => {
+    await insertTestPR(env);
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'stale-db-sha' WHERE id = 1001").run();
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    mockLiveCandidatePR('current-github-sha');
+    const response = await SELF.fetch(requestWithSession('/api/pr-panel/1001/maintainer-decision', admin, makeCsrf(), {
+      decision: 'accepted', reason: 'Reviewed current revision.',
+    }));
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/changed on GitHub/);
+    const count = await env.DB.prepare('SELECT COUNT(*) AS count FROM maintainer_decisions WHERE pr_id = 1001').first<{ count: number }>();
+    expect(count?.count).toBe(0);
   });
 
   it('creates a distinct cross-fork upstream PR only after maintainer acceptance', async () => {
     await insertTestRepo(env, { name: 'test-repo' });
     await env.DB.prepare("UPDATE repos SET upstream_url = 'https://github.com/upstream/project' WHERE name = 'test-repo'").run();
     await insertTestPR(env);
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'abc123456789' WHERE id = 1001").run();
     const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    mockLiveCandidatePR('abc123456789');
     const csrf = makeCsrf();
 
     const beforeAcceptance = await SELF.fetch(requestWithSession(
@@ -202,8 +236,116 @@ describe('maintainer and upstream workflow', () => {
     }));
   });
 
+  it('blocks upstream submission when the candidate head changed after approval', async () => {
+    await insertTestRepo(env, { name: 'test-repo' });
+    await env.DB.prepare("UPDATE repos SET upstream_url = 'https://github.com/upstream/project' WHERE name = 'test-repo'").run();
+    await insertTestPR(env);
+    const admin = await createTestSession(env, { github_user_id: 7505051, github_login: 'humor4fun' });
+    const csrf = makeCsrf();
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'approved-sha' WHERE id = 1001").run();
+    const setLiveSha = mockLiveCandidatePR('approved-sha');
+    const accepted = await SELF.fetch(requestWithSession('/api/pr-panel/1001/maintainer-decision', admin, csrf, {
+      decision: 'accepted', reason: 'Reviewed current revision.',
+    }));
+    expect(accepted.status).toBe(200);
+    setLiveSha('new-unreviewed-sha');
+    fetchMock.when(req => req.method === 'GET' && req.url === 'https://api.github.com/repos/upstream/project')
+      .respondWith(new Response(JSON.stringify({ full_name: 'upstream/project', default_branch: 'main' }), { headers: { 'Content-Type': 'application/json' } }));
+
+    const submit = await SELF.fetch(requestWithSession('/api/pr-panel/1001/submit-upstream', admin, csrf, { confirm: true }));
+    expect(submit.status).toBe(409);
+    expect((await submit.json()).error).toMatch(/changed after approval/);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM upstream_submissions').first<{ count: number }>()).toMatchObject({ count: 0 });
+  });
+
+  it('returns only current-revision validator identities and credibility to a verified maintainer', async () => {
+    await insertTestRepo(env, { name: 'test-repo' });
+    await env.DB.prepare("UPDATE repos SET upstream_url = 'https://github.com/upstream/project' WHERE name = 'test-repo'").run();
+    await insertTestPR(env);
+    const now = new Date().toISOString();
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'current-sha' WHERE id = 1001").run();
+    await env.DB.prepare(`INSERT INTO verified_upstream_maintainers
+      (oasis_repo_id, upstream_repo_github_id, upstream_full_name, github_user_id, github_login, github_permission, verified_at, created_at, updated_at)
+      SELECT id, 500, 'upstream/project', 811, 'maintainer', 'maintain', ?, ?, ? FROM repos WHERE name = 'test-repo'`)
+      .bind(now, now, now).run();
+    await env.DB.prepare(`INSERT INTO contributors (login, modified_reputation, prs_worked, rank_90d, synced_at)
+      VALUES ('validator-now', 28.4, 6, 9, ?), ('validator-old', 33.2, 8, 4, ?)`)
+      .bind(now, now).run();
+    await env.DB.prepare(`INSERT INTO user_votes (github_login, github_user_id, pr_id, repo_name, pr_number, decision, head_sha, voted_at)
+      VALUES ('validator-now', 9001, 1001, 'test-repo', 1, 'accept', 'current-sha', ?),
+             ('validator-old', 9002, 1001, 'test-repo', 1, 'reject', 'old-sha', ?),
+             ('legacy-validator', NULL, 1001, 'test-repo', 1, 'modify', NULL, ?)`)
+      .bind(now, now, now).run();
+
+    const member = await createTestSession(env, { github_user_id: 812, github_login: 'ordinary-member' });
+    const denied = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/validation-evidence', {
+      headers: { Cookie: buildCookieHeader(member.sessionCookie, member.tokenCookie) },
+    }));
+    expect(denied.status).toBe(403);
+
+    fetchMock.when(req => req.method === 'GET' && req.url === 'https://api.github.com/repos/upstream/project')
+      .respondWith(new Response(JSON.stringify({ id: 500, full_name: 'upstream/project', permissions: { maintain: true } }), { headers: { 'Content-Type': 'application/json' } }));
+    const maintainer = await createTestSession(env, { github_user_id: 811, github_login: 'maintainer' });
+    const response = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/validation-evidence', {
+      headers: { Cookie: buildCookieHeader(maintainer.sessionCookie, maintainer.tokenCookie) },
+    }));
+    expect(response.status).toBe(200);
+    const evidence = await response.json();
+    expect(evidence.counts).toEqual({ accept: 1, modify: 0, reject: 0 });
+    expect(evidence.participants).toHaveLength(1);
+    expect(evidence.participants[0]).toMatchObject({
+      github_login: 'validator-now', decision: 'accept', reputation: 28.4, prs_worked: 6, rank_90d: 9,
+    });
+    expect(evidence.historical_votes_unattributed).toBe(true);
+    expect(evidence.historical_vote_count).toBe(1);
+  });
+
+  it('recovers a pending submission after a lost GitHub create response without creating a duplicate', async () => {
+    await insertTestRepo(env, { name: 'test-repo' });
+    await env.DB.prepare("UPDATE repos SET upstream_url = 'https://github.com/upstream/project' WHERE name = 'test-repo'").run();
+    await insertTestPR(env);
+    const now = new Date().toISOString();
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'validated-sha' WHERE id = 1001").run();
+    await env.DB.prepare(`
+      INSERT INTO maintainer_decisions (id, pr_id, decision, reason, head_sha, github_user_id, github_login, created_at)
+      VALUES ('accepted-1', 1001, 'accepted', 'Reviewed this revision.', 'validated-sha', 7505051, 'humor4fun', ?)
+    `).bind(now).run();
+    await env.DB.prepare(`
+      INSERT INTO upstream_submissions (
+        id, source_pr_id, upstream_full_name, upstream_default_branch,
+        head_repo_full_name, head_branch, validated_head_sha, base_branch,
+        status, submitted_by_github_id, submitted_by_login, created_at, updated_at
+      ) VALUES ('pending-1', 1001, 'upstream/project', 'main', 'owasp-oasis/test-repo',
+        'fix/sql-injection', 'validated-sha', 'main', 'pending', 7505051, 'humor4fun', ?, ?)
+    `).bind(now, now).run();
+
+    fetchMock.when(req => req.method === 'GET' && req.url.includes('/repos/upstream/project/pulls?'))
+      .respondWith(new Response(JSON.stringify([{
+        id: 9002,
+        number: 43,
+        node_id: 'PR_kwDO43',
+        html_url: 'https://github.com/upstream/project/pull/43',
+        state: 'open',
+        body: 'Submitted from OASIS candidate PR https://github.com/owasp-oasis/test-repo/pull/1',
+        head: { sha: 'validated-sha', ref: 'fix/sql-injection', repo: { full_name: 'owasp-oasis/test-repo' } },
+        base: { ref: 'main' },
+      }]), { headers: { 'Content-Type': 'application/json' } }));
+
+    const recovered = await SELF.fetch(new Request('http://localhost/api/pr-panel/1001/workflow'));
+    const body = await recovered.json();
+    expect(body.upstream_submission).toMatchObject({
+      status: 'open',
+      upstream_pr_number: 43,
+      upstream_pr_url: 'https://github.com/upstream/project/pull/43',
+      validated_head_sha: 'validated-sha',
+    });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM upstream_submissions WHERE source_pr_id = 1001').first<{ count: number }>())
+      .toMatchObject({ count: 1 });
+  });
+
   it('communicates upstream review requests and merge outcomes on refresh', async () => {
     await insertTestPR(env);
+    await env.DB.prepare("UPDATE pull_requests SET head_sha = 'abc123456789' WHERE id = 1001").run();
     await env.DB.prepare(`
       INSERT INTO upstream_submissions (
         id, source_pr_id, upstream_full_name, upstream_default_branch,

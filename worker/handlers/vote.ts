@@ -145,7 +145,7 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
 
   // 6. PR existence + must be open
   const pr = await env.DB.prepare(
-    `SELECT p.id, p.repo_id, p.repo_name, p.number, p.state
+    `SELECT p.id, p.repo_id, p.repo_name, p.number, p.state, p.head_sha
        FROM pull_requests p JOIN repos r ON r.id = p.repo_id
       WHERE p.id = ? AND p.deleted = 0 AND r.active = 1`,
   ).bind(prId).first<{
@@ -154,9 +154,11 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
     repo_name: string;
     number: number;
     state: string;
+    head_sha: string | null;
   }>();
   if (!pr) return jsonErr('PR not found', 404, request);
   if (pr.state !== 'open') return jsonErr('Voting is only allowed on open PRs', 409, request);
+  if (!pr.head_sha) return jsonErr('The candidate revision is not available yet. Retry after the repository sync completes.', 409, request);
 
   // Resolve duplicate parents within the same immutable repository identity.
   if (decision === 'duplicate' && parentPrNumber) {
@@ -425,13 +427,13 @@ export async function handleVote(request: Request, env: Env): Promise<Response> 
   try {
     await env.DB.prepare(
       `INSERT INTO user_votes
-         (github_login, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at,
-          vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (github_login, github_user_id, pr_id, repo_name, pr_number, decision, parent_pr_id, team_id, comment_id, voted_at,
+          vulnerability_assessment, introduced_vulnerability, security_issue_addressed, breaks_codebase, head_sha)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      session.github_login, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now,
+      session.github_login, session.github_user_id, pr.id, pr.repo_name, pr.number, decisionKey, parentPrId, teamId, commentId, now,
       assessment.vulnerability_assessment, assessment.introduced_vulnerability,
-      assessment.security_issue_addressed, assessment.breaks_codebase,
+      assessment.security_issue_addressed, assessment.breaks_codebase, pr.head_sha,
     ).run();
     await env.DB.prepare(`
       UPDATE validation_requests

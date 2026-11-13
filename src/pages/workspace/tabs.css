@@ -600,6 +600,18 @@ tr:hover .row-chevron {
   color: var(--blue-dark);
 }
 
+.project-card-title {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--blue-dark);
+  font: 600 15px var(--mono);
+  cursor: pointer;
+}
+.project-card-title:hover { color: var(--blue); text-decoration: underline; }
+.project-card-title:focus-visible { outline: 3px solid #9ccce0; outline-offset: 3px; border-radius: 2px; }
+
 .upstream-link {
   font-size: 0.78rem;
   color: var(--gray-400) !important;
@@ -637,6 +649,15 @@ tr:hover .row-chevron {
   display: grid;
   grid-template-columns: repeat(3,1fr);
   gap: 8px;
+}
+
+.project-card-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--gray-500);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .stat {
