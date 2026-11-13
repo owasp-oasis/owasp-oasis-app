@@ -24,7 +24,22 @@ describe('response badge rules', () => {
       kind: 'achievement',
       evidence: '1 first response',
     });
-    expect(summary.rules.criteriaVersion).toBe(1);
+    expect(summary.rules.criteriaVersion).toBe(2);
+    expect(summary.badges.find(badge => badge.id === 'validation_contributor')).toMatchObject({
+      state: 'active',
+      evidence: '1 recorded validation',
+    });
+  });
+
+  it('credits a recorded validation even when no timed response qualifies', () => {
+    const summary = buildResponseBadgeSummary({ ...emptyMetrics, total_responses: 3 });
+
+    expect(summary.badges.find(badge => badge.id === 'validation_contributor')).toMatchObject({
+      state: 'active',
+      evidence: '3 recorded validations',
+    });
+    expect(summary.badges.find(badge => badge.id === 'fast_responder')?.state).toBe('locked');
+    expect(summary.badges.find(badge => badge.id === 'coverage_contributor')?.state).toBe('locked');
   });
 
   it('requires both response volume and timely-response rate for Fast Responder', () => {

@@ -1,7 +1,7 @@
 # OASIS Reputation and Recognition System
 
-**Status:** Response-recognition MVP and maintainer/upstream workflow implemented locally
-**Initial scope:** First response, fast response, and unattended-request coverage
+**Status:** Response-recognition MVP and maintainer/upstream workflow implemented in the application
+**Initial scope:** Recorded validation, first response, fast response, and unattended-request coverage
 **Important:** These recognitions do not alter the existing reputation formula, ranks, vote weight, or permissions.
 
 ## Product intent
@@ -63,17 +63,17 @@ The event records:
 - whether the clock is eligible for badges; and
 - whether it is open, responded to, closed, or cancelled.
 
-Existing PRs are imported as observation-only because their true OASIS availability time cannot be reconstructed.
+Existing PRs are imported as observation-only because their true OASIS availability time cannot be reconstructed. Their recorded OASIS votes still count toward Validation Contributor and First Responder, which require no availability timestamp. Only the timed badges require an eligible request clock.
 
 ### Recognized response
 
-The MVP counts a structured OASIS Accept, Modify, Reject, or Duplicate vote submitted after the availability event. It excludes:
+The MVP counts a recorded structured OASIS Accept, Modify, Reject, or Duplicate vote, including a vote made before response clocks existed. It excludes:
 
 - votes by the PR author;
-- votes made before the recorded availability time;
-- cancelled or observation-only availability events;
-- deleted PRs and PRs classified as duplicates; and
+- votes on cancelled requests or deleted PRs; and
 - known automated comments excluded by the existing synchronization pipeline.
+
+First Responder also excludes PRs classified as duplicates. Fast Responder and Coverage Contributor additionally require a badge-eligible availability event, a vote after that event, and a nonduplicate PR. A historical or early vote can receive Validation Contributor credit without claiming a measured response time.
 
 The current parser recognizes the OASIS comment format, but the response-badge
 MVP does not implement moderation or invalidation. For that reason, the badge UI uses
@@ -131,11 +131,21 @@ the upstream link, status chip, actor, timestamp, and reason when available.
 
 ## MVP recognitions
 
+### Validation Contributor
+
+**Type:** Cumulative achievement
+
+Awarded after one recorded structured OASIS validation on a candidate fix. One vote per contributor and PR counts. Past votes count even if the PR predates response clocks, including a recorded Duplicate decision. PR authors, cancelled requests, and deleted PRs do not qualify.
+
+- The profile displays the contributor's cumulative recorded validation count.
+- No response-time or expertise claim is made.
+- No reputation or trust effect.
+
 ### First Responder
 
 **Type:** Cumulative achievement
 
-Awarded to the eligible contributor with the earliest recognized response. Equal timestamps are resolved by GitHub comment ID and then login so the result is deterministic.
+Awarded to the contributor with the earliest recorded structured OASIS validation on a nonduplicate candidate fix. Historical PRs count because the order of recorded votes is known even when the OASIS availability time is not. Equal timestamps are resolved by GitHub comment ID and then login so the result is deterministic.
 
 - One credit per availability event.
 - The profile displays the contributor’s cumulative count.
@@ -162,7 +172,7 @@ This balances the incentive to respond quickly by also rewarding people who addr
 
 ## Presentation
 
-Contributor panels include a **Badges** tab. Each card shows:
+The Workspace **Validators** profile displays the badges, and the project contributor panel retains its **Badges** tab. Each card shows:
 
 - what the recognition means;
 - earned or not-yet-earned state;
@@ -195,7 +205,8 @@ states.
 - Coverage Contributor rewards old unattended work.
 - Speed never increases vote weight.
 - A negative or minority vote is not penalized merely for disagreeing.
-- Historical PRs cannot receive invented response clocks.
+- Historical PRs receive credit for recorded validation and first response without invented response clocks.
+- Fast Responder and Coverage Contributor use only requests with a trustworthy start time.
 - Rules and thresholds are centralized and versioned in code.
 - Maintainer decisions do not change a validator's response badge or existing reputation score.
 
