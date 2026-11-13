@@ -182,7 +182,7 @@ describe('response badge integration', () => {
     expect(runnerUp.metrics.firstResponses).toBe(0);
   });
 
-  it('excludes PR authors, cancelled clocks, observation-only clocks, and early votes', async () => {
+  it('credits historical and early work without counting it toward timed badges', async () => {
     await insertRequestAndVote({
       prId: 4001,
       login: 'excluded-validator',
@@ -216,7 +216,68 @@ describe('response badge integration', () => {
       'excluded-validator',
       new Date('2026-09-12T12:00:00.000Z'),
     );
-    expect(summary.metrics.totalResponses).toBe(0);
+    expect(summary.metrics).toMatchObject({
+      totalResponses: 2,
+      firstResponses: 2,
+      responses90d: 0,
+      fastResponses90d: 0,
+      coverageResponses180d: 0,
+    });
+    expect(summary.badges.find(badge => badge.id === 'validation_contributor')?.state).toBe('active');
+    expect(summary.badges.find(badge => badge.id === 'first_responder')?.state).toBe('active');
+  });
+
+  it('credits every historical validator while first-response credit follows the recorded order', async () => {
+    await insertRequestAndVote({
+      prId: 4501,
+      login: 'first-historical-validator',
+      requestedAt: '2026-09-12T10:00:00.000Z',
+      votedAt: '2026-08-01T10:00:00.000Z',
+      badgeEligible: 0,
+    });
+    await env.DB.prepare(`
+      INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+      VALUES ('second-historical-validator', 4501, 'badge-repo-4501', 4501, 'modify', 94502, '2026-08-02T10:00:00.000Z')
+    `).run();
+
+    const first = await getResponseBadgeSummary(env.DB, 'first-historical-validator', new Date('2026-09-12T12:00:00.000Z'));
+    const second = await getResponseBadgeSummary(env.DB, 'second-historical-validator', new Date('2026-09-12T12:00:00.000Z'));
+
+    expect(first.metrics).toMatchObject({ totalResponses: 1, firstResponses: 1, responses90d: 0 });
+    expect(second.metrics).toMatchObject({ totalResponses: 1, firstResponses: 0, responses90d: 0 });
+    expect(second.badges.find(badge => badge.id === 'validation_contributor')?.state).toBe('active');
+    expect(second.badges.find(badge => badge.id === 'first_responder')?.state).toBe('locked');
+  });
+
+  it('credits recorded duplicate work without awarding a first or timed badge', async () => {
+    await insertRequestAndVote({
+      prId: 4502,
+      login: 'duplicate-validator',
+      requestedAt: '2026-09-12T10:00:00.000Z',
+      votedAt: '2026-09-12T11:00:00.000Z',
+    });
+    await env.DB.prepare('UPDATE pull_requests SET duplicate_of = 4501 WHERE id = 4502').run();
+
+    const summary = await getResponseBadgeSummary(env.DB, 'duplicate-validator', new Date('2026-09-12T12:00:00.000Z'));
+
+    expect(summary.metrics).toMatchObject({ totalResponses: 1, firstResponses: 0, responses90d: 0 });
+    expect(summary.badges.find(badge => badge.id === 'validation_contributor')?.state).toBe('active');
+    expect(summary.badges.find(badge => badge.id === 'first_responder')?.state).toBe('locked');
+  });
+
+  it('credits recorded votes when a historical PR has no request row', async () => {
+    await insertTestRepo(env, { id: 7503, name: 'no-request-repo' });
+    await insertTestPR(env, { id: 4503, repo_id: 7503, repo_name: 'no-request-repo', number: 1 });
+    await env.DB.prepare(`
+      INSERT INTO user_votes
+        (github_login, pr_id, repo_name, pr_number, decision, comment_id, voted_at)
+      VALUES ('no-request-validator', 4503, 'no-request-repo', 1, 'accept', 94503, '2026-08-02T10:00:00.000Z')
+    `).run();
+
+    const summary = await getResponseBadgeSummary(env.DB, 'no-request-validator', new Date('2026-09-12T12:00:00.000Z'));
+
+    expect(summary.metrics).toMatchObject({ totalResponses: 1, firstResponses: 1, responses90d: 0 });
   });
 
   it('adds badges to the profile response without changing reputation fields', async () => {
@@ -236,8 +297,9 @@ describe('response badge integration', () => {
 
     expect(response.status).toBe(200);
     expect(body.contributor).toMatchObject({ base_reputation: 42, modified_reputation: 84 });
-    expect(body.responseBadges.badges).toHaveLength(3);
-    expect(body.responseBadges.badges[0]).toMatchObject({ id: 'first_responder', state: 'active' });
+    expect(body.responseBadges.badges).toHaveLength(4);
+    expect(body.responseBadges.badges[0]).toMatchObject({ id: 'validation_contributor', state: 'active' });
+    expect(body.responseBadges.badges[1]).toMatchObject({ id: 'first_responder', state: 'active' });
   });
 
   it('keeps the profile endpoint available before the badge migration lands', async () => {

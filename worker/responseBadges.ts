@@ -8,7 +8,7 @@
 import { isMissingSchemaObject } from './schemaCompatibility.js';
 
 export const RESPONSE_BADGE_RULES = {
-  criteriaVersion: 1,
+  criteriaVersion: 2,
   fastWindowDays: 90,
   fastResponseHours: 24,
   fastMinimumResponses: 10,
@@ -18,7 +18,7 @@ export const RESPONSE_BADGE_RULES = {
   coverageMinimumResponses: 5,
 } as const;
 
-export type ResponseBadgeId = 'first_responder' | 'fast_responder' | 'coverage_contributor';
+export type ResponseBadgeId = 'validation_contributor' | 'first_responder' | 'fast_responder' | 'coverage_contributor';
 export type ResponseBadgeState = 'active' | 'locked';
 
 export interface ResponseBadgeCriterion {
@@ -96,14 +96,31 @@ export function buildResponseBadgeSummary(
     metrics,
     rules: RESPONSE_BADGE_RULES,
     calculatedAt,
-    requestClockMeaning: 'Time since a newly discovered open PR became available in the OASIS Workspace.',
+    requestClockMeaning: 'Timed badges measure from when a newly discovered open PR became available in OASIS. Historical work counts toward Validation Contributor and First Responder without an invented response clock.',
     badges: [
+      {
+        id: 'validation_contributor',
+        name: 'Validation Contributor',
+        kind: 'achievement',
+        state: totalResponses > 0 ? 'active' : 'locked',
+        description: 'Submitted a recorded OASIS validation on a candidate fix.',
+        evidence: totalResponses > 0
+          ? `${totalResponses} recorded ${plural(totalResponses, 'validation')}`
+          : 'No recorded validations yet',
+        criteria: [{
+          label: 'Recorded validations',
+          current: totalResponses,
+          target: 1,
+          unit: 'count',
+          met: totalResponses > 0,
+        }],
+      },
       {
         id: 'first_responder',
         name: 'First Responder',
         kind: 'achievement',
         state: firstResponses > 0 ? 'active' : 'locked',
-        description: 'First eligible person to submit a recognized OASIS vote.',
+        description: 'First person to submit a recorded OASIS validation on a candidate fix.',
         evidence: firstResponses > 0
           ? `${firstResponses} first ${plural(firstResponses, 'response')}`
           : 'No first responses yet',
@@ -169,37 +186,36 @@ export async function getResponseBadgeSummary(
   let row: MetricsRow | null;
   try {
     row = await db.prepare(`
-    WITH eligible_responses AS (
+    WITH recorded_responses AS (
       SELECT
         uv.github_login,
         uv.pr_id,
         uv.voted_at,
         vr.requested_at,
+        vr.badge_eligible,
+        pr.duplicate_of,
         (julianday(uv.voted_at) - julianday(vr.requested_at)) * 24.0 AS response_hours,
         ROW_NUMBER() OVER (
           PARTITION BY uv.pr_id
           ORDER BY uv.voted_at ASC, COALESCE(uv.comment_id, 9223372036854775807) ASC, uv.github_login ASC
         ) AS response_rank
       FROM user_votes uv
-      JOIN validation_requests vr ON vr.pr_id = uv.pr_id
       JOIN pull_requests pr ON pr.id = uv.pr_id
-      WHERE vr.badge_eligible = 1
-        AND vr.status != 'cancelled'
-        AND pr.deleted = 0
-        AND pr.duplicate_of IS NULL
-        AND uv.voted_at >= vr.requested_at
+      LEFT JOIN validation_requests vr ON vr.pr_id = uv.pr_id
+      WHERE pr.deleted = 0
+        AND (vr.status IS NULL OR vr.status != 'cancelled')
         AND uv.github_login != COALESCE(pr.author, '')
         AND uv.decision IN ('accept', 'modify', 'reject', 'duplicate')
     )
     SELECT
       COUNT(*) AS total_responses,
-      COALESCE(SUM(CASE WHEN response_rank = 1 THEN 1 ELSE 0 END), 0) AS first_responses,
-      COALESCE(SUM(CASE WHEN voted_at >= ? THEN 1 ELSE 0 END), 0) AS responses_90d,
-      COALESCE(SUM(CASE WHEN voted_at >= ? AND response_hours <= ? THEN 1 ELSE 0 END), 0) AS fast_responses_90d,
+      COALESCE(SUM(CASE WHEN response_rank = 1 AND duplicate_of IS NULL THEN 1 ELSE 0 END), 0) AS first_responses,
+      COALESCE(SUM(CASE WHEN badge_eligible = 1 AND duplicate_of IS NULL AND voted_at >= requested_at AND voted_at >= ? THEN 1 ELSE 0 END), 0) AS responses_90d,
+      COALESCE(SUM(CASE WHEN badge_eligible = 1 AND duplicate_of IS NULL AND voted_at >= requested_at AND voted_at >= ? AND response_hours <= ? THEN 1 ELSE 0 END), 0) AS fast_responses_90d,
       COALESCE(SUM(CASE
-        WHEN voted_at >= ? AND response_rank = 1 AND response_hours >= ? THEN 1 ELSE 0
+        WHEN badge_eligible = 1 AND duplicate_of IS NULL AND voted_at >= requested_at AND voted_at >= ? AND response_rank = 1 AND response_hours >= ? THEN 1 ELSE 0
       END), 0) AS coverage_responses_180d
-    FROM eligible_responses
+    FROM recorded_responses
     WHERE github_login = ?
     `).bind(
       cutoff90d,
