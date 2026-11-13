@@ -6,6 +6,7 @@ import { MyTeamsProvider } from './context/MyTeamsContext'
 import TeamInvitationNotice from './components/TeamInvitationNotice'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
+import AwardBanner from './components/AwardBanner'
 import OnboardingModal from './components/OnboardingModal/OnboardingModal'
 import Home from './pages/Home'
 import About from './pages/About'
@@ -47,6 +48,7 @@ function AppShell() {
       <AnalyticsTracker />
       {!isStandalone && <PreviewBanner />}
       {!isStandalone && <Nav onOpenOnboarding={() => setOnboardingOpen(true)} />}
+      <AwardBanner />
       <main id="main-content" tabIndex={-1}>
         <TeamInvitationNotice />
         <Routes>
