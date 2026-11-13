@@ -82,7 +82,7 @@ export default function ResponseBadgeCards({ summary, headingLevel = 3, compact 
     <div className="cp-response-note">
       <strong>How is past work counted?</strong>
       <span>{summary.requestClockMeaning}</span>
-      <span>PR authors and cancelled or deleted work do not qualify. Timed badges also exclude duplicate PRs.</span>
+      <span>PR authors and cancelled or deleted work do not qualify. First Responder and timed badges also exclude duplicate PRs.</span>
     </div>
   </>
 }
