@@ -1,3 +1,4 @@
+import RoleChoices from './ContributionRoles/RoleChoices'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import './RegisterForm.css'
@@ -128,6 +129,8 @@ export default function RegisterForm({
         />
       </div>
 
+      {type === 'validator' && <RoleChoices disabled={state === 'loading'} />}
+
       {state === 'error' && (
         <p className="register-error" role="alert">{errorMsg}</p>
       )}
@@ -141,8 +144,7 @@ export default function RegisterForm({
       </button>
 
       <p className="register-note">
-        No commitment. You'll receive update emails at the address you provide.<br />
-        Thank you for your support.
+        No commitment. You'll receive update emails at the address you provide. Thank you for your support.
       </p>
     </form>
   )
