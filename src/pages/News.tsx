@@ -13,8 +13,8 @@ interface Article {
   actionLabel?: string
   secondaryHref?: string
   secondaryLabel?: string
-  deadline?: string
   featured?: boolean
+  showActions?: boolean
 }
 
 interface Event {
@@ -52,12 +52,9 @@ const articles: Article[] = [
     date: 'October 28, 2026',
     title: 'OWASP OASIS Named a 2026 SANS Difference Makers Awards Finalist',
     excerpt: 'SANS selected OWASP OASIS as one of five finalists for Innovation of the Year (Open-Source Product or Tool), recognizing its community-led workflow for turning automated patches into reviewed, upstream-ready security fixes.',
-    href: 'https://go.sans.org/MBGfxJ',
-    actionLabel: 'Vote for OASIS',
-    secondaryHref: 'https://www.linkedin.com/posts/sans-difference-makers-awards-2026-community-ugcPost-7521314156336021504-DGzW/',
-    secondaryLabel: 'View the SANS announcement',
-    deadline: 'Community voting closes November 9, 2026.',
+    href: 'https://www.linkedin.com/posts/sans-difference-makers-awards-2026-community-ugcPost-7521314156336021504-DGzW/',
     featured: true,
+    showActions: false,
   },
   {
     slug: 'launch',
@@ -200,23 +197,24 @@ export default function News() {
                     )}
                   </h2>
                   <p className="news-card-excerpt">{a.excerpt}</p>
-                  {a.deadline && <p className="news-card-deadline">{a.deadline}</p>}
-                  <div className="news-card-actions">
-                    {a.href ? (
-                      <a href={a.href} target="_blank" rel="noopener noreferrer" className="news-card-read-more news-card-read-more--primary">
-                        {a.actionLabel ?? 'Read more'} <ArrowIcon />
-                      </a>
-                    ) : (
-                      <Link to={`/news/${a.slug}`} className="news-card-read-more">
-                        {a.actionLabel ?? 'Read more'} <ArrowIcon />
-                      </Link>
-                    )}
-                    {a.secondaryHref && (
-                      <a href={a.secondaryHref} target="_blank" rel="noopener noreferrer" className="news-card-source-link">
-                        {a.secondaryLabel ?? 'View source'}
-                      </a>
-                    )}
-                  </div>
+                  {a.showActions !== false && (
+                    <div className="news-card-actions">
+                      {a.href ? (
+                        <a href={a.href} target="_blank" rel="noopener noreferrer" className="news-card-read-more news-card-read-more--primary">
+                          {a.actionLabel ?? 'Read more'} <ArrowIcon />
+                        </a>
+                      ) : (
+                        <Link to={`/news/${a.slug}`} className="news-card-read-more">
+                          {a.actionLabel ?? 'Read more'} <ArrowIcon />
+                        </Link>
+                      )}
+                      {a.secondaryHref && (
+                        <a href={a.secondaryHref} target="_blank" rel="noopener noreferrer" className="news-card-source-link">
+                          {a.secondaryLabel ?? 'View source'}
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {a.featured && (
                   <div className="news-award-mark" aria-label="2026 SANS Difference Makers Awards, Innovation of the Year finalist">
