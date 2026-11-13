@@ -36,6 +36,16 @@ interface Event {
 
 const articles: Article[] = [
   {
+    slug: '1000-members',
+    category: 'Press Release',
+    categoryClass: 'badge-blue',
+    date: 'November 5, 2026',
+    title: 'OWASP OASIS Welcomes 1000 New Members to Community, Launches Grassroots Movement to Secure Open Source Software',
+    excerpt: 'OWASP OASIS has welcomed 1,000 members from around the world, building a grassroots community to validate AI-generated security fixes for open source software.',
+    href: 'https://www.einpresswire.com/article/954582882/owasp-oasis-welcomes-1000-new-members-to-community-launches-grassroots-movement-to-secure-open-source-software',
+    actionLabel: 'Read the press release',
+  },
+  {
     slug: 'sans-difference-makers-finalist',
     category: 'Award Finalist',
     categoryClass: 'badge-green',
@@ -72,34 +82,6 @@ const upcomingEvents: Event[] = [
     location: 'Oakland Marriott · Oakland, CA',
     details: 'Michael Cartsonis presents at NahamCon 2026 during Prompt2Pwn. The conference schedule will be updated here when the exact session time is announced.',
     href: 'https://labs.zenity.io/prompt2pwn',
-  },
-  {
-    date: '2026-11-06',
-    day: '6',
-    month: 'NOV',
-    dateLabel: 'November 6, 2026',
-    venue: 'OWASP Global AppSec USA',
-    kind: 'Book signing',
-    title: 'Book Signing: Two Cycles, One Codebase',
-    time: '3:00–3:30 PM PST · Friday, November 6',
-    location: 'Grand Ballroom Foyer (Street Level) · Hyatt Regency San Francisco',
-    details: 'Michael Cartsonis and Bruce Fram sign Two Cycles, One Codebase: How AI, Fix Automation, and OASIS Are Rewriting the Role of Application Security.',
-    href: 'https://sched.co/2Ze2S',
-    secondaryHref: 'https://www.amazon.com/dp/B0HHJ3JTVS',
-    secondaryLabel: 'View the book',
-  },
-  {
-    date: '2026-10-08',
-    day: '8',
-    month: 'OCT',
-    dateLabel: 'October 8, 2026',
-    venue: 'Online · Zoom Webinar',
-    kind: 'Webinar',
-    cancelled: true,
-    title: 'The Future of AppSec, Open Source, and Your Role in the Age of AI',
-    time: 'Cancelled · New date to be announced',
-    location: 'Online · Zoom Webinar',
-    details: 'This webinar has been cancelled and will be rescheduled. A new date will be announced soon.',
   },
 ]
 
