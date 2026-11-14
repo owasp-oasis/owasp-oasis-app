@@ -176,7 +176,12 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
       const viewportBottom = window.visualViewport
         ? window.visualViewport.offsetTop + window.visualViewport.height
         : window.innerHeight
-      const available = Math.max(0, Math.floor(viewportBottom - panel.getBoundingClientRect().top - 12))
+      // Mobile stacks the list above the panel. Keep enough document height
+      // for scrollIntoView; sizing from the panel's pre-scroll position would
+      // shrink the page and push the footer below the fold again.
+      const available = window.matchMedia('(max-width: 767px)').matches
+        ? Math.floor(window.innerHeight * 0.75)
+        : Math.max(0, Math.floor(viewportBottom - panel.getBoundingClientRect().top - 12))
       const height = `${available}px`
       if (panel.style.getPropertyValue('--prp-inline-height') !== height) {
         panel.style.setProperty('--prp-inline-height', height)
@@ -187,6 +192,11 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     }
 
     updateHeight()
+    // In the stacked mobile layout the candidate list comes first.
+    if (window.matchMedia('(max-width: 767px)').matches &&
+        panel.getBoundingClientRect().top > window.innerHeight - 120) {
+      panel.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' })
+    }
     const observer = new ResizeObserver(scheduleUpdate)
     observer.observe(panel.parentElement ?? panel)
     const workspaceContent = panel.closest('.ws-content')
