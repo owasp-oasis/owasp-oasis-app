@@ -75,10 +75,10 @@ const upcomingEvents: Event[] = [
     venue: 'NahamCon · NahamSec / Prompt2Pwn',
     kind: 'Speaking',
     title: 'Saving Open Source One Remediation at a Time',
-    time: 'Time TBD',
+    time: '4:00–4:25 PM PT · Friday, November 20',
     location: 'Oakland Marriott · Oakland, CA',
-    details: 'Michael Cartsonis presents at NahamCon 2026 during Prompt2Pwn. The conference schedule will be updated here when the exact session time is announced.',
-    href: 'https://labs.zenity.io/prompt2pwn',
+    details: 'Michael Cartsonis presents at NahamCon 2026 during Prompt2Pwn. The 25-minute talk is scheduled for 4:00 PM Pacific on Friday, November 20.',
+    href: 'https://p2p.nahamcon.com/',
   },
 ]
 

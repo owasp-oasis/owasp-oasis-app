@@ -193,30 +193,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Featured event ── */}
-      <section className="home-event-section" aria-labelledby="home-event-title">
-        <div className="wrap">
-          <div className="home-event-card">
-            <div className="home-event-time">
-              <span className="home-event-label">Upcoming talk</span>
-              <time dateTime="2026-11-20T16:00:00-08:00">
-                <strong>4:00 PM PT</strong>
-                <span>Friday, November 20, 2026</span>
-                <span>25 minutes</span>
-              </time>
-            </div>
-            <div className="home-event-copy">
-              <p className="home-eyebrow">NahamCon 2026 · Prompt2Pwn</p>
-              <h2 id="home-event-title">Saving Open Source One Remediation at a Time</h2>
-              <p>Michael Cartsonis · Oakland Marriott and global livestream</p>
-            </div>
-            <a className="home-event-link" href="https://p2p.nahamcon.com/" target="_blank" rel="noopener noreferrer">
-              View the agenda <span aria-hidden="true">↗</span>
-            </a>
-          </div>
-        </div>
-      </section>
-
       {/* ── Quotes carousel ── */}
       <QuotesCarousel quotes={quotes} />
 
