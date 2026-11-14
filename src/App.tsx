@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
+import { StarPromptProvider, useHoldStarPrompt } from './context/StarPromptContext'
 import Nav from './components/Nav'
 import { MyTeamsProvider } from './context/MyTeamsContext'
 import TeamInvitationNotice from './components/TeamInvitationNotice'
@@ -39,6 +40,7 @@ function LegacySyncRunLink() {
 
 function AppShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
+  useHoldStarPrompt(onboardingOpen)
   const location = useLocation()
   const isStandalone = location.pathname === '/calculator'
   const isWorkspace = location.pathname.startsWith('/workspace')
@@ -99,9 +101,11 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter><MyTeamsProvider><WorkspaceProvider>
-        <AppShell />
-      </WorkspaceProvider></MyTeamsProvider></BrowserRouter>
+      <StarPromptProvider>
+        <BrowserRouter><MyTeamsProvider><WorkspaceProvider>
+          <AppShell />
+        </WorkspaceProvider></MyTeamsProvider></BrowserRouter>
+      </StarPromptProvider>
     </AuthProvider>
   )
 }
