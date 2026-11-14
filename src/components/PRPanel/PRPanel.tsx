@@ -5,7 +5,7 @@
  * Vote bar: Accept / Modify / Reject (open PRs only)
  * VoteForm drawer slides up from bottom when a decision is selected.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import VoteForm, { type Decision } from '../VoteForm'
 import { Maximize2, Minimize2, X, ExternalLink, LockKeyhole } from 'lucide-react'
@@ -159,7 +159,63 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
   const [detailsRetry, setDetailsRetry] = useState(0)
 
   const bodyRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const prevPrId = useRef<number | null>(null)
+
+  // The inline panel begins below the workspace header and filters, whose
+  // height changes when they wrap. Size it from its actual viewport position
+  // so the review footer stays visible while the tab content scrolls.
+  useLayoutEffect(() => {
+    if (!pr || presentation !== 'inline' || expanded) return
+    const panel = panelRef.current
+    if (!panel) return
+
+    let frame = 0
+    const updateHeight = () => {
+      frame = 0
+      const viewportBottom = window.visualViewport
+        ? window.visualViewport.offsetTop + window.visualViewport.height
+        : window.innerHeight
+      // Mobile stacks the list above the panel. Keep enough document height
+      // for scrollIntoView; sizing from the panel's pre-scroll position would
+      // shrink the page and push the footer below the fold again.
+      const available = window.matchMedia('(max-width: 767px)').matches
+        ? Math.floor(window.innerHeight * 0.75)
+        : Math.max(0, Math.floor(viewportBottom - panel.getBoundingClientRect().top - 12))
+      const height = `${available}px`
+      if (panel.style.getPropertyValue('--prp-inline-height') !== height) {
+        panel.style.setProperty('--prp-inline-height', height)
+      }
+    }
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateHeight)
+    }
+
+    updateHeight()
+    // In the stacked mobile layout the candidate list comes first.
+    if (window.matchMedia('(max-width: 767px)').matches &&
+        panel.getBoundingClientRect().top > window.innerHeight - 120) {
+      panel.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' })
+    }
+    const observer = new ResizeObserver(scheduleUpdate)
+    observer.observe(panel.parentElement ?? panel)
+    const workspaceContent = panel.closest('.ws-content')
+    if (workspaceContent) observer.observe(workspaceContent)
+    document.querySelectorAll('.ws-screen-header, .ws-toolbar, .ws-filter-summary').forEach(element => observer.observe(element))
+    window.addEventListener('resize', scheduleUpdate)
+    window.addEventListener('scroll', scheduleUpdate, true)
+    window.visualViewport?.addEventListener('resize', scheduleUpdate)
+    window.visualViewport?.addEventListener('scroll', scheduleUpdate)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('scroll', scheduleUpdate, true)
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate)
+      window.visualViewport?.removeEventListener('scroll', scheduleUpdate)
+      if (frame) window.cancelAnimationFrame(frame)
+      panel.style.removeProperty('--prp-inline-height')
+    }
+  }, [pr?.id, presentation, expanded, params.toString()])
 
   // Reset panel state when PR changes
   useEffect(() => {
@@ -173,8 +229,14 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
       setDetailsRetry(0)
       setNudgeDismissed(false)
       if (bodyRef.current) bodyRef.current.scrollTop = 0
+      if (contentRef.current) contentRef.current.scrollTop = 0
     }
   }, [pr])
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+    if (contentRef.current) contentRef.current.scrollTop = 0
+  }, [activeTab])
 
   // Fetch details when PR changes
   useEffect(() => {
@@ -310,6 +372,8 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
              role={modal ? "dialog" : "region"} aria-modal={modal || undefined}
              aria-label={`PR #${activePR.number} details`}>
 
+        <div className="prp-panel-content" ref={contentRef}>
+
         {/* Header */}
         <div className="prp-header">
           <div className="prp-header-top">
@@ -389,6 +453,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
           {activeTab === 'workflow' && (
             <WorkflowTab prId={activePR.id} isAdmin={user?.role === 'admin'} />
           )}
+        </div>
         </div>
 
         {/* Review footer: one decision bar, followed by its form. Keeping this

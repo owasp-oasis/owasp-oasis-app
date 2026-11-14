@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-worker/
+test-results/
+playwright-report/
 .wrangler/
 *.log
 *.local
