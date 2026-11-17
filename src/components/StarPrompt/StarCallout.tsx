@@ -3,7 +3,7 @@
  * Signed-in users get the one-click star button; everyone else gets a sign-in
  * link plus direct links to star on GitHub.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useStarPrompt } from '../../context/StarPromptContext'
 import { StarRepoList } from './StarPromptModal'
@@ -11,8 +11,13 @@ import './StarPrompt.css'
 
 export default function StarCallout() {
   const { user } = useAuth()
-  const { repos, allStarred, starring, error, starAll } = useStarPrompt()
+  const { repos, allStarred, starring, error, starAll, checkStatus } = useStarPrompt()
   const [done, setDone] = useState(false)
+
+  // The sign-in prompt may have skipped the status lookup; load it for this box.
+  useEffect(() => {
+    if (user) checkStatus()
+  }, [user, checkStatus])
 
   if (user && (allStarred || done)) {
     return <div className="sp-callout"><p><strong>Thanks for starring OASIS! ⭐</strong></p></div>

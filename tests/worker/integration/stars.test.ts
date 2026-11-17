@@ -75,6 +75,18 @@ describe('Repository star endpoints', () => {
       }));
       expect(res.status).toBe(502);
     });
+
+    it('returns 401 asking to sign in again when GitHub rejects the token', async () => {
+      fetchMock
+        .when(req => req.url.startsWith(STARRED_URL))
+        .respondWith(new Response('Bad credentials', { status: 401 }));
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const res = await SELF.fetch(new Request('http://localhost/api/github/stars', {
+        headers: { Cookie: `${sessionCookie}; ${tokenCookie}` },
+      }));
+      expect(res.status).toBe(401);
+      await expect(res.json()).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/sign in again/i) });
+    });
   });
 
   describe('POST /api/github/stars', () => {
@@ -131,6 +143,44 @@ describe('Repository star endpoints', () => {
 
       expect(res.status).toBe(502);
       await expect(res.json()).resolves.toMatchObject({ ok: false, all_starred: false });
+    });
+
+    it('returns 401 without starring when GitHub rejects the token', async () => {
+      const puts: string[] = [];
+      fetchMock
+        .when(req => {
+          if (req.method === 'PUT') puts.push(req.url);
+          return req.url.startsWith(STARRED_URL);
+        })
+        .respondWith(new Response('Bad credentials', { status: 401 }));
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+
+      const res = await SELF.fetch(new Request('http://localhost/api/github/stars', {
+        method: 'POST',
+        headers: { 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}` },
+      }));
+
+      expect(res.status).toBe(401);
+      expect(puts).toEqual([]);
+    });
+
+    it('is rate limited like other actions taken with the user token', async () => {
+      fetchMock
+        .when(req => req.method === 'GET' && req.url.startsWith(STARRED_URL))
+        .respondWith(new Response(null, { status: 204 }));
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      const post = () => SELF.fetch(new Request('http://localhost/api/github/stars', {
+        method: 'POST',
+        headers: { 'x-csrf-token': csrf, Cookie: `__csrf=${csrf}; ${sessionCookie}; ${tokenCookie}` },
+      }));
+
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) statuses.push((await post()).status);
+
+      expect(statuses.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+      expect(statuses[5]).toBe(429);
     });
   });
 });

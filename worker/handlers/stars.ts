@@ -13,9 +13,8 @@
 
 import type { Env } from '../types.js';
 import { getSession } from './auth.js';
-import { jsonErr, jsonOk, secHeaders, validateCSRF } from '../security.js';
-
-export const STAR_REPOS = ['OWASP/oasis', 'owasp-oasis/project-overview'] as const;
+import { checkRateLimit, jsonErr, jsonOk, secHeaders, validateCSRF } from '../security.js';
+import { STAR_REPOS } from '../starRepos.js';
 
 const GH_HEADERS = {
   Accept: 'application/vnd.github+json',
@@ -25,20 +24,27 @@ const GH_HEADERS = {
 
 type StarState = { full_name: string; starred: boolean };
 
-async function isStarred(token: string, repo: string): Promise<boolean | null> {
+type StarCheck = boolean | 'unauthorized' | null;
+
+async function isStarred(token: string, repo: string): Promise<StarCheck> {
   const res = await fetch(`https://api.github.com/user/starred/${repo}`, {
     headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
   });
   if (res.status === 204) return true;
   if (res.status === 404) return false;
-  return null; // unknown: expired token, rate limit, GitHub outage
+  if (res.status === 401) return 'unauthorized'; // token expired or app access revoked
+  return null; // unknown: rate limit, GitHub outage
 }
 
-async function readStates(token: string): Promise<StarState[] | null> {
+/** Star state per repo, 'unauthorized' when GitHub rejects the token, or null when unknown. */
+async function readStates(token: string): Promise<StarState[] | 'unauthorized' | null> {
   const results = await Promise.all(STAR_REPOS.map(repo => isStarred(token, repo)));
+  if (results.includes('unauthorized')) return 'unauthorized';
   if (results.some(r => r === null)) return null;
   return STAR_REPOS.map((full_name, i) => ({ full_name, starred: results[i] === true }));
 }
+
+const REAUTH_MESSAGE = 'GitHub no longer accepts your sign-in. Sign in again to star.';
 
 function summary(repos: StarState[], request: Request): Response {
   return jsonOk({ repos, all_starred: repos.every(r => r.starred) }, request, { cache: 'no-store' });
@@ -51,6 +57,7 @@ export async function handleStarStatus(request: Request, env: Env): Promise<Resp
   if (!session.github_token) return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
 
   const repos = await readStates(session.github_token).catch(() => null);
+  if (repos === 'unauthorized') return jsonErr(REAUTH_MESSAGE, 401, request);
   if (!repos) return jsonErr('Could not check star status on GitHub', 502, request);
   return summary(repos, request);
 }
@@ -60,15 +67,20 @@ export async function handleStarRepos(request: Request, env: Env): Promise<Respo
   if (!validateCSRF(request)) return jsonErr('Invalid or missing security token', 403, request);
   const session = await getSession(request, env);
   if (!session) return jsonErr('Sign in to star repositories', 401, request);
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (!(await checkRateLimit(env, ip)).allowed) {
+    return jsonErr('Too many requests — please wait a minute and try again.', 429, request);
+  }
   if (!session.github_token) return jsonErr('Forbidden — you may need to re-authenticate', 403, request);
   const token = session.github_token;
 
-  let current: StarState[] | null;
+  let current: StarState[] | 'unauthorized' | null;
   try {
     current = await readStates(token);
   } catch {
     current = null;
   }
+  if (current === 'unauthorized') return jsonErr(REAUTH_MESSAGE, 401, request);
   if (!current) return jsonErr('Could not check star status on GitHub', 502, request);
 
   const repos = await Promise.all(current.map(async (state): Promise<StarState> => {

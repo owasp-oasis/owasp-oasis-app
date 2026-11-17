@@ -39,9 +39,10 @@ function LegacySyncRunLink() {
 
 function AppShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
-  useHoldStarPrompt(onboardingOpen)
   const location = useLocation()
   const isStandalone = location.pathname === '/calculator'
+  // Standalone pages hide all site chrome and prompts, the star popup included.
+  useHoldStarPrompt(onboardingOpen || isStandalone)
   const isWorkspace = location.pathname.startsWith('/workspace')
 
   return (
