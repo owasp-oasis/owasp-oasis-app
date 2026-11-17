@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    include: ['tests/frontend/workspaceFirstAccessOnboarding.interaction.test.ts'],
+    // jsdom interaction tests; vitest.config.ts excludes the same pattern.
+    include: ['tests/frontend/**/*.interaction.test.ts'],
   },
 })
