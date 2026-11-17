@@ -117,7 +117,7 @@ export function normalizeAnalyticsRoute(pathname: string): string {
   if (/^\/api\/admin\/users\/\d+\/role$/.test(path)) return '/api/admin/users/:id/role';
   const approved = new Set([
     '/', '/about', '/overview', '/support', '/sponsors', '/brand', '/news', '/news/launch',
-    '/calculator', '/workspace', '/workspace/projects', '/workspace/fixes', '/workspace/pull-requests',
+    '/calculator', '/dashboard', '/workspace', '/workspace/projects', '/workspace/fixes', '/workspace/pull-requests',
     '/workspace/validators', '/workspace/contributors', '/workspace/maintainers', '/workspace/teams',
     '/workspace/preferences', '/workspace/fix-automation', '/workspace/tools', '/workspace/sync', '/workspace/status',
     '/admin', '/admin/analytics',

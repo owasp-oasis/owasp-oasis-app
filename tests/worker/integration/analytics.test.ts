@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { runAnalyticsCollector, runHistoricalAnalyticsBackfill } from '../../../worker/analytics.js';
+import { normalizeAnalyticsRoute, runAnalyticsCollector, runHistoricalAnalyticsBackfill } from '../../../worker/analytics.js';
 import {
   handleAdminAnalytics,
   handleAdminAnalyticsBackfill,
@@ -33,6 +33,10 @@ function telemetryRequest(path: string, body: Record<string, unknown>, csrf: str
 
 describe('privacy-safe administrative analytics', () => {
   beforeAll(async () => applySchema(env));
+
+  it('records the public dashboard under its own approved route key', () => {
+    expect(normalizeAnalyticsRoute('/dashboard')).toBe('/dashboard');
+  });
 
   beforeEach(() => {
     fetchMock.activate();
