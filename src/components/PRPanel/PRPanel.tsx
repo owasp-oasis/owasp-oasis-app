@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useStarPrompt } from '../../context/StarPromptContext'
 import VoteForm, { type Decision } from '../VoteForm'
 import { Maximize2, Minimize2, X, ExternalLink, LockKeyhole } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -137,6 +138,7 @@ export function SignInModal({ onClose }: SignInModalProps) {
 /* ── Main panel ──────────────────────────────────────────────── */
 export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentation = 'drawer' }: Props) {
   const { user } = useAuth()
+  const { remind: remindStar } = useStarPrompt()
 
   const [params, setParams] = useSearchParams()
   const activeTab = (['summary','body','changes','comments','workflow'].includes(params.get('tab') ?? '') ? params.get('tab') : 'summary') as Tab
@@ -266,6 +268,7 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
     setVoteDecision(null)
     setRefetchComments(n => n + 1)
     onVoteSuccess(activePR, decision)
+    remindStar('vote')
   }
 
   function handleVoteButtonClick(d: Decision) {

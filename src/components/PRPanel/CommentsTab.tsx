@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useStarPrompt } from '../../context/StarPromptContext'
 import { renderMarkdown } from './renderMarkdown'
 
 interface Reactions {
@@ -60,6 +61,7 @@ function formatRelative(dateStr: string): string {
 
 export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSignInRequired }: Props) {
   const { user } = useAuth()
+  const { remind: remindStar } = useStarPrompt()
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -145,6 +147,7 @@ export default function CommentsTab({ prId, refetchTrigger, onCountLoaded, onSig
       })
       setDraft('')
       setPostNotice('Comment posted to the GitHub PR.')
+      remindStar('comment')
     } catch {
       setPostError('Could not post comment. Check your connection and try again.')
     } finally {

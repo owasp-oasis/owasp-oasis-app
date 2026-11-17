@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { AuthProvider } from './context/AuthContext'
+import { StarPromptProvider, useHoldStarPrompt } from './context/StarPromptContext'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import PreviewBanner from './components/PreviewBanner'
@@ -37,6 +38,8 @@ function AppShell() {
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const location = useLocation()
   const isStandalone = location.pathname === '/calculator'
+  // Standalone pages hide all site chrome and prompts, the star popup included.
+  useHoldStarPrompt(onboardingOpen || isStandalone)
   const isWorkspace = location.pathname.startsWith('/workspace')
 
   return (
@@ -92,9 +95,11 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter><WorkspaceProvider>
-        <AppShell />
-      </WorkspaceProvider></BrowserRouter>
+      <StarPromptProvider>
+        <BrowserRouter><WorkspaceProvider>
+          <AppShell />
+        </WorkspaceProvider></BrowserRouter>
+      </StarPromptProvider>
     </AuthProvider>
   )
 }
