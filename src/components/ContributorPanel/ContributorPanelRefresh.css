@@ -441,7 +441,7 @@
   gap: 10px;
 }
 
-.cp-response-badge-heading h3 {
+.cp-response-badge-heading :is(h3, h5) {
   margin: 0;
   color: #102238;
   font-size: 1rem;

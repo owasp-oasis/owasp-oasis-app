@@ -12,6 +12,7 @@ import { useEffect, useState, useCallback } from 'react';
 import ContributorAvatar from '../ContributorAvatar';
 import './ContributorPanel.css';
 import './ContributorPanelRefresh.css';
+import ResponseBadgeCards, { type ResponseBadgeSummary } from '../ResponseBadgeCards';
 
 /* ─── TYPES ───────────────────────────────────────────────────── */
 interface ContributorDetail {
@@ -64,30 +65,6 @@ interface PublicBadge {
   qualifying_count: number;
   threshold: number | null;
   awarded_at: string;
-}
-
-interface ResponseBadgeCriterion {
-  label: string;
-  current: number;
-  target: number;
-  unit: 'count' | 'percent';
-  met: boolean;
-}
-
-interface ResponseBadge {
-  id: 'first_responder' | 'fast_responder' | 'coverage_contributor';
-  name: string;
-  kind: 'achievement' | 'activity';
-  state: 'active' | 'locked';
-  description: string;
-  evidence: string;
-  criteria: ResponseBadgeCriterion[];
-}
-
-interface ResponseBadgeSummary {
-  badges: ResponseBadge[];
-  calculatedAt: string;
-  requestClockMeaning: string;
 }
 
 interface PanelData {
@@ -270,77 +247,8 @@ function ScoreTab({ contributor, allTimeRank, publicBadges, onShowFormula }: {
   );
 }
 
-const RESPONSE_BADGE_ICONS: Record<ResponseBadge['id'], string> = {
-  first_responder: '⚡',
-  fast_responder: '⏱',
-  coverage_contributor: '🛟',
-};
-
-function criterionValue(criterion: ResponseBadgeCriterion): string {
-  const suffix = criterion.unit === 'percent' ? '%' : '';
-  return `${criterion.current}${suffix} / ${criterion.target}${suffix}`;
-}
-
 function BadgesTab({ summary }: { summary: ResponseBadgeSummary }) {
-  return (
-    <div className="cp-tab-content cp-response-badges">
-      <div className="cp-response-intro">
-        <strong>Response recognition</strong>
-        <span>Rewards timely coverage without changing reputation, ranking, vote weight, or permissions.</span>
-      </div>
-
-      <div className="cp-response-badge-list">
-        {summary.badges.map(badge => (
-          <article
-            key={badge.id}
-            className={`cp-response-badge-card cp-response-badge-card--${badge.state}`}
-          >
-            <div className="cp-response-badge-icon" aria-hidden="true">{RESPONSE_BADGE_ICONS[badge.id]}</div>
-            <div className="cp-response-badge-body">
-              <div className="cp-response-badge-heading">
-                <h3>{badge.name}</h3>
-                <span className={`cp-response-badge-state cp-response-badge-state--${badge.state}`}>
-                  {badge.state === 'active' ? 'Earned' : 'Not yet earned'}
-                </span>
-              </div>
-              <p>{badge.description}</p>
-              <strong className="cp-response-badge-evidence">{badge.evidence}</strong>
-              {(badge.kind === 'activity' || badge.state !== 'active') && (
-                <div className="cp-response-criteria">
-                  {badge.criteria.map(criterion => {
-                    const progress = criterion.target > 0
-                      ? Math.min(100, Math.round((criterion.current / criterion.target) * 100))
-                      : 0;
-                    return (
-                      <div key={criterion.label} className="cp-response-criterion">
-                        <span><small>{criterion.label}</small><b>{criterionValue(criterion)}</b></span>
-                        <div
-                          className={`cp-response-progress${criterion.met ? ' cp-response-progress--met' : ''}`}
-                          role="progressbar"
-                          aria-label={criterion.label}
-                          aria-valuemin={0}
-                          aria-valuemax={criterion.target}
-                          aria-valuenow={Math.min(criterion.current, criterion.target)}
-                        >
-                          <span style={{ width: `${progress}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-
-      <div className="cp-response-note">
-        <strong>When does the clock start?</strong>
-        <span>{summary.requestClockMeaning}</span>
-        <span>Only recognized OASIS votes count. PR authors and historical requests are excluded.</span>
-      </div>
-    </div>
-  );
+  return <div className="cp-tab-content cp-response-badges"><ResponseBadgeCards summary={summary} /></div>;
 }
 
 function ContributionRow({ c, is90d }: { c: Contribution; is90d: boolean }) {

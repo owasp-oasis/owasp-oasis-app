@@ -20,10 +20,10 @@ The tests cover:
 
 - creation of a badge-eligible clock for a newly discovered PR;
 - protection against reopening a responded request during synchronization;
-- observation-only handling for historical PRs;
+- historical validation and first-response credit without invented response times;
 - exact 24-hour, 72-hour, and 80% boundaries;
 - deterministic timestamp ties;
-- exclusions for authors, cancelled clocks, early votes, and historical clocks; and
+- exclusions for authors and cancelled requests, and timed-badge exclusion for early votes and historical clocks; and
 - unchanged `base_reputation` and `modified_reputation` fields.
 
 Run the complete repository verification before review:
@@ -45,17 +45,16 @@ npm run demo:badges
 Open the local URL printed by Wrangler, normally:
 
 ```text
-http://localhost:8787/workspace/contributors
+http://localhost:8787/workspace/validators
 ```
 
 Then:
 
-1. Select `alice-validator`.
-2. Confirm her avatar falls back to the `AV` initials instead of showing a broken image.
-3. Open **Badges** and confirm First Responder and Fast Responder are earned.
-4. Select `casey-coverage` and confirm Coverage Contributor is earned.
-5. Return to **Score**, expand **How does the bonus multiplier work?**, and confirm the explanation is readable.
-6. Confirm the existing score values are unchanged when switching between Score and Badges.
+1. Select `alice-validator` and confirm her avatar falls back to the `AV` initials instead of showing a broken image.
+2. In her profile, confirm Validation Contributor, First Responder, and Fast Responder are earned, while Coverage Contributor shows progress.
+3. Select `casey-coverage` and confirm Coverage Contributor is earned.
+4. Confirm the badges and score details remain readable at desktop and mobile widths without horizontal page overflow.
+5. In **Workspace → Projects**, open a project contributor and confirm the slide-out **Badges** tab uses the same four cards.
 
 The seed uses dates relative to the time it is run, so rolling badge windows remain reproducible.
 
