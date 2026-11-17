@@ -419,7 +419,7 @@ describe('POST /api/vote', () => {
     });
 
     it('records optional Team attribution for a current Team member', async () => {
-      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env, { github_user_id: 101 });
       const csrf = makeCsrf();
       const timestamp = new Date().toISOString();
       await env.DB.prepare(`INSERT INTO teams (name, description, membership_mode, status, owner_login, created_at, updated_at)
@@ -588,7 +588,7 @@ describe('POST /api/vote', () => {
 
   describe('database updates', () => {
     it('creates user_votes row', async () => {
-      const { sessionCookie, tokenCookie, login } = await createTestSession(env);
+      const { sessionCookie, tokenCookie, login } = await createTestSession(env, { github_user_id: 101 });
       const csrf = makeCsrf();
 
       await insertTestPR(env);
@@ -603,6 +603,20 @@ describe('POST /api/vote', () => {
 
       expect(votes.results).toHaveLength(1);
       expect((votes.results[0] as any).decision).toBe('accept');
+      expect((votes.results[0] as any).github_user_id).toBe(101);
+      expect((votes.results[0] as any).head_sha).toBe('test-head-sha');
+    });
+
+    it('does not accept a vote when the candidate revision is unknown', async () => {
+      const { sessionCookie, tokenCookie } = await createTestSession(env);
+      const csrf = makeCsrf();
+      await insertTestPR(env);
+      await env.DB.prepare('UPDATE pull_requests SET head_sha = NULL WHERE id = 1001').run();
+
+      const response = await vote(1001, 'accept', csrf, sessionCookie, tokenCookie);
+      expect(response.status).toBe(409);
+      expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM user_votes').first<{ count: number }>())
+        .toMatchObject({ count: 0 });
     });
 
     it('updates pull_requests consensus_accept count', async () => {

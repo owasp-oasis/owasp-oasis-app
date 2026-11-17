@@ -150,6 +150,30 @@ action auditing. A new machine-to-machine endpoint needs a separate threat
 model and narrowly scoped credential; do not automatically reuse
 `ADMIN_SECRET`.
 
+## Repository stewardship and maintainer capabilities
+
+Repo Security Stewardship and upstream maintainer status are separate OASIS
+capabilities. The authenticated GitHub user ID is the identity key; usernames
+are display data and are re-verified against GitHub before a new assignment.
+
+- Only an OASIS administrator may approve or decline a Steward request.
+- A repository has at most one active OASIS Repo Security Steward. The
+  assigned Steward may add, edit, or remove repo-specific OASIS Role
+  assignments and remove a maintainer's OASIS registration.
+- Removing a registration does not revoke GitHub access. OASIS does not grant
+  or remove GitHub repository permissions through the roster APIs.
+- A registered upstream maintainer may perform maintainer workflow actions
+  only while their OAuth session still has Maintain or Admin permission on the
+  configured upstream repository. The Worker checks the immutable GitHub repo
+  ID and current permission before decisions, evidence access, or submission.
+- Maintainer approval is bound to the current source PR head SHA. An upstream
+  PR is created only after explicit user confirmation; OASIS never merges it.
+
+These are distinct checks: being a Steward does not grant GitHub Maintain
+access, and being a GitHub maintainer does not make someone the OASIS Steward.
+GitHub Maintain provisioning for Stewards is not implemented in this feature
+slice and must not be implied by the roster UI.
+
 ## Tests required for a protected feature
 
 Add integration coverage for every protected endpoint:

@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 
 CREATE TABLE IF NOT EXISTS user_votes (
   github_login TEXT    NOT NULL,
+  github_user_id INTEGER,
   pr_id        INTEGER NOT NULL,
   repo_name    TEXT    NOT NULL,
   pr_number    INTEGER NOT NULL,
@@ -316,11 +317,13 @@ CREATE TABLE IF NOT EXISTS user_votes (
   parent_pr_id INTEGER DEFAULT NULL,  -- cited parent PR id (for duplicate votes; null for others)
   team_id      INTEGER DEFAULT NULL,  -- optional Team attribution, immutable once submitted
   comment_id   INTEGER,            -- GitHub comment ID (null if GitHub post failed)
+  head_sha     TEXT,               -- exact candidate revision reviewed; NULL for legacy rows
   voted_at     TEXT    NOT NULL,
   PRIMARY KEY (github_login, pr_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_votes_login    ON user_votes(github_login);
+CREATE INDEX IF NOT EXISTS idx_user_votes_pr_revision ON user_votes(pr_id, head_sha, decision);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_login ON user_sessions(github_login);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_github_user_id ON user_sessions(github_user_id);
 
@@ -515,6 +518,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upstream_submissions_external_pr
   ON upstream_submissions(upstream_full_name, upstream_pr_number)
   WHERE upstream_pr_number IS NOT NULL;
 
+-- Verified GitHub maintainers registered against an OASIS fork.
+-- GitHub access remains external; this table records the OASIS relationship.
+CREATE TABLE IF NOT EXISTS verified_upstream_maintainers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  oasis_repo_id INTEGER NOT NULL,
+  upstream_repo_github_id INTEGER NOT NULL,
+  upstream_full_name TEXT NOT NULL,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL,
+  github_name TEXT,
+  github_permission TEXT NOT NULL CHECK (github_permission IN ('maintain', 'admin')),
+  verified_at TEXT NOT NULL,
+  removed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id),
+  UNIQUE(oasis_repo_id, github_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_verified_maintainers_active
+  ON verified_upstream_maintainers(oasis_repo_id, removed_at, github_user_id);
+
 -- Sync observability tables are introduced by migrations/0007_sync_job_observability.sql.
 -- Apply migrations after this bootstrap schema when creating a fresh local database.
 -- Additive; safe to reapply. Reverting the UI can leave this table intact.
@@ -522,4 +547,161 @@ CREATE TABLE IF NOT EXISTS workspace_preferences (
   github_login TEXT PRIMARY KEY,
   settings TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(settings)),
   updated_at TEXT NOT NULL
+);
+
+-- OASIS stewardship requests and repo-specific role assignments.
+-- GitHub permissions remain independent; these tables record OASIS roles only.
+CREATE TABLE IF NOT EXISTS repository_stewards (
+  oasis_repo_id INTEGER PRIMARY KEY,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL COLLATE NOCASE,
+  github_name TEXT,
+  assigned_by_github_user_id INTEGER NOT NULL,
+  assigned_by_login TEXT NOT NULL COLLATE NOCASE,
+  assigned_at TEXT NOT NULL,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id)
+);
+
+CREATE TABLE IF NOT EXISTS repository_stewardship_requests (
+  id TEXT PRIMARY KEY,
+  oasis_repo_id INTEGER NOT NULL,
+  requester_github_user_id INTEGER NOT NULL,
+  requester_login TEXT NOT NULL COLLATE NOCASE,
+  requester_name TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'declined')),
+  reviewed_by_github_user_id INTEGER,
+  reviewed_by_login TEXT COLLATE NOCASE,
+  requested_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_stewardship_one_pending
+  ON repository_stewardship_requests(oasis_repo_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_repo_stewardship_requester
+  ON repository_stewardship_requests(requester_github_user_id, requested_at DESC);
+
+CREATE TABLE IF NOT EXISTS repository_role_assignments (
+  id TEXT PRIMARY KEY,
+  oasis_repo_id INTEGER NOT NULL,
+  github_user_id INTEGER NOT NULL,
+  github_login TEXT NOT NULL COLLATE NOCASE,
+  github_name TEXT,
+  role_name TEXT NOT NULL COLLATE NOCASE,
+  role_description TEXT NOT NULL DEFAULT '',
+  assigned_by_github_user_id INTEGER NOT NULL,
+  assigned_by_login TEXT NOT NULL COLLATE NOCASE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  removed_at TEXT,
+  removed_by_github_user_id INTEGER,
+  removed_by_login TEXT COLLATE NOCASE,
+  FOREIGN KEY (oasis_repo_id) REFERENCES repos(id),
+  CHECK (length(role_name) BETWEEN 2 AND 80)
+);
+CREATE INDEX IF NOT EXISTS idx_repository_role_assignments_repo
+  ON repository_role_assignments(oasis_repo_id, role_name COLLATE NOCASE, removed_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repository_role_assignments_active_unique
+  ON repository_role_assignments(oasis_repo_id, github_user_id, role_name COLLATE NOCASE)
+  WHERE removed_at IS NULL;
+
+-- Operational synchronization tables. Kept in the bootstrap snapshot so a
+-- fresh local D1 can be seeded without replaying ALTER migrations on a schema
+-- that already represents the latest shape.
+CREATE TABLE IF NOT EXISTS sync_job_runs (
+  id TEXT PRIMARY KEY, pipeline_run_id TEXT, workflow_instance_id TEXT,
+  job_key TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL,
+  trigger_type TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL,
+  started_at TEXT NOT NULL, finished_at TEXT, duration_ms INTEGER,
+  expected_items INTEGER NOT NULL DEFAULT 0, completed_items INTEGER NOT NULL DEFAULT 0,
+  failed_items INTEGER NOT NULL DEFAULT 0, metrics_json TEXT NOT NULL DEFAULT '{}',
+  error_code TEXT, error_summary TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sync_job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, job_run_id TEXT NOT NULL,
+  event_type TEXT NOT NULL, entity_type TEXT, entity_id TEXT, attempt INTEGER,
+  response_status INTEGER, message TEXT, details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sync_work_items (
+  id TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, job_run_id TEXT NOT NULL,
+  job_key TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}', cursor TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'leased', 'succeeded', 'failed', 'deferred')),
+  attempts INTEGER NOT NULL DEFAULT 0, leased_at TEXT, lease_expires_at TEXT,
+  last_error_code TEXT, last_error_summary TEXT, created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, UNIQUE(pipeline_run_id, job_key, entity_type, entity_id)
+);
+CREATE TABLE IF NOT EXISTS sync_shadow_entities (
+  pipeline_run_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  repository_id INTEGER, source_updated_at TEXT, fingerprint TEXT NOT NULL,
+  payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY(pipeline_run_id, entity_type, entity_id)
+);
+CREATE TABLE IF NOT EXISTS sync_parity_runs (
+  pipeline_run_id TEXT PRIMARY KEY, canonical_pipeline_run_id TEXT NOT NULL,
+  canonical_cutoff_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'match', 'mismatch', 'incomplete')),
+  comparable_entities INTEGER NOT NULL DEFAULT 0, matched_entities INTEGER NOT NULL DEFAULT 0,
+  changed_during_run INTEGER NOT NULL DEFAULT 0, difference_count INTEGER NOT NULL DEFAULT 0,
+  consecutive_matches INTEGER NOT NULL DEFAULT 0, eligible_for_cutover INTEGER NOT NULL DEFAULT 0,
+  compared_at TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sync_parity_differences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, pipeline_run_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  difference_type TEXT NOT NULL CHECK(difference_type IN ('source_changed_during_comparison', 'missing_in_shadow', 'extra_in_shadow', 'field_mismatch', 'simulated_side_effect_mismatch')),
+  fields_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
+  FOREIGN KEY(pipeline_run_id) REFERENCES sync_parity_runs(pipeline_run_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS sync_daily_budgets (
+  budget_date TEXT NOT NULL, budget_key TEXT NOT NULL, label TEXT NOT NULL,
+  unit TEXT NOT NULL, configured_limit INTEGER, consumed INTEGER NOT NULL DEFAULT 0,
+  reserved INTEGER NOT NULL DEFAULT 0, deferred INTEGER NOT NULL DEFAULT 0,
+  remaining INTEGER, reset_at TEXT, updated_at TEXT NOT NULL,
+  PRIMARY KEY(budget_date, budget_key)
+);
+
+-- Current privacy-safe analytics tables, including columns added by the
+-- historical dataset capability migration.
+CREATE TABLE IF NOT EXISTS analytics_daily_routes (
+  metric_date TEXT NOT NULL, route_key TEXT NOT NULL, page_views INTEGER NOT NULL DEFAULT 0,
+  navigation_count INTEGER NOT NULL DEFAULT 0, load_ms_sum INTEGER NOT NULL DEFAULT 0,
+  load_ms_max INTEGER NOT NULL DEFAULT 0, response_2xx INTEGER NOT NULL DEFAULT 0,
+  response_3xx INTEGER NOT NULL DEFAULT 0, response_4xx INTEGER NOT NULL DEFAULT 0,
+  response_5xx INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+  PRIMARY KEY(metric_date, route_key)
+);
+CREATE TABLE IF NOT EXISTS analytics_daily_cloudflare (
+  metric_date TEXT PRIMARY KEY, requests_estimate INTEGER NOT NULL DEFAULT 0,
+  visits_estimate INTEGER NOT NULL DEFAULT 0, response_bytes INTEGER NOT NULL DEFAULT 0,
+  response_2xx INTEGER NOT NULL DEFAULT 0, response_3xx INTEGER NOT NULL DEFAULT 0,
+  response_4xx INTEGER NOT NULL DEFAULT 0, response_5xx INTEGER NOT NULL DEFAULT 0,
+  cache_hits_estimate INTEGER NOT NULL DEFAULT 0, cache_misses_estimate INTEGER NOT NULL DEFAULT 0,
+  sample_interval REAL, source_is_estimated INTEGER NOT NULL DEFAULT 1 CHECK(source_is_estimated IN (0, 1)),
+  collected_at TEXT NOT NULL, source_dataset TEXT NOT NULL DEFAULT 'adaptive',
+  visits_available INTEGER NOT NULL DEFAULT 1 CHECK(visits_available IN (0, 1)),
+  statuses_available INTEGER NOT NULL DEFAULT 1 CHECK(statuses_available IN (0, 1)),
+  cache_available INTEGER NOT NULL DEFAULT 1 CHECK(cache_available IN (0, 1))
+);
+CREATE TABLE IF NOT EXISTS analytics_collection_days (
+  metric_date TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending', 'running', 'succeeded', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0, started_at TEXT, finished_at TEXT,
+  error_summary TEXT, updated_at TEXT NOT NULL,
+  source_dataset TEXT NOT NULL DEFAULT 'adaptive' CHECK(source_dataset IN ('adaptive', 'daily_rollup'))
+);
+CREATE TABLE IF NOT EXISTS analytics_daily_engagement (
+  metric_date TEXT NOT NULL, repo_id INTEGER NOT NULL, review_opens INTEGER NOT NULL DEFAULT 0,
+  review_closes INTEGER NOT NULL DEFAULT 0, active_seconds INTEGER NOT NULL DEFAULT 0,
+  votes_submitted INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+  PRIMARY KEY(metric_date, repo_id)
+);
+CREATE TABLE IF NOT EXISTS analytics_event_receipts (
+  event_id TEXT PRIMARY KEY, event_date TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS analytics_dataset_capabilities (
+  dataset_key TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+  not_older_than_seconds INTEGER, max_duration_seconds INTEGER, max_page_size INTEGER,
+  available_fields_json TEXT NOT NULL DEFAULT '[]', checked_at TEXT NOT NULL,
+  error_summary TEXT
 );

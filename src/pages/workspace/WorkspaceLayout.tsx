@@ -8,7 +8,8 @@ export const workspaceLinks = [
   { label: 'Candidate fixes', path: '/workspace/fixes', icon: GitPullRequest },
   { label: 'Projects', path: '/workspace/projects', icon: Folder },
   { label: 'Validators', path: '/workspace/validators', icon: Users },
-  { label: 'Maintainers', path: '/workspace/maintainers', icon: ShieldCheck },
+  { label: 'Maintainer impact', path: '/workspace/maintainers', icon: ShieldCheck },
+  { label: 'Maintainer workspace', path: '/workspace/maintainer-workspace', icon: GitPullRequest },
   { label: 'Teams', path: '/workspace/teams', icon: Users },
 ]
 export default function WorkspaceLayout({ title, children, queue = false, isPRs = false }: { title: string; children: ReactNode; queue?: boolean; isPRs?: boolean }) {
@@ -28,6 +29,8 @@ export default function WorkspaceLayout({ title, children, queue = false, isPRs 
     Projects: 'Target repositories',
     Validators: 'Credibility-weighted',
     Maintainers: 'Upstream',
+    'Maintainer impact': 'Upstream',
+    'Maintainer workspace': 'Manage upstream work',
     Teams: 'Coordinate',
     Preferences: 'Account',
     'Sync status': 'Workspace',
