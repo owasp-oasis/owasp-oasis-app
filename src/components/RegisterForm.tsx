@@ -2,6 +2,7 @@ import RoleChoices from './ContributionRoles/RoleChoices'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import './RegisterForm.css'
+import StarCallout from './StarPrompt/StarCallout'
 
 type FormType = 'validator' | 'sponsor'
 type FormState = 'idle' | 'loading' | 'success' | 'error'
@@ -75,6 +76,7 @@ export default function RegisterForm({
             Join #oasis
           </a>
         </p>
+        <StarCallout />
       </div>
     )
   }
