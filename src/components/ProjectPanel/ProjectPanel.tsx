@@ -75,6 +75,7 @@ interface Props {
   onClose: () => void;
   onNavigateToPRs?: (repoId: number) => void;
   myVotes: Map<number, Decision>;
+  onVoteSuccess: () => void;
 }
 
 /* ─── Skeleton shimmer (matching ContributorPanel) ─────────────── */
@@ -165,7 +166,7 @@ function LangBadge({ lang }: { lang: string | null }) {
 }
 
 /* ─── Main panel ─────────────────────────────────────────────── */
-export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
+export default function ProjectPanel({ repo, onClose, myVotes, onVoteSuccess }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('overview');
   const [panelData, setPanelData] = useState<RepoDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -260,7 +261,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
           myVotes={myVotes}
           onClose={() => setSelectedPR(null)}
           onVoteSuccess={() => {
-            // Refresh panel data after vote
+            onVoteSuccess();
             fetchData();
           }}
         />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { finding, matchesSearch, matchesPreferences, sortFixes, fixPath, lifecycle, type CandidateFix } from '../../src/pages/workspace/fixModel'
+import { countUnvotedOpenFixes, finding, matchesSearch, matchesPreferences, sortFixes, fixPath, lifecycle, type CandidateFix } from '../../src/pages/workspace/fixModel'
 import { WORKSPACE_DEFAULTS } from '../../worker/workspacePreferences'
 const fix={id:1,repo_id:41,repo_name:'react',number:14,title:'High severity CWE-22 (Path traversal) in compiler',state:'open',updated_at:'2026-09-01',consensus_accept:1,consensus_modify:0,consensus_reject:0,consensus_duplicate:0,participants:1,merged_upstream:0,html_url:'https://example.test/fix',comment_count:0} satisfies CandidateFix
 describe('Workspace review queue',()=>{
@@ -12,6 +12,13 @@ describe('Workspace review queue',()=>{
     expect(matchesPreferences({...fix,repo_id:42},prefs,new Map())).toBe(false)
     expect(matchesPreferences(fix,prefs,new Map([[1,'accept']]))).toBe(false)
     expect(matchesPreferences({...fix,state:'closed'},prefs,new Map())).toBe(false)
+  })
+  it('counts only the current project’s open fixes that still need a vote', () => {
+    const votes = new Map([[11, 'accept'], [12, 'modify'], [99, 'reject']])
+    expect(countUnvotedOpenFixes([11, 12, 13], votes)).toBe(1)
+    expect(countUnvotedOpenFixes([21, 22, 23], votes)).toBe(3)
+    expect(countUnvotedOpenFixes([11, 12], votes)).toBe(0)
+    expect(countUnvotedOpenFixes([], votes)).toBe(0)
   })
   it('sorts severity before activity and links immutable fix identity',()=>{
     const critical={...fix,id:2,number:15,title:'Critical severity CWE-79 (XSS)',updated_at:'2025-01-01'}

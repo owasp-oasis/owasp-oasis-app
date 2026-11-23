@@ -60,6 +60,21 @@ describe('Leaderboard endpoints', () => {
       expect(body.some((r: any) => r.name === 'test-repo-1')).toBe(true);
     });
 
+    it('lists only open, non-deleted fix IDs belonging to each project', async () => {
+      await insertTestPR(env, { id: 101, repo_name: 'project-a' });
+      await insertTestPR(env, { id: 102, repo_name: 'project-a', number: 2, state: 'closed' });
+      await insertTestPR(env, { id: 103, repo_name: 'project-a', number: 3 });
+      await env.DB.prepare('UPDATE pull_requests SET deleted = 1 WHERE id = 103').run();
+      await insertTestPR(env, { id: 201, repo_name: 'project-b' });
+      await insertTestPR(env, { id: 301, repo_name: 'closed-only', state: 'closed' });
+
+      const response = await SELF.fetch(new Request('http://localhost/api/workspace/repos'));
+      const repos = await response.json() as { name: string; open_pr_ids: number[] }[];
+      expect(Object.fromEntries(repos.map(repo => [repo.name, repo.open_pr_ids]))).toEqual({
+        'project-a': [101], 'project-b': [201], 'closed-only': [],
+      });
+    });
+
     it('hides repos with no current PRs', async () => {
       await insertTestRepo(env, { name: 'active-repo' });
       await insertTestRepo(env, { name: 'empty-repo' });

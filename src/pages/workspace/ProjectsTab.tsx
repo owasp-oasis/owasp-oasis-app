@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import './tabs.css'
+import { countUnvotedOpenFixes } from './fixModel'
+import { useAuth } from '../../context/AuthContext'
+import { useWorkspaceData } from './useWorkspaceData'
 import ProjectPanel, { type Repo } from '../../components/ProjectPanel/ProjectPanel'
 import type { Decision } from '../../components/VoteForm'
 
@@ -57,13 +60,22 @@ function ConsensusBar({ accept, modify, reject }: { accept: number; modify: numb
 }
 
 interface Props {
-  data: Repo[]
+  data: (Repo & { open_pr_ids?: number[] })[]
   loading: boolean
-  myVotes: Map<number, Decision>
   onNavigateToPRs: (repoId: number) => void
 }
 
-export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }: Props) {
+export default function ProjectsTab({ data, loading, onNavigateToPRs }: Props) {
+  const { user, loading: authLoading } = useAuth()
+  const votes = useWorkspaceData<{ votes?: { pr_id: number; decision: Decision }[] }>(
+    user ? '/api/votes/mine' : null, {},
+  )
+  const myVotes = new Map(votes.data.votes?.map(vote => [vote.pr_id, vote.decision]))
+  function needMyVote(repo: Props['data'][number]) {
+    if (authLoading || votes.loading || votes.error) return '—'
+    if (!user) return repo.open_prs
+    return repo.open_pr_ids ? countUnvotedOpenFixes(repo.open_pr_ids, myVotes) : '—'
+  }
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [langFilter, setLangFilter] = useState<string | null>(null)
 
@@ -80,9 +92,11 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
         onClose={() => setSelectedRepo(null)}
         onNavigateToPRs={onNavigateToPRs}
         myVotes={myVotes}
+        onVoteSuccess={votes.retry}
       />
 
       <div className="projects-tab">
+        {votes.error && <div role="alert">Your votes could not be loaded. <button onClick={votes.retry}>Retry</button></div>}
         {langFilter && (
           <div className="filter-chip-row">
             <button className="filter-chip active" onClick={() => setLangFilter(null)}>
@@ -150,7 +164,7 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
                     setSelectedRepo(repo)
                   }}
                 >
-                  <span className="stat-value">{Math.max(0, repo.open_prs - Array.from(myVotes.keys()).length)}</span>
+                  <span className="stat-value">{needMyVote(repo)}</span>
                   <span className="stat-label">Need my vote</span>
                 </button>
                 <button
