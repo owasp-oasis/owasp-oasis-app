@@ -36,6 +36,9 @@ export function matchesSearch(pr: CandidateFix, query: string) {
   const { cwe, cweName } = finding(pr)
   return `${pr.repo_name} ${pr.title} ${cwe} ${cweName}`.toLowerCase().includes(q)
 }
+export function countUnvotedOpenFixes(openIds: readonly number[], votes: ReadonlyMap<number, unknown>) {
+  return openIds.filter(id => !votes.has(id)).length
+}
 export function matchesPreferences(pr: CandidateFix, preferences: WorkspacePreferences, votes: ReadonlyMap<number, unknown>) {
   const { severity, cwe } = finding(pr)
   return (!preferences.repositories.length || preferences.repositories.includes(pr.repo_id)) &&

@@ -82,6 +82,8 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
   const rows  = await env.DB.prepare(`
     SELECT r.id, r.name, r.full_name, r.description, r.language,
            r.open_prs, r.duplicate_count, r.stars, r.upstream_url, r.synced_at,
+           (SELECT json_group_array(p.id) FROM pull_requests p
+             WHERE p.repo_id = r.id AND p.state = 'open' AND p.deleted = 0) AS open_pr_ids,
            (SELECT COUNT(*) FROM pull_requests p WHERE p.repo_id = r.id AND p.deleted = 0) AS total_prs,
            (SELECT COUNT(DISTINCT pp.login)
               FROM pr_participants pp JOIN pull_requests participant_pr ON participant_pr.id = pp.pr_id
@@ -104,7 +106,10 @@ export async function handleRepos(env: Env, req: Request, url: URL): Promise<Res
     String(r['language'] ?? '').toLowerCase().includes(q) ||
     String(r['description'] ?? '').toLowerCase().includes(q),
   );
-  return lbResponse(results, req);
+  return lbResponse(results.map(repo => ({
+    ...repo,
+    open_pr_ids: JSON.parse(repo.open_pr_ids as string) as number[],
+  })), req);
 }
 
 /**
