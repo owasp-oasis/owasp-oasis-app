@@ -1,6 +1,8 @@
+import { renderMarkdown } from './renderMarkdown'
 /** SummaryTab — the short review brief shown before the full PR body. */
 interface PRDetails {
   tldr: string | null
+  tldr_source?: 'tldr' | 'findings' | null
   consensus_accept: number
   consensus_modify: number
   consensus_reject: number
@@ -30,8 +32,8 @@ export default function SummaryTab({ details, loading, error, onRetry }: Props) 
 
   return <div className="prp-summary">
     <section className="prp-summary-brief">
-      <span className="prp-summary-eyebrow">TL;DR</span>
-      <p>{details.tldr ?? 'No short summary is available for this candidate fix.'}</p>
+      <span className="prp-summary-eyebrow">{details.tldr_source === 'findings' ? 'What we found' : 'TL;DR'}</span>
+      <div className="prp-md prp-summary-markdown">{details.tldr?.trim() ? renderMarkdown(details.tldr) : <p>No short summary is available for this candidate fix.</p>}</div>
     </section>
     <section className="prp-consensus-card">
       <div className="prp-consensus-heading"><strong>Community consensus</strong><span>{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'} · {details.participants} participants</span></div>

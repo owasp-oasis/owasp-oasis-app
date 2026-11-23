@@ -45,7 +45,7 @@ const EMPTY_WORKFLOW_FIELDS = `
 
 async function getRepoPRRows(db: D1Database, repoId: number): Promise<D1Result<Record<string, unknown>>> {
   const common = `
-      SELECT id, number, title, state, author, html_url,
+      SELECT id, number, title, severity, state, author, html_url,
              comment_count, oasis_comment_count, non_oasis_comment_count,
              participants, consensus_accept, consensus_modify, consensus_reject,
              merged_upstream, updated_at,`;
@@ -171,7 +171,7 @@ export async function handlePRs(env: Env, req: Request, url: URL): Promise<Respo
     'consensus_accept','consensus_modify','consensus_reject','consensus_duplicate','updated_at']);
   const col = VALID.has(sort) ? sort : 'updated_at';
   const base = `
-    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.state, p.author, p.html_url, r.language,
+    SELECT p.id, p.repo_id, p.repo_name, p.number, p.title, p.severity, p.state, p.author, p.html_url, r.language,
            comment_count,
            COALESCE(oasis_comment_count, 0)     AS oasis_comment_count,
            COALESCE(non_oasis_comment_count, 0)  AS non_oasis_comment_count,

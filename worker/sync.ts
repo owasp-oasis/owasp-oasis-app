@@ -1,3 +1,4 @@
+import { parseSeverity } from './severity.js';
 /**
  * GitHub sync engine: full cron sync, chunked manual sync, shared PR processor.
  *
@@ -12,7 +13,7 @@
 
 import type { Env, SyncResult, SyncStats, ParticipantData, PRResult } from './types.js';
 import {
-  setSyncState, rebuildContributors, rebuildDuplicates, syncVotesFromComments,
+  getSyncState, setSyncState, rebuildContributors, rebuildDuplicates, syncVotesFromComments,
   closeOneResolvedDuplicate,
   clearPRReviewProjection,
   reconcileCurrentParticipants,
@@ -367,7 +368,12 @@ export async function runSyncOneRepo(
     const openPRs   = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=open&sort=updated&direction=desc`, token);
     const closedPRs = await ghFetchAll<GitHubPR>(`/repos/${ORG}/${repo.name}/pulls?state=closed&sort=updated&direction=desc`, token);
     const repositoryPRs = [...openPRs, ...closedPRs];
-    const allPRs = repositoryPRs.filter(pr => pr.updated_at >= repoSince);
+    // Backfill known severities without requiring an upstream PR edit. Keep this
+    // work inside the same cursor and chunk budget as normal synchronization.
+    const severityBackfillKey = `severity_backfill_v1:${repo.id}`;
+    const needsSeverityBackfill = await getSyncState(db, severityBackfillKey) !== 'done';
+    const allPRs = repositoryPRs.filter(pr => pr.updated_at >= repoSince ||
+      (needsSeverityBackfill && parseSeverity(pr.title, pr.body) !== null));
 
     // Slice this chunk
     const chunk   = allPRs.slice(prStart, prStart + CHUNK_SIZE);
@@ -376,6 +382,11 @@ export async function runSyncOneRepo(
 
     for (const pr of chunk) {
       stats.prs++;
+      if (pr.updated_at < repoSince) {
+        await db.prepare('UPDATE pull_requests SET severity = ? WHERE id = ? AND repo_id = ? AND severity IS NULL')
+          .bind(parseSeverity(pr.title, pr.body), pr.id, repo.id).run();
+        continue;
+      }
       const result = await processPR(pr, repo.id, repo.name, upstreamUrl, db, token, syncStart, {
         skipReactions,
         reactionJobRunId: opts.reactionJobRunId,
@@ -399,6 +410,7 @@ export async function runSyncOneRepo(
       }));
       const finalSyncedAt = repositoryPRs[0]?.updated_at ?? syncStart;
       await updateRepoPRCount(db, repo.id, syncStart, finalSyncedAt);
+      if (needsSeverityBackfill) await setSyncState(db, severityBackfillKey, 'done');
     }
 
     // Advance cursor

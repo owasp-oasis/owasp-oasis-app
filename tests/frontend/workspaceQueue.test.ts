@@ -24,3 +24,17 @@ describe('Workspace review queue',()=>{
     expect(lifecycle({...fix,upstream_status:'closed'})).toBe('Closed Without Merge')
   })
 })
+
+describe('severity metadata compatibility', () => {
+  const medium = {...fix, title:'Fix CWE-200 (Information Disclosure)', severity:'medium'};
+  it('uses body-derived metadata for new titles and keeps legacy title precedence', () => {
+    expect(finding(medium).severity).toBe('medium');
+    expect(finding({...fix, severity:'low'}).severity).toBe('high');
+    expect(finding({...medium, severity:'invalid'}).severity).toBe('unknown');
+  });
+  it('applies severity preferences and sorting to both formats', () => {
+    expect(matchesPreferences(medium,{...WORKSPACE_DEFAULTS,minimumSeverity:'medium'},new Map())).toBe(true);
+    expect(matchesPreferences(medium,{...WORKSPACE_DEFAULTS,minimumSeverity:'high'},new Map())).toBe(false);
+    expect(sortFixes([medium,fix]).map(p=>finding(p).severity)).toEqual(['high','medium']);
+  });
+});
