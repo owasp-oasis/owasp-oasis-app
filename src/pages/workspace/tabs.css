@@ -595,6 +595,7 @@ tr:hover .row-chevron {
   gap: 4px;
 }
 
+.project-card-title,
 .project-card-name a {
   font:600 15px var(--mono);
   color: var(--blue-dark);

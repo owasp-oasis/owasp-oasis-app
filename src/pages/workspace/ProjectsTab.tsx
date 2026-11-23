@@ -100,14 +100,7 @@ export default function ProjectsTab({ data, loading, myVotes, onNavigateToPRs }:
             >
               <div className="project-card-header">
                 <div className="project-card-name">
-                  <a
-                    href={`https://github.com/owasp-oasis/${repo.name}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {repo.name}
-                  </a>
+                  <span className="project-card-title">{repo.name}</span>
                   {repo.upstream_url && (
                     <a
                       href={repo.upstream_url}
