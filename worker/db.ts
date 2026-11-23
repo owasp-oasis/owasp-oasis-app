@@ -1,3 +1,4 @@
+import { parseSeverity } from './severity.js';
 /**
  * D1 database helpers: sync state, duplicate checks, contributor rebuild.
  *
@@ -160,6 +161,7 @@ export async function upsertPR(
     id: number;
     number: number;
     title: string;
+    body?: string | null;
     state: string;
     html_url: string;
     head?: { sha?: string };
@@ -193,8 +195,8 @@ export async function upsertPR(
       (id, repo_id, repo_name, number, title, state, author, html_url, comment_count,
        oasis_comment_count, non_oasis_comment_count,
        participants, consensus_accept, consensus_modify, consensus_reject,
-       duplicate_of, closed_as_duplicate, merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       duplicate_of, closed_as_duplicate, merged_upstream, head_sha, merged_at, created_at, updated_at, detection_tool, synced_at, severity)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     pr.id, repoId, repoName, pr.number, pr.title, state,
     pr.user?.login ?? null, pr.html_url, commentCount,
@@ -202,7 +204,7 @@ export async function upsertPR(
     oasisParticipantCount, consensusAccept, consensusModify, consensusReject,
     existing?.duplicate_of ?? null, existing?.closed_as_duplicate ?? 0,
     mergedUpstream, pr.head?.sha ?? null, pr.merged_at ?? null,
-    pr.created_at, pr.updated_at, detectionTool, syncStart,
+    pr.created_at, pr.updated_at, detectionTool, syncStart, parseSeverity(pr.title, pr.body),
   ).run();
 
   // The MVP response clock starts when a newly discovered open PR first becomes

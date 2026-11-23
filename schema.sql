@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
   merged_at               TEXT,
   created_at              TEXT,
   updated_at              TEXT,
+  severity                TEXT CHECK (severity IS NULL OR severity IN ('low', 'medium', 'high', 'critical')),
   detection_tool          TEXT,
   synced_at               TEXT,
   deleted                 INTEGER DEFAULT 0,     -- 1 if PR no longer exists on GitHub (soft delete)

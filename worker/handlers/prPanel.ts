@@ -1,3 +1,5 @@
+import { reviewBrief } from '../reviewBrief.js';
+import { parseSeverity } from '../severity.js';
 /**
  * PR Panel proxy endpoints — serve GitHub API data for the slide-out PR panel.
  *
@@ -90,20 +92,20 @@ interface GHComment {
 function parsePRMeta(title: string, body: string | null) {
   const cweMatch     = title.match(/CWE-(\d+)/i);
   const cweDescMatch = title.match(/CWE-\d+\s*\(([^)]+)\)/i);
-  const severity     = title.match(/\b(critical|high|medium|low)\s+severity/i);
+  const severity     = parseSeverity(title, body);
   const cveMatch     = (body ?? '').match(/CVE-(\d{4}-\d+)/i);
   const capecMatch   = (body ?? '').match(/CAPEC-(\d+)/i);
   const cvssMatch    = (body ?? '').match(/CVSS[:\s]+([0-9.]+)/i);
-  const tldrMatch    = (body ?? '').match(/##\s*TL[;:]DR\s*\n([\s\S]*?)(?:\n##|\n---|\s*$)/i);
+
 
   return {
     cwe_id:        cweMatch    ? `CWE-${cweMatch[1]}`    : null,
     cwe_desc:      cweDescMatch ? cweDescMatch[1].trim()  : null,
-    cvss_severity: severity    ? severity[1].toLowerCase() : null,
+    cvss_severity: severity,
     cve_id:        cveMatch    ? `CVE-${cveMatch[1]}`    : null,
     capec_id:      capecMatch  ? `CAPEC-${capecMatch[1]}`: null,
     cvss_score:    cvssMatch   ? cvssMatch[1]             : null,
-    tldr:          tldrMatch   ? tldrMatch[1].trim()      : null,
+    ...reviewBrief(body),
     detection_tool: parseDetectionTool(body),
   };
 }

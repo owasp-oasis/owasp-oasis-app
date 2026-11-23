@@ -1,3 +1,4 @@
+import { normalizeSeverity, parseSeverity } from '../../../worker/severity'
 import type { PanelPR } from '../../components/PRPanel/PRPanel'
 import type { WorkspacePreferences } from '../../workspacePreferences'
 export interface CandidateFix extends PanelPR {
@@ -6,8 +7,8 @@ export interface CandidateFix extends PanelPR {
   maintainer_decision?: string | null; maintainer_decision_at?: string | null; upstream_status?: string | null
 }
 export const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, unknown: 0 }
-export function finding(pr: Pick<CandidateFix, 'title'>) {
-  return { severity: pr.title.match(/\b(critical|high|medium|low)\s+severity/i)?.[1].toLowerCase() ?? 'unknown', cwe: pr.title.match(/CWE-\d+/i)?.[0].toUpperCase() ?? '', cweName: pr.title.match(/CWE-\d+\s*\(([^)]+)\)/i)?.[1] ?? '' }
+export function finding(pr: Pick<CandidateFix, 'title' | 'severity'>) {
+  return { severity: parseSeverity(pr.title) ?? normalizeSeverity(pr.severity) ?? 'unknown', cwe: pr.title.match(/CWE-\d+/i)?.[0].toUpperCase() ?? '', cweName: pr.title.match(/CWE-\d+\s*\(([^)]+)\)/i)?.[1] ?? '' }
 }
 export function fixStatus(pr: PanelPR & Partial<CandidateFix>) {
   if (pr.merged_upstream && pr.state === 'closed') return 'Accepted'

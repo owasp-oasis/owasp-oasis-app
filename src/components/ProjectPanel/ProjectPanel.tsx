@@ -35,6 +35,7 @@ interface PR {
   id: number;
   number: number;
   title: string;
+  severity?: string | null;
   state: string;
   author: string | null;
   html_url: string;
@@ -251,6 +252,7 @@ export default function ProjectPanel({ repo, onClose, myVotes }: Props) {
             repo_name: selectedPR.repo_name,
             number: selectedPR.number,
             title: selectedPR.title,
+            severity: selectedPR.severity,
             state: selectedPR.state,
             html_url: selectedPR.html_url,
             consensus_accept: selectedPR.consensus_accept,

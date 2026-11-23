@@ -28,6 +28,7 @@ export interface PanelPR {
   repo_name: string
   number: number
   title: string
+  severity?: string | null
   state: string
   html_url: string
   consensus_accept: number
@@ -59,6 +60,7 @@ interface PRDetails {
   capec_id: string | null
   cvss_score: string | null
   tldr: string | null
+  tldr_source?: 'tldr' | 'findings' | null
   detection_tool: string | null
 }
 
@@ -317,14 +319,14 @@ export default function PRPanel({ pr, myVotes, onClose, onVoteSuccess, presentat
         <div className="prp-header">
           <div className="prp-header-top">
             <span className="prp-identity">{activePR.repo_name} #{activePR.number}</span>
-            <div className="ws-chips"><FixChips pr={activePR}/></div>
+            <div className="ws-chips"><FixChips pr={{...activePR, severity: details?.cvss_severity ?? activePR.severity}}/></div>
             <span className="prp-header-spacer" />
             <a href={activePR.html_url} target="_blank" rel="noopener noreferrer" className="prp-gh-link" title="Open on GitHub"><ExternalLink size={14}/> Open on GitHub</a>
             <button className="prp-close" disabled={submitting} onClick={onClose} aria-label="Close panel"><X size={18}/></button>
           </div>
           <h2 className="prp-fix-title">{activePR.title}</h2>
           <div className="prp-meta-grid" aria-label="Candidate fix metadata">
-            <div><span>Severity</span><strong className="prp-meta-severity"><SeverityChip title={activePR.title}/>{details?.cvss_score ? ` · ${details.cvss_score}` : ''}</strong></div>
+            <div><span>Severity</span><strong className="prp-meta-severity"><SeverityChip title={activePR.title} severity={details?.cvss_severity ?? activePR.severity}/>{details?.cvss_score ? ` · ${details.cvss_score}` : ''}</strong></div>
             <div><span>Weakness</span><strong>{details?.cwe_id ? `${details.cwe_id}${details.cwe_desc ? ` · ${details.cwe_desc}` : ''}` : '—'}</strong></div>
             <div><span>CVE</span><strong className="prp-meta-mono">{details?.cve_id ?? '—'}</strong></div>
             <div><span>Fix automation</span><strong>{automation ? <DonorLogo tool={automation} /> : '—'}</strong></div>
