@@ -298,3 +298,36 @@ workflow shell steps with synthetic contact data and a mock HTTP client.
 These checks verify that success and failure paths never print contact data,
 that only aggregate counts are reported, and that failed registration fetches
 stop the step. GitHub validation runs this check separately from `npm run check`.
+
+## Local repository language review
+
+The language fallback is exercised against mocked GitHub responses and local D1:
+
+```bash
+npx vitest run tests/worker/integration/repositoryLanguage.test.ts
+```
+
+For a browser review, create the local schema, add synthetic UI fixtures, build,
+and start the local Worker. Use an unused port if another local app is running:
+
+```bash
+npx wrangler d1 execute oasis-db --local --persist-to .wrangler/java-language-demo --file schema.sql
+npx wrangler d1 execute oasis-db --local --persist-to .wrangler/java-language-demo --file seeds/java-language-demo.sql
+npm run build
+npm run dev -- --local --persist-to .wrangler/java-language-demo --port 8789
+```
+
+Do not apply historical migrations after this current schema for this fixture.
+The fixture contains no production data and makes no GitHub requests. It seeds
+resolved language values for UI review; the integration test above verifies the
+actual GitHub fallback and the backfill of existing null language values.
+
+Open `http://localhost:8789/workspace/projects`. The `xwiki-java-demo` and
+`ofbiz-java-demo` cards should have Java badges. Clicking either Java badge should
+hide the Python control card. Clear the language chip to show all projects again.
+
+Open `http://localhost:8789/workspace/fixes?lang=Java&all=1&layout=table`.
+The five synthetic Java candidates should appear and the Python control should
+be absent. Selecting either Java project should narrow those candidates to three
+or two. Removing the Java query parameter should also show the Python candidate.
+PR detail content is outside this fixture's scope.

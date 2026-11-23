@@ -347,13 +347,26 @@ export async function runSyncOneRepo(
     // First chunk for this repo: upsert repo row + fetch PR list
     let repoSince: string;
     if (prStart === 0) {
-      const detail = await ghFetch<{ parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
+      const detail = await ghFetch<{ language?: string | null; parent?: { html_url: string } }>(`/repos/${ORG}/${repo.name}`, token);
       upstreamUrl  = detail.parent?.html_url ?? null;
       // Get the previous sync timestamp for this repo (or epoch if new)
-      const existingRepo = await db.prepare('SELECT synced_at FROM repos WHERE id = ?')
-        .bind(repo.id).first<{ synced_at: string | null }>();
+      const existingRepo = await db.prepare('SELECT synced_at, language FROM repos WHERE id = ?')
+        .bind(repo.id).first<{ synced_at: string | null; language: string | null }>();
       repoSince = existingRepo?.synced_at ?? '1970-01-01T00:00:00Z';
-      await upsertRepo(db, repo, upstreamUrl, repoSince);
+      let language = repo.language || detail.language;
+      if (!language) {
+        // New forks can have a null primary language despite populated language
+        // statistics. One bounded request per repository supplies that fallback.
+        try {
+          const languages = await ghFetch<Record<string, number>>(`/repos/${ORG}/${repo.name}/languages`, token);
+          language = Object.entries(languages)
+            .filter(([, bytes]) => Number.isFinite(bytes) && bytes > 0)
+            .sort(([a, aBytes], [b, bBytes]) => bBytes - aBytes || a.localeCompare(b))[0]?.[0];
+        } catch {
+          console.warn(JSON.stringify({ event: 'repository_language_lookup_failed', repository_id: repo.id }));
+        }
+      }
+      await upsertRepo(db, { ...repo, language: language || existingRepo?.language || null }, upstreamUrl, repoSince);
       stats.repos++;
     } else {
       // Subsequent chunks: read upstream_url and synced_at from DB (already stored on first chunk)
